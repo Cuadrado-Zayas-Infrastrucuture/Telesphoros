@@ -187,11 +187,10 @@ signed business associate agreement first. Until then backups contain synthetic 
 | + the whole API suite running **on PostgreSQL** | same | `... test:db` |
 | + the whole API suite uploading over the S3 protocol | `TEST_S3_ENDPOINT` + `TEST_OBJECT_STORAGE=s3` | `TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 ... test` |
 
-**On macOS, set a locale first.** PostgreSQL 16 started from a shell with no `LANG` and no `LC_ALL`, as some agent, cron and launchd
-shells are, stops with `FATAL: postmaster became multithreaded during startup` (reproduced 2026-11-04 with Homebrew 16.15; either variable
-fixes it). `dev-postgres.sh` sets `LC_ALL` for its own server, but the recovery suites (`independent-recovery`, `application-recovery`,
-`recovery-cli`) start another server through `test/helpers/recovery-target.ts`, which inherits your shell's: `export LC_ALL=en_US.UTF-8` before
-the database tier.
+**On macOS, a PostgreSQL you start yourself needs a locale.** PostgreSQL 16 started from a shell with no `LANG` and no `LC_ALL`, as some
+agent, cron and launchd shells are, stops with `FATAL: postmaster became multithreaded during startup` (reproduced 2026-11-04 with Homebrew
+16.15; either variable fixes it). `dev-postgres.sh` and the recovery suites' `test/helpers/recovery-target.ts` (since 2026-11-08) set `LC_ALL`
+for the servers they start, keeping yours if it is set; a server started any other way needs `export LC_ALL=en_US.UTF-8` first.
 
 The background worker has its own suites (`pnpm --filter @telesphoros/worker test`; with `TEST_DATABASE_URL` set they also run the queue against PostgreSQL and start real worker processes: a claim race, a killed worker, a drain). CI runs them in the same job and fails if they are skipped.
 
@@ -207,7 +206,7 @@ Which command needs which service, what it skips and how it says so, and what CI
 | --- | --- | --- | --- | --- | --- |
 | `pnpm typecheck`, `pnpm lint`, `pnpm build` | Node, pnpm | Types, lint and Prettier, builds, the frontend chunk budget | Nothing | `verify` | Yes |
 | `pnpm test` (repository root) | Nothing | The root script tests, then each workspace's own `test` script; the backend runs on the in-memory store | Service tiers without their variables: a `[jest] NOT RUNNING` line from the backend and a `[vitest] NOT RUNNING` line from the worker. The five reader-engine specs: `[jest] ENGINE ABSENT` (a different notice, on purpose) | `verify`, in-memory only | Yes |
-| Backend `pnpm test` with `TEST_DATABASE_URL` | PostgreSQL 16, client tools, `openssl`; on macOS `LC_ALL` set | Schema, row-level security, repositories, backup/restore, readiness on real PostgreSQL | No `TEST_DATABASE_URL`: `NOT RUNNING` for the database tier | `database-and-storage` (the memory profile includes the database and S3 specs) | Yes |
+| Backend `pnpm test` with `TEST_DATABASE_URL` | PostgreSQL 16, client tools, `openssl` | Schema, row-level security, repositories, backup/restore, readiness on real PostgreSQL | No `TEST_DATABASE_URL`: `NOT RUNNING` for the database tier | `database-and-storage` (the memory profile includes the database and S3 specs) | Yes |
 | Backend `pnpm test:db` (`TEST_STORAGE=postgres`) | Same | The whole API suite on the PostgreSQL store with the in-memory file store | Same notice | Not run on its own (PostgreSQL + S3 below covers the PostgreSQL store) | `service-postgres` |
 | Backend `TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm test` | Same, plus `TEST_S3_ENDPOINT` (Moto) | The whole API suite on the PostgreSQL store, uploading over the S3 protocol | No `TEST_S3_ENDPOINT`: `NOT RUNNING` for the S3 tier | `service-postgres-s3` | Yes |
 | `pnpm --filter @telesphoros/worker test` | `TEST_DATABASE_URL` for the queue and real worker processes (claim race, killed worker, drain); plus `TEST_S3_ENDPOINT` for the S3 suites | The job queue against PostgreSQL, and shutdown and recovery of real worker processes | `[vitest] NOT RUNNING` for `test/*.pg.test.ts` without the database variable and `test/*.s3.test.ts` without the S3 one; CI fails the job if they skip | Yes, inside `database-and-storage` | Yes |

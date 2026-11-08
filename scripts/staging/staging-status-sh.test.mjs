@@ -20,9 +20,13 @@ const DIGEST = `sha256:${'d5'.repeat(32)}`;
 const bin = join(box, 'bin');
 mkdirSync(bin);
 const stub = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
-// The processes this machine runs are never read: pgrep prints STUB_PGREP, and nothing (exit 1) by default. The check itself is tested in
-// scripts/staging/terraform-running.test.mjs.
-stub('pgrep', '[ -n "${STUB_PGREP:-}" ] || exit 1\nprintf "%s\\n" "$STUB_PGREP"');
+// The processes this machine runs are never read: `pgrep -x NAME` and `ps -o args= -p PID` answer from STUB_PROCS, one `PID NAME COMMAND LINE`
+// per line, empty (nothing running) by default; STUB_PGREP_EXIT makes pgrep fail. The check itself is tested in scripts/staging/terraform-running.test.mjs.
+stub('pgrep', [
+  '[ -z "${STUB_PGREP_EXIT:-}" ] || exit "$STUB_PGREP_EXIT"',
+  'found=1; while read -r pid name _; do [ -n "$pid" ] && [ "$name" = "${!#}" ] && { echo "$pid"; found=0; }; done <<< "${STUB_PROCS:-}"; exit $found',
+].join('\n'));
+stub('ps', 'while read -r pid _ args; do [ "$pid" = "${!#}" ] && { echo "$args"; exit 0; }; done <<< "${STUB_PROCS:-}"; exit 1');
 stub('aws', `case "$*" in
   *get-caller-identity*) echo "$STUB_ACCOUNT" ;;
   *describe-services*"--services telesphoros-staging-worker "*) echo "arn:aws:ecs:us-east-2:$STUB_ACCOUNT:task-definition/telesphoros-staging-worker:3" ;;
@@ -96,14 +100,23 @@ test('staging that matches its facts, with no plan changes, exits 0 and prints n
   noSentinel(r);
 });
 
-test('the plan is not run while a real Terraform runs, and a stand-in run by a shell does not stop it', () => {
+test('the plan is not run while a real Terraform runs or the process list cannot be read; a stand-in or a command line that mentions it does not stop it', () => {
   stackEnv();
-  const busy = run({ STUB_PGREP: '4242 /opt/homebrew/bin/terraform -chdir=/x plan -input=false' });
+  const busy = run({ STUB_PROCS: '4242 terraform /opt/homebrew/bin/terraform -chdir=/x plan -input=false' });
   assert.equal(busy.status, 1, busy.stdout + busy.stderr);
   assert.match(busy.stdout, /plan: not run: another terraform process is running/);
-  const stand = run({ STUB_PGREP: `4242 bash ${join(bin, 'terraform')} -chdir=/x plan -input=false` });
-  assert.equal(stand.status, 0, stand.stdout + stand.stderr);
-  assert.match(stand.stdout, /current: nothing to do/);
+  for (const procs of [
+    `4242 terraform bash ${join(bin, 'terraform')} -chdir=/x plan -input=false`,
+    '4243 zsh zsh -c sleep 600; : terraform -chdir=/x plan -input=false',
+    '4244 node node /x/codex.js exec run terraform -chdir=/x plan',
+  ]) {
+    const quiet = run({ STUB_PROCS: procs });
+    assert.equal(quiet.status, 0, `${procs}\n${quiet.stdout}${quiet.stderr}`);
+    assert.match(quiet.stdout, /current: nothing to do/);
+  }
+  const refused = run({ STUB_PGREP_EXIT: '3' });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stdout, /plan: not run: the process list could not be read, so another terraform process cannot be ruled out/);
 });
 
 test('each kind of staleness fails the run and is named', () => {

@@ -8,7 +8,7 @@
 //   node staging-status.mjs report FACTS OBSERVED            prints the table; exits 0 only when there is nothing to do
 //   node staging-status.mjs terraform-pathspecs              prints the git pathspecs of the files an apply reads, one per line
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 // What an apply reads, as terraform-inputs.json lists it: the two folders, less tests, docs and examples. A test change merged after the
 // applied commit is not waiting for an apply (#320, 2026-11-08). The freshness Lambda keeps the same rule in its handler.ts; its tests
@@ -169,6 +169,6 @@ function main([mode, factsPath, observedPath]) {
   throw new Error('usage: staging-status.mjs project-state | project-plan | collect WORKDIR | report FACTS OBSERVED | terraform-pathspecs');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   try { main(process.argv.slice(2)); } catch (e) { console.error(`staging-status: ${e.message}`); process.exitCode = 2; }
 }
