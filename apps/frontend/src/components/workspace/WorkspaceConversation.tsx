@@ -18,7 +18,7 @@ import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { incompleteness } from '@/lib/demographicsDraft';
 import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
-import { cancelOwnedUpload, getReport, removeUnfinishedReport } from '@/lib/ownedStorageApi';
+import { cancelOwnedUpload, getReport, removeUnfinishedReport, retireOwnedUpload } from '@/lib/ownedStorageApi';
 import { productUploadSchema } from '@/lib/productUploadSchema';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 import { readRecovery } from '@/lib/uploadRecovery';
@@ -61,6 +61,18 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
   const transfer = useRef<AbortController | null>(null);
   const sending = useRef(false);
   const progress = useRef<UploadProgress>({});
+  const progressWatch = useRef<number | undefined>(undefined);
+
+  // Nested patient/panel navigation keeps this owner mounted. New chat (or leaving the workspace) ends it.
+  // Stop local work without claiming cancellation on the server or discarding its scoped recovery record.
+  useEffect(
+    () => () => {
+      retireOwnedUpload(progress.current);
+      transfer.current?.abort();
+      window.clearInterval(progressWatch.current);
+    },
+    [],
+  );
 
   useEffect(() => onPatientAdded((patient) => setPatientId(patient.id)), []);
 
@@ -183,6 +195,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         transfer.current = new AbortController();
         // Keep registration and attempt identities until success or acknowledged cancellation, including after a lost reply.
         const watch = window.setInterval(() => update(id, { stage: uploadStage(progress.current.attempt?.state) }), 150);
+        progressWatch.current = watch;
         let reportId: string;
         try {
           reportId = (await submitReport(parsed.data, apiFetch, progress.current, transfer.current.signal, recoverySession ?? undefined)).reference;
@@ -193,13 +206,17 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
           setSynthetic(false);
         } catch (error) {
           if (error instanceof SessionEndedError) return;
-          if (progress.current.cancelRequested) await cancelOwnedUpload(apiFetch, progress.current).catch(() => undefined);
+          let message = error instanceof SubmitError ? error.message : 'The upload was interrupted. Your file is kept; please retry.';
+          if (progress.current.cancelRequested) {
+            try {
+              await cancelOwnedUpload(apiFetch, progress.current);
+              message = 'Upload cancelled.';
+            } catch (cancelError) {
+              if (cancelError instanceof SessionEndedError) return;
+              message = cancelError instanceof SubmitError ? cancelError.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.';
+            }
+          }
           setDetailsOpen(true);
-          const message = progress.current.cancelRequested
-            ? 'Upload cancelled.'
-            : error instanceof SubmitError
-              ? error.message
-              : 'The upload was interrupted. Your file is kept; please retry.';
           setUploadError(message);
           update(id, { phase: 'failed', message });
           setFailedId(id);
@@ -207,6 +224,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
           return;
         } finally {
           window.clearInterval(watch);
+          progressWatch.current = undefined;
           transfer.current = null;
           setUploading(false);
         }
