@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { type Facts, PublishError, run, type Sources } from './handler';
+import { type Facts, isTerraformInput, PublishError, run, type Sources, TERRAFORM_INPUTS } from './handler';
 
 const DIGEST = `sha256:${'d5'.repeat(32)}`;
 const FACTS: Facts = {
@@ -71,7 +71,7 @@ describe('staging freshness check', () => {
     const { s, published } = sources({ terraformFilesSince: async () => ({ files, truncated: false }) });
     const r = await run(s, NOW);
     expect(r.findings.map((f) => f.field)).toEqual(['terraform-unapplied']);
-    expect(published[0]!.message).toContain('12 file(s)');
+    expect(published[0]!.message).toContain('12 Terraform input file(s)');
     expect(published[0]!.message).toContain('f9.tf');
     expect(published[0]!.message).not.toContain('f10.tf');
   });
@@ -184,5 +184,25 @@ describe('staging freshness check', () => {
     const incomplete = lines.find((l) => l.includes('outcome=incomplete'))!;
     expect(matches(`2026-11-05T12:00:00.000Z abc INFO ${complete}`)).toBe(true);
     expect(matches(`2026-11-05T12:00:00.000Z abc INFO ${incomplete}`)).toBe(false);
+  });
+});
+
+describe('Terraform inputs', () => {
+  const shared = (name: string) => JSON.parse(readFileSync(new URL(`../../../../scripts/staging/${name}`, import.meta.url), 'utf8'));
+
+  it('are the list staging-status.sh reads', () => {
+    expect(TERRAFORM_INPUTS).toEqual(shared('terraform-inputs.json'));
+  });
+
+  it('are what the real source filters the GitHub file list by', () => {
+    const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    expect(index).toMatch(/files: all\.map\(\(f\) => f\.filename\)\.filter\(isTerraformInput\)/);
+  });
+
+  it('count what an apply reads and leave out tests, docs and examples', () => {
+    const fixtures: { path: string; input: boolean }[] = shared('terraform-inputs.fixtures.json');
+    expect(fixtures.filter((f) => f.input).length).toBeGreaterThan(3);
+    expect(fixtures.filter((f) => !f.input).length).toBeGreaterThan(3);
+    for (const f of fixtures) expect([f.path, isTerraformInput(f.path)]).toEqual([f.path, f.input]);
   });
 });

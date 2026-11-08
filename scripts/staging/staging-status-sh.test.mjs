@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 
 const root = new URL('../../', import.meta.url).pathname;
@@ -133,13 +133,21 @@ test('each kind of staleness fails the run and is named', () => {
     assert.match(r.stdout, shows);
     noSentinel(r);
   }
-  writeFileSync(join(clone, 'infrastructure/terraform/main.tf'), '# merged later\n');
-  git(clone, 'commit', '-q', '-am', 'Merge pull request #999 (Terraform, not applied)');
-  git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const merge = (path, text, subject) => {
+    mkdirSync(dirname(join(clone, path)), { recursive: true });
+    writeFileSync(join(clone, path), text);
+    git(clone, 'add', '-A');
+    git(clone, 'commit', '-q', '-m', subject);
+    git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  };
+  merge('infrastructure/terraform/extra.test.mjs', '// a test\n', 'Merge pull request #997 (a test only)');
+  assert.match(run().stdout, /merged after the applied commit, Terraform inputs: none/, 'a test an apply never reads is not unapplied');
+  merge('infrastructure/lambda/x/src/index.ts', 'export {};\n', 'Merge pull request #998 (Lambda source)');
+  merge('infrastructure/terraform/main.tf', '# merged later\n', 'Merge pull request #999 (Terraform, not applied)');
   const late = run();
   assert.equal(late.status, 1);
-  assert.match(late.stdout, /merged after the applied commit, under infrastructure\/terraform\/: 1\n {2}[0-9a-f]+ Merge pull request #999/);
-  git(clone, 'reset', '-q', '--hard', 'HEAD~1');
+  assert.match(late.stdout, /merged after the applied commit, Terraform inputs: 2\n {2}[0-9a-f]+ Merge pull request #999[^\n]*\n {2}[0-9a-f]+ Merge pull request #998/);
+  git(clone, 'reset', '-q', '--hard', 'HEAD~3');
   git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
 });
 

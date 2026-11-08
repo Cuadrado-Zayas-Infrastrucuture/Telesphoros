@@ -21,7 +21,7 @@ export interface Sources {
   cloudfrontPaths(): Promise<string[]>;
   /** The HTTP status of the API's readiness route. */
   ready(): Promise<number>;
-  /** Files under infrastructure/terraform/ that changed between the commit and main. `truncated` when GitHub cut its answer short. */
+  /** Terraform inputs (`isTerraformInput`) that changed between the commit and main. `truncated` when GitHub cut its answer short. */
   terraformFilesSince(commit: string): Promise<{ files: string[]; truncated: boolean }>;
   /** When the first application change the image does not contain merged, if there is one. */
   applicationChangeSince(commit: string): Promise<{ since: string | undefined }>;
@@ -39,6 +39,17 @@ export interface Result {
   findings: Finding[];
   problems: string[];
 }
+
+/**
+ * What an apply reads: the two folders, less tests, docs and examples (a test change merged after the applied commit waits for no apply).
+ * The same list as scripts/staging/terraform-inputs.json, which staging-status.sh reads; handler.test.ts fails when the two differ.
+ */
+export const TERRAFORM_INPUTS = {
+  paths: ['infrastructure/terraform', 'infrastructure/lambda'],
+  notInputs: ['.test.mjs', '.test.ts', '.tftest.hcl', '.md', '.example'],
+};
+export const isTerraformInput = (file: string): boolean =>
+  TERRAFORM_INPUTS.paths.some((p) => file.startsWith(`${p}/`)) && !TERRAFORM_INPUTS.notInputs.some((s) => file.endsWith(s));
 
 /** A change in the image's source this many days old and still not released is a finding (spec 027, D4). */
 export const IMAGE_BEHIND_DAYS = 7;
@@ -101,7 +112,7 @@ export async function run(sources: Sources, now: Date = new Date()): Promise<Res
     if (tf?.truncated) problems.push('terraform-since-applied: truncated');
     else if (tf && tf.files.length > 0) {
       const listed = tf.files.slice(0, MAX_FILES_LISTED).map((f) => clean(f)).join(', ');
-      findings.push(differs('terraform-unapplied', 'nothing merged after the applied commit', `${tf.files.length} file(s) under infrastructure/terraform/ changed: ${listed}`));
+      findings.push(differs('terraform-unapplied', 'nothing merged after the applied commit', `${tf.files.length} Terraform input file(s) changed: ${listed}`));
     }
 
     const behind = await attempt('image-behind-main', problems, () => sources.applicationChangeSince(facts.image.commit));
