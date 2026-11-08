@@ -199,6 +199,25 @@ A plain `test` prints which tiers it skipped. **CI runs all three tiers** (the `
 `.github/workflows/ci.yml`) and fails the job if any tier reports `NOT RUNNING`: a green run without them says nothing
 about the schema.
 
+### Verification matrix
+
+Which command needs which service, what it skips and how it says so, and what CI runs (2026-11-07, main `859e964a`; the CI column is the table in [ci-cd.md](ops/ci-cd.md#required-checks-what-each-does-now)). Run order and shell setup for the real-service rows: [STATUS.md](STATUS.md#running-things-locally), which starts the disposable PostgreSQL (`dev-postgres.sh`) and the S3 emulator (`moto_server`) these rows use.
+
+| Command | Needs | Boundary it proves | Skipped when, and the notice | Pull request | Nightly |
+| --- | --- | --- | --- | --- | --- |
+| `pnpm typecheck`, `pnpm lint`, `pnpm build` | Node, pnpm | Types, lint and Prettier, builds, the frontend chunk budget | Nothing | `verify` | Yes |
+| `pnpm test` (repository root) | Nothing | The root script tests, then each workspace's own `test` script; the backend runs on the in-memory store | Service tiers without their variables: a `[jest] NOT RUNNING` line from the backend and a `[vitest] NOT RUNNING` line from the worker. The five reader-engine specs: `[jest] ENGINE ABSENT` (a different notice, on purpose) | `verify`, in-memory only | Yes |
+| Backend `pnpm test` with `TEST_DATABASE_URL` | PostgreSQL 16, client tools, `openssl`; on macOS `LC_ALL` set | Schema, row-level security, repositories, backup/restore, readiness on real PostgreSQL | No `TEST_DATABASE_URL`: `NOT RUNNING` for the database tier | `database-and-storage` (the memory profile includes the database and S3 specs) | Yes |
+| Backend `pnpm test:db` (`TEST_STORAGE=postgres`) | Same | The whole API suite on the PostgreSQL store with the in-memory file store | Same notice | Not run on its own (PostgreSQL + S3 below covers the PostgreSQL store) | `service-postgres` |
+| Backend `TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm test` | Same, plus `TEST_S3_ENDPOINT` (Moto) | The whole API suite on the PostgreSQL store, uploading over the S3 protocol | No `TEST_S3_ENDPOINT`: `NOT RUNNING` for the S3 tier | `service-postgres-s3` | Yes |
+| `pnpm --filter @telesphoros/worker test` | `TEST_DATABASE_URL` for the queue and real worker processes (claim race, killed worker, drain); plus `TEST_S3_ENDPOINT` for the S3 suites | The job queue against PostgreSQL, and shutdown and recovery of real worker processes | `[vitest] NOT RUNNING` for `test/*.pg.test.ts` without the database variable and `test/*.s3.test.ts` without the S3 one; CI fails the job if they skip | Yes, inside `database-and-storage` | Yes |
+| `pnpm test:infra`, `pnpm test:ci-config`, `pnpm check:workflows` | Nothing | The Terraform security tripwire; CI configuration, doc links and status fragments; the agent workflow pack | Nothing | Every pull request, including documentation-only ones | Yes |
+| `pnpm --filter @telesphoros/frontend e2e` | Chromium (`CHROMIUM_PATH` where needed); builds the fake identity provider and the API | The login flow and pages at 375 px and 1280 px against the built API and frontend | Nothing | `browser` | Yes |
+| `pnpm --filter @telesphoros/frontend e2e:storage` | `E2E_DATABASE_URL` for an already migrated, disposable loopback database; `MOTO_SERVER`; Chromium | The upload, find and download journey on real PostgreSQL ([details](ops/local-storage-browser.md)) | Refuses to start without a disposable loopback database | Not run | The separate, advisory `e2e-storage.yml` workflow |
+| The five reader-engine backend specs | The private reader engine and `sidecars/report-reader` | The imported engine itself | Always, in the public checkout: `[jest] ENGINE ABSENT`. `scripts/check-without-reader.sh` runs the suite that way ([lab-report-reader.md](lab-report-reader.md#the-engine-is-optional)) | Skipped | Skipped |
+
+Read the notices before you read "green": a `NOT RUNNING` line means a service tier did not run (CI fails on it), while `ENGINE ABSENT` means the reader specs were skipped because the engine is not in a public checkout (CI accepts it, and says so).
+
 ## Scheduling the real-service test suites
 
 When `TEST_DATABASE_URL` is set, the backend Jest configuration runs one suite at a time. All suites share one PostgreSQL instance; host CPU-count worker defaults can overload it with concurrent migrations, restores and checkpoints. The restore advisory lock only excludes other participating restore suites, not unrelated database suites.
