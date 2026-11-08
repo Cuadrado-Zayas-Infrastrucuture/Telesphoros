@@ -682,6 +682,10 @@ clinician, reviewer and admin only; `dispute-active` is **tenant-wide** until th
 nvm use                                                     # Node 22.22.0, from .nvmrc (the lab-report matcher refuses another Unicode version)
 pnpm install
 pnpm typecheck && pnpm lint && pnpm build && pnpm test:infra && pnpm test:ci-config
+export PATH=/opt/homebrew/opt/postgresql@16/bin:$PATH      # macOS: Homebrew's libpq puts pg_dump, pg_restore and pg_config 18 first; the backup,
+                                                            # restore and recovery specs need 16 (with 18, 75 of them fail)
+export LC_ALL=C.UTF-8                                       # macOS: the recovery specs run initdb and pg_ctl for their own cluster and need a UTF-8
+                                                            # locale (without one, 37 fail: "Could not initialize the isolated recovery target")
 apps/backend/scripts/dev-postgres.sh start                 # a disposable PostgreSQL on 127.0.0.1:54329 that checks passwords, as CI's does
                                                             # (macOS: PGBIN=/opt/homebrew/opt/postgresql@16/bin first)
 pip install -r .github/ci/requirements.txt                  # moto, the S3 emulator CI uses
