@@ -71,6 +71,11 @@ it('keeps exception contents and request values out of real filter and HTTP JSON
     const res = await request(app.getHttpServer()).get(`/api/v1/privacy/${MARKER}`).set('Authorization', `Bearer ${MARKER}`).set('Cookie', `session=${MARKER}`).expect(500);
     await request(app.getHttpServer()).get(`/api/v1/privacy/${MARKER}?secret=${MARKER}`).expect(400);
     await request(app.getHttpServer()).post('/api/v1/privacy').send({ value: MARKER }).expect(500);
+    // A request value that imitates a stack frame: every 500 logs its error's frames, so this line of the message must not be taken for one.
+    await request(app.getHttpServer())
+      .post('/api/v1/privacy')
+      .send({ value: `first line\n    at ${MARKER} (forged.js:1:1)` })
+      .expect(500);
     const rejected = await request(app.getHttpServer())
       .post('/api/v1/privacy')
       .send({ value: 'ok', [MARKER]: MARKER })
@@ -93,6 +98,7 @@ it('keeps exception contents and request values out of real filter and HTTP JSON
       status: 500,
       code: 'INTERNAL_ERROR',
       requestId: expect.any(String),
+      err: expect.objectContaining({ type: 'Error', frames: expect.arrayContaining([expect.stringMatching(/^at /)]) }),
     }),
   );
   const http = lines.filter((s) => s.req);

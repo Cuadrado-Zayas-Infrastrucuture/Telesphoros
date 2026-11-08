@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, posix } from 'node:path';
 import { promisify } from 'node:util';
 import { KnowledgeLoadError, loadKnowledge, type KnowledgeMode } from './knowledge-loader';
+import type { SignerKeys } from './signatures';
 
 const run = promisify(execFile);
 const GIT_BUFFER = 16 * 1024 * 1024;
@@ -19,6 +20,8 @@ export interface LocateOptions {
   id: string;
   /** Production also requires every file in that commit to be reviewed and not synthetic. */
   mode: KnowledgeMode;
+  /** The signer keys a production load checks (audit CLIN-01); none by default, so a signed real file is then refused. */
+  signerKeys?: SignerKeys;
   /** Most commits examined; the newest come first. */
   limit: number;
   /** Search every ref, not only HEAD, so commits dropped by a rewrite are still found while they exist. */
@@ -110,7 +113,7 @@ export async function locateKnowledgeSet(options: LocateOptions): Promise<Locate
       const scratch = await mkdtemp(join(tmpdir(), 'knowledge-locate-'));
       try {
         await materialise(root, entry.commit, directory, scratch);
-        byTree.set(tree, (await loadKnowledge({ directory: scratch, mode: options.mode })).id);
+        byTree.set(tree, (await loadKnowledge({ directory: scratch, mode: options.mode, signerKeys: options.signerKeys })).id);
       } catch (error) {
         if (!(error instanceof KnowledgeLoadError)) throw error;
         byTree.set(tree, null);

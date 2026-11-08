@@ -85,6 +85,8 @@ export const citationSchema = z.strictObject({
   sourceUrl: z.string(),
   locator: z.strictObject({ table: z.string(), row: z.string(), column: z.string().nullable() }),
   verification: verificationStateSchema,
+  /** The signers whose signatures over the cited file the production load verified (audit CLIN-01). Absent for unsigned or non-production knowledge. */
+  signedBy: z.array(z.string()).min(2).max(4).optional(),
 });
 export type Citation = z.infer<typeof citationSchema>;
 
