@@ -20,6 +20,9 @@ const DIGEST = `sha256:${'d5'.repeat(32)}`;
 const bin = join(box, 'bin');
 mkdirSync(bin);
 const stub = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+// The processes this machine runs are never read: pgrep prints STUB_PGREP, and nothing (exit 1) by default. The check itself is tested in
+// scripts/staging/terraform-running.test.mjs.
+stub('pgrep', '[ -n "${STUB_PGREP:-}" ] || exit 1\nprintf "%s\\n" "$STUB_PGREP"');
 stub('aws', `case "$*" in
   *get-caller-identity*) echo "$STUB_ACCOUNT" ;;
   *describe-services*"--services telesphoros-staging-worker "*) echo "arn:aws:ecs:us-east-2:$STUB_ACCOUNT:task-definition/telesphoros-staging-worker:3" ;;
@@ -91,6 +94,16 @@ test('staging that matches its facts, with no plan changes, exits 0 and prints n
   assert.match(r.stdout, /current: nothing to do/);
   assert.match(r.stdout, /state serial: 42/);
   noSentinel(r);
+});
+
+test('the plan is not run while a real Terraform runs, and a stand-in run by a shell does not stop it', () => {
+  stackEnv();
+  const busy = run({ STUB_PGREP: '4242 /opt/homebrew/bin/terraform -chdir=/x plan -input=false' });
+  assert.equal(busy.status, 1, busy.stdout + busy.stderr);
+  assert.match(busy.stdout, /plan: not run: another terraform process is running/);
+  const stand = run({ STUB_PGREP: `4242 bash ${join(bin, 'terraform')} -chdir=/x plan -input=false` });
+  assert.equal(stand.status, 0, stand.stdout + stand.stderr);
+  assert.match(stand.stdout, /current: nothing to do/);
 });
 
 test('each kind of staleness fails the run and is named', () => {

@@ -24,6 +24,8 @@ const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 const bin = join(box, 'bin');
 mkdirSync(bin);
 const stub = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+// No Terraform runs on this machine as far as these scripts can tell; the check itself is tested in scripts/staging/terraform-running.test.mjs.
+stub('pgrep', 'exit 1');
 stub('aws', `case "$*" in
   *"--query Account"*) echo "\${STUB_ACCOUNT:-${ACCOUNT}}" ;;
   *"--query Arn"*) echo "arn:aws:sts::${ACCOUNT}:assumed-role/StagingRole/s" ;;

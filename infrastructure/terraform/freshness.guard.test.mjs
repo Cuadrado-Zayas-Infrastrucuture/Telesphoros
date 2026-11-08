@@ -8,6 +8,7 @@ import { test } from 'node:test';
 const read = (name) => readFileSync(new URL(name, import.meta.url), 'utf8');
 const real = read('./freshness.tf');
 const kms = read('./kms.tf');
+const services = read('./api-compute.tf') + read('./worker.tf');
 
 const block = (text, header) => {
   const start = text.indexOf(header);
@@ -18,7 +19,7 @@ const block = (text, header) => {
 const squash = (s) => s.replace(/\s+/g, ' ');
 
 /** Each way the file departs from the design, as text. */
-export function problems(tf, kmsText = kms) {
+export function problems(tf, kmsText = kms, serviceText = services) {
   const out = [];
   const need = (ok, why) => { if (!ok) out.push(why); };
   const has = (b, s) => squash(b).includes(squash(s));
@@ -35,7 +36,13 @@ export function problems(tf, kmsText = kms) {
   need(JSON.stringify(starResources) === JSON.stringify(['ReadTaskDefinitionsAndAlarms']), `only the two calls that take no resource use "*" (found: ${starResources.join(', ') || 'none'})`);
   need(has(policy, 'resources = [aws_sns_topic.audit_alarms.arn]') && has(policy, 'actions   = ["sns:Publish"]'), 'it publishes to the audit alarm topic and nowhere else');
   need(has(policy, 'resources = [aws_kms_key.audit.arn]') && has(policy, 'variable = "kms:ViaService"') && has(policy, 'values   = ["sns.${var.region}.amazonaws.com"]'), 'the audit key is usable only through SNS');
-  need(has(policy, 'resources = [aws_ecs_service.api[0].id, aws_ecs_service.worker[0].id]'), 'it reads the two services and no others');
+  need(has(policy, 'resources = local.freshness_services'), 'it reads the two services and no others');
+  // An IMAGE release updates the services and task definitions; a policy that reads their attributes is known only at apply, and refused.
+  need(!/aws_ecs_(?:service|task_definition)\./.test(policy), 'the policy names no ECS service or task definition by its resource');
+  need(has(tf, 'freshness_services = [for s in ["api", "worker"] : "arn:aws:ecs:${var.region}:${local.audit_account_id}:service/${local.name}-api/${local.name}-${s}"]'), 'the two service ARNs are built from the names');
+  need(has(block(serviceText, 'resource "aws_ecs_cluster" "api"'), 'name  = "${local.name}-api"'), 'the cluster is still named ${local.name}-api');
+  need(has(block(serviceText, 'resource "aws_ecs_service" "api"'), 'name                               = "${local.name}-api"'), 'the API service is still named ${local.name}-api');
+  need(has(block(serviceText, 'resource "aws_ecs_service" "worker"'), 'name                               = "${local.name}-worker"'), 'the worker service is still named ${local.name}-worker');
   need(has(policy, 'resources = [aws_cloudfront_distribution.web[0].arn]'), 'it reads the one distribution');
 
   const group = block(tf, 'resource "aws_cloudwatch_log_group" "staging_freshness"');
@@ -83,6 +90,8 @@ test('each rule fails on a deliberately broken copy (controls)', () => {
     ['a short missed-run window', 'evaluation_periods  = 26', 'evaluation_periods  = 2'],
     ['missing data is fine', 'treat_missing_data  = "breaching"', 'treat_missing_data  = "notBreaching"'],
     ['the errors alarm goes nowhere', /(freshness_check_failing" \{[\s\S]*?)alarm_actions       = \[aws_sns_topic\.audit_alarms\.arn\]/, '$1alarm_actions       = []'],
+    ['the policy reads the service ids again', 'resources = local.freshness_services', 'resources = [aws_ecs_service.api[0].id, aws_ecs_service.worker[0].id]'],
+    ['a service ARN without the name prefix', 'service/${local.name}-api/${local.name}-${s}', 'service/${local.name}-api/${s}'],
   ];
   for (const [name, from, to] of breaks) {
     const broken = real.replace(from, to);
@@ -90,4 +99,12 @@ test('each rule fails on a deliberately broken copy (controls)', () => {
     assert.ok(problems(broken).length > 0, name);
   }
   assert.ok(problems(real, kms.replace(', local.freshness_log_group]', ']')).length > 0, 'kms.tf not naming the freshness log group');
+  for (const [name, from, to] of [
+    ['the worker service renamed', 'name                               = "${local.name}-worker"', 'name                               = "${local.name}-workers"'],
+    ['the cluster renamed', 'name  = "${local.name}-api"', 'name  = "${local.name}-cluster"'],
+  ]) {
+    const broken = services.replace(from, to);
+    assert.notEqual(broken, services, `the replacement for "${name}" did not apply`);
+    assert.ok(problems(real, kms, broken).length > 0, name);
+  }
 });

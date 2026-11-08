@@ -22,6 +22,8 @@ umask 077
 
 die() { echo "staging-status: $*" >&2; exit 2; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/staging/terraform-running.sh
+. "$HERE/terraform-running.sh"
 PRIVATE="${PRIVATE_DIR:-$HOME/telesphoros-private}"
 STACK_ENV="${STACK_ENV:-$PRIVATE/staging/stack.env}"
 CURRENT="$PRIVATE/staging/current.tfvars"
@@ -108,7 +110,7 @@ elif [ "$(shasum -a 256 "$CURRENT" | cut -c1-64)" != "$(cut -c1-64 "$CURRENT.sha
   PLAN_WHY="current.tfvars does not match its recorded sha256 (edited by hand)"
 elif [ -n "$UNBUILT" ]; then
   PLAN_WHY="the $UNBUILT Lambda is not built for this checkout (plan.sh builds it)"
-elif pgrep -f 'terraform.*(apply|plan|import|untaint)' >/dev/null; then
+elif terraform_running; then
   PLAN_WHY="another terraform process is running"
 else
   set +e
