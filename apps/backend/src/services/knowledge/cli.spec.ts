@@ -1,11 +1,23 @@
 import { join } from 'node:path';
 import { contentSha256 } from './content-hash';
 import { runKnowledgeCli } from './cli';
-import { cleanupTempDirs, readJson, REAL_KNOWLEDGE_DIR, reviewedCopyOf, signerKeysJson, SYNTHETIC_DIR, tempDir, TEST_SIGNERS, writeJson } from '../../../test/helpers/knowledge';
+import {
+  cleanupTempDirs,
+  copyOf,
+  readJson,
+  REAL_KNOWLEDGE_DIR,
+  reviewedCopyOf,
+  signerKeysJson,
+  SYNTHETIC_DIR,
+  tempDir,
+  TEST_SIGNERS,
+  writeJson,
+} from '../../../test/helpers/knowledge';
+import type { GuidelineFile } from '@telesphoros/cpic-schema';
 import { GetPublicKeyCommand, SignCommand } from '@aws-sdk/client-kms';
 import { generateKeyPairSync, sign as signRaw, type KeyObject } from 'node:crypto';
 import { checkSignatures, parseSignerKeys } from './signatures';
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 
 afterAll(cleanupTempDirs);
 
@@ -25,10 +37,14 @@ describe('knowledge CLI', () => {
     expect(refused.text).toContain('not allowed in production');
   });
 
-  it('verify passes for the knowledge directory that ships, in production, and says when it is empty', async () => {
-    const result = await run(['verify', '--production'], { KNOWLEDGE_DIR: REAL_KNOWLEDGE_DIR });
-    expect(result.code).toBe(0);
-    expect(result.text).toContain('no guidelines are loaded');
+  it('verify refuses an empty set in production unless --allow-empty says so on purpose (audit CLIN-14)', async () => {
+    const refused = await run(['verify', '--production'], { KNOWLEDGE_DIR: REAL_KNOWLEDGE_DIR });
+    expect(refused).toEqual({ code: 1, text: 'Refused: no guidelines are loaded. Production needs at least one; pass --allow-empty to accept an empty set on purpose.' });
+    const allowed = await run(['verify', '--production', '--allow-empty'], { KNOWLEDGE_DIR: REAL_KNOWLEDGE_DIR });
+    expect(allowed.code).toBe(0);
+    expect(allowed.text).toContain('no guidelines are loaded');
+    // control: outside production an empty set is only a note
+    expect((await run(['verify'], { KNOWLEDGE_DIR: REAL_KNOWLEDGE_DIR })).code).toBe(0);
   });
 
   it('hash prints exactly the hash the loader checks', async () => {
@@ -78,6 +94,56 @@ describe('knowledge CLI', () => {
     expect((await run([])).code).toBe(2);
     expect((await run(['sign'])).code).toBe(2);
     expect((await run(['hash'])).code).toBe(2);
+  });
+});
+
+// Audit DATA-01: a source release that drops cells must not pass unnoticed. `diff OLD NEW` lists the combinations each guideline covers that were
+// added or removed, and exits 1 when any coverage was lost.
+describe('knowledge CLI: diff', () => {
+  const edited = async (edit: (file: GuidelineFile) => void, id: string) => {
+    const dir = await copyOf(SYNTHETIC_DIR);
+    const path = join(dir, `guidelines/${id}.json`);
+    const file = (await readJson(path)) as GuidelineFile;
+    edit(file);
+    await writeJson(path, file);
+    return dir;
+  };
+
+  it('reports no change between a set and its copy', async () => {
+    expect(await run(['diff', SYNTHETIC_DIR, await copyOf(SYNTHETIC_DIR)])).toEqual({ code: 0, text: 'No coverage change.' });
+  });
+
+  it('a release identical to its predecessor minus a cell is flagged: the lost combination is named and the exit is 1', async () => {
+    const dropped = await edited((file) => {
+      file.recommendations = file.recommendations.filter((row) => row.when.GENEA !== 'Synthetic Poor');
+    }, 'drugx-genea');
+    expect(await run(['diff', SYNTHETIC_DIR, dropped])).toEqual({
+      code: 1,
+      text: ['REMOVED drugx-genea: GENEA "Synthetic Poor"', 'Coverage lost: 1 combination in 1 guideline.'].join('\n'),
+    });
+  });
+
+  it('an added cell is listed and is not a loss', async () => {
+    const added = await edited((file) => {
+      file.recommendations.push({ ...file.recommendations[0]!, when: { GENEB: 'Synthetic High' } });
+    }, 'drugy-geneb');
+    expect(await run(['diff', SYNTHETIC_DIR, added])).toEqual({ code: 0, text: 'ADDED drugy-geneb: GENEB "Synthetic High"' });
+  });
+
+  it('a guideline that disappears loses every combination it covered', async () => {
+    const dir = await copyOf(SYNTHETIC_DIR);
+    await rm(join(dir, 'guidelines/drugx-genec.json'));
+    expect(await run(['diff', SYNTHETIC_DIR, dir])).toEqual({
+      code: 1,
+      text: ['REMOVED drugx-genec: GENEC "Synthetic Alpha"', 'REMOVED drugx-genec: GENEC "Synthetic Beta"', 'Coverage lost: 2 combinations in 1 guideline.'].join('\n'),
+    });
+  });
+
+  it('refuses to compare a set that does not load, and names the side', async () => {
+    const result = await run(['diff', SYNTHETIC_DIR, join(SYNTHETIC_DIR, 'missing')]);
+    expect(result.code).toBe(1);
+    expect(result.text).toContain('NEW: The knowledge directory cannot be read');
+    expect((await run(['diff', SYNTHETIC_DIR])).code).toBe(2);
   });
 });
 
