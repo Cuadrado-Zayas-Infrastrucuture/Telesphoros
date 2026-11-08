@@ -19,15 +19,6 @@ after(() => { for (const c of children) c.kill('SIGKILL'); rmSync(box, { recursi
 const bin = join(box, 'bin');
 mkdirSync(bin);
 const write = (path, body) => { writeFileSync(path, `#!/usr/bin/env bash\n${body}\n`); chmodSync(path, 0o755); };
-// pgrep exits 1 and prints nothing when no process matches; otherwise it prints `PID command line`, one per process. The lines come from a
-// file, since a test below lists more than an environment variable can hold. PGREP_EXIT makes it fail the way a real pgrep does when it
-// cannot read the process list (exit 3 in the macOS sandbox) or is missing (127).
-const listed = join(box, 'pgrep-lines');
-const asked = join(box, 'pgrep-args');
-write(
-  join(bin, 'pgrep'),
-  `printf '%s\\n' "$@" > "${asked}"\n[ -z "\${PGREP_EXIT:-}" ] || { echo 'pgrep: Cannot get process list' >&2; exit "$PGREP_EXIT"; }\n[ -s "${listed}" ] || exit 1\ncat "${listed}"`,
-);
 // The table: one `PID NAME COMMAND LINE` per line, NAME being what `pgrep -x` matches (the executable's name). pgrep exits 1 when no process
 // has the name, and STUB_PGREP_EXIT when set (3: macOS pgrep in a sandbox, "Cannot get process list"). Every pgrep call is logged.
 const table = join(box, 'procs');
@@ -134,19 +125,6 @@ test('gate_quiet in release/lib.sh stops a release while Terraform runs or the p
   assert.match(passed.stdout, /passed/);
 });
 
-test('a pgrep that cannot read the process list, or is missing, counts as running: gate_quiet stops and says why', () => {
-  for (const code of ['2', '3', '127']) {
-    const r = bash(`set -euo pipefail; . "${check}"; if terraform_running; then echo running; else echo quiet; fi`, [], { PGREP_EXIT: code });
-    assert.equal(r.stdout.trim(), 'running', `pgrep exit ${code}`);
-    assert.match(r.stderr, new RegExp(`cannot read the process list \\(pgrep exit ${code}\\)`));
-    const gate = bash(`set -euo pipefail; . "${lib}"; gate_quiet; echo passed`, [], { PGREP_EXIT: code });
-    assert.equal(gate.status, 1, `pgrep exit ${code}`);
-    assert.doesNotMatch(gate.stdout, /passed/);
-  }
-});
-
-test('the real pgrep shows a running stand-in as a shell command line, and the check ignores it', async () => {
-  const stand = join(box, 'stand', 'terraform');
 const NAME = `tfp${process.pid}`; // under 15 characters: Linux truncates a process name there
 const unreadable = spawnSync('pgrep', ['-x', `${NAME}none`], { encoding: 'utf8' }).status >= 2;
 
