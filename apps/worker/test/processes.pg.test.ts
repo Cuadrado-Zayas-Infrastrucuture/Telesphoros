@@ -3,6 +3,8 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { disposeFixtures } from '../../backend/test/helpers/fixture-cleanup';
+import { holdSettlements } from './settlement-gate';
 import {
   PERSON,
   REPORTS_BUCKET,
@@ -122,18 +124,57 @@ describe('a worker that dies', () => {
 });
 
 describe('stopping', () => {
+  it('can finish another job before shutdown while one job waits to settle', async () => {
+    await begin();
+    const gate = await holdSettlements(f);
+    const errors: unknown[] = [];
+    try {
+      const id = await enqueue('test.slow', { ms: 0 });
+      const w = worker({ WORKER_ID: 'before-stop', WORKER_CONCURRENCY: '2' });
+      await until('the running job to reach the settlement gate', async () => (await gate.blocked()) === 1);
+      const later = await enqueue('test.echo', { n: 1 });
+      await until('the later job to finish before shutdown', async () => (await stateOf(later)) === 'succeeded');
+      expect(await stateOf(id)).toBe('running');
+      expect((await attemptsOf(f.admin, later)).map((attempt) => attempt.outcome)).toEqual(['succeeded']);
+      await gate.release();
+      await until('the held job to finish', async () => (await stateOf(id)) === 'succeeded');
+      await requestShutdown(w);
+      expect(await w.exited).toEqual({ code: 0, signal: null });
+    } catch (error) {
+      errors.push(error);
+      throw error;
+    } finally {
+      await disposeFixtures([gate.close], errors);
+    }
+  });
+
   it('drains on SIGTERM: finishes the running job, claims nothing more, exits cleanly', async () => {
     await begin();
-    const id = await enqueue('test.slow', { ms: 1_200 });
-    const w = worker({ WORKER_ID: 'drainer', WORKER_DRAIN_SECONDS: '20' });
-    await until('the job to start', async () => (await effects.files()).includes(`${id}.started`));
-    const later = await enqueue('test.echo', { n: 1 });
-    w.child.kill('SIGTERM');
-    const exit = await w.exited;
-    expect(exit).toEqual({ code: 0, signal: null });
-    expect(await stateOf(id)).toBe('succeeded');
-    expect(w.output()).toContain('worker-draining');
-    expect(await stateOf(later)).toBe('queued');
+    const gate = await holdSettlements(f);
+    const errors: unknown[] = [];
+    try {
+      const id = await enqueue('test.slow', { ms: 0 });
+      const w = worker({ WORKER_ID: 'drainer', WORKER_CONCURRENCY: '2', WORKER_DRAIN_SECONDS: '20' });
+      await until('the running job to reach the settlement gate', async () => (await gate.blocked()) === 1);
+      await requestShutdown(w);
+      await until('the worker to enter its drain', async () => w.output().includes('"event":"worker-draining"'));
+      // The worker has stopped claiming, and a real running job still prevents its drain from completing.
+      const later = await enqueue('test.echo', { n: 1 });
+      expect(await stateOf(id)).toBe('running');
+      expect(await stateOf(later)).toBe('queued');
+      await gate.release();
+      const exit = await w.exited;
+      expect(exit).toEqual({ code: 0, signal: null });
+      expect(await stateOf(id)).toBe('succeeded');
+      expect(w.output()).toContain('worker-draining');
+      expect(await stateOf(later)).toBe('queued');
+      expect(await attemptsOf(f.admin, later)).toEqual([]);
+    } catch (error) {
+      errors.push(error);
+      throw error;
+    } finally {
+      await disposeFixtures([gate.close], errors);
+    }
   });
 
   it('releases a job it cannot finish within the drain, and a second worker takes it as a first attempt', async () => {
