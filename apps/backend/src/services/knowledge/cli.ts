@@ -6,12 +6,18 @@ import { createPublicKey, verify } from 'node:crypto';
 import { contentSha256 } from './content-hash';
 import { KnowledgeLoadError, loadKnowledge } from './knowledge-loader';
 import { KNOWLEDGE_SET_ID, locateKnowledgeSet } from './knowledge-locate';
+import { coverageDiff } from './coverage-diff';
+import type { KnowledgeSet } from './knowledge-set';
 import { parseSignerKeys, SignerKeysError, signingMessage } from './signatures';
 
 const USAGE = `Usage: node dist/services/knowledge/cli.js <command>
 
-  verify [--dir DIR] [--production]   load the knowledge directory and report every problem
-                                       (default DIR: KNOWLEDGE_DIR, else ../../knowledge/cpic)
+  verify [--dir DIR] [--production] [--allow-empty]
+                                       load the knowledge directory and report every problem
+                                       (default DIR: KNOWLEDGE_DIR, else ../../knowledge/cpic); in production
+                                       an empty set is refused unless --allow-empty accepts it on purpose
+  diff OLD NEW                         list the phenotype combinations each guideline covers that NEW added
+                                       or removed compared with OLD; exits 1 when any coverage was lost
   sign FILE --key-id ID --kms-key ARN  sign one file's id and content hash with a KMS key (ECC_NIST_P256) and print the
                                        signature entry to add to its review.signatures; writes nothing
   hash FILE                           print the content hash a reviewer signs for one knowledge file
@@ -45,9 +51,35 @@ export async function runKnowledgeCli(
       const directory = resolve(dirFlag >= 0 ? (rest[dirFlag + 1] ?? '') : (env.KNOWLEDGE_DIR ?? '../../knowledge/cpic'));
       const mode = rest.includes('--production') ? 'production' : 'non-production';
       const set = await loadKnowledge({ directory, mode, signerKeys: parseSignerKeys(env.KNOWLEDGE_SIGNER_KEYS) });
+      // An empty set loads, and every drug then reports no guideline: in production that must be a decision, not an accident (audit CLIN-14).
+      if (set.isEmpty && mode === 'production' && !rest.includes('--allow-empty')) {
+        write('Refused: no guidelines are loaded. Production needs at least one; pass --allow-empty to accept an empty set on purpose.');
+        return 1;
+      }
       write(`OK (${mode}): ${set.files.length} files, ${set.guidelineCount} guidelines, knowledge set ${set.id}`);
       if (set.isEmpty) write('Note: no guidelines are loaded, so every drug will report NO_MATCHING_GUIDELINE.');
       return 0;
+    }
+    if (command === 'diff' && rest[0] !== undefined && rest[1] !== undefined) {
+      const sides: KnowledgeSet[] = [];
+      for (const [label, directory] of [
+        ['OLD', rest[0]],
+        ['NEW', rest[1]],
+      ] as const) {
+        try {
+          sides.push(await loadKnowledge({ directory: resolve(directory), mode: 'non-production' }));
+        } catch (error) {
+          if (!(error instanceof KnowledgeLoadError)) throw error;
+          for (const problem of error.problems) write(`${label}: ${problem}`);
+          return 1;
+        }
+      }
+      const { lines, lost, guidelinesLosing } = coverageDiff(sides[0]!, sides[1]!);
+      for (const line of lines) write(line);
+      if (lines.length === 0) write('No coverage change.');
+      if (lost === 0) return 0;
+      write(`Coverage lost: ${lost} combination${lost === 1 ? '' : 's'} in ${guidelinesLosing} guideline${guidelinesLosing === 1 ? '' : 's'}.`);
+      return 1;
     }
     if (command === 'hash' && rest[0] !== undefined) {
       const parsed = knowledgeFileSchema.safeParse(JSON.parse(await readFile(rest[0], 'utf8')));

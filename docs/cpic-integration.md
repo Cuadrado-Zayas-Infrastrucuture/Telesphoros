@@ -117,7 +117,10 @@ process runs, so write access to the files is not enough to sign them.
 - The signers that verified are kept with the file, and every citation from it carries them (`citation.signedBy`), inside the ledger hash.
 - A test (`knowledge-loader.spec.ts`) loads the real `knowledge/cpic/` under the production rules, so
   committing unreviewed, edited or synthetic content there fails the build.
-- `pnpm --filter @telesphoros/backend knowledge:verify -- --production` runs the same check by hand.
+- `pnpm --filter @telesphoros/backend knowledge:verify -- --production` runs the same check by hand. In production an empty set is
+  refused (the pipeline's start refuses one too) unless `--allow-empty` accepts it on purpose; CI passes it while `knowledge/cpic/` holds no guideline.
+- `pnpm --filter @telesphoros/backend knowledge:diff -- OLD NEW` lists the phenotype combinations each guideline covers that NEW added or removed,
+  and exits 1 when coverage was lost: a source release that drops cells is seen before anyone signs it.
 - An evaluation stores only the knowledge set id. `pnpm --filter @telesphoros/backend knowledge:locate -- <id>` finds
   the git commits whose `knowledge/cpic` loads to that id, with the same loader, so a reviewer can get back to the exact
   files. It reads git only and prints no file content. It can find only commits that still exist: a history rewrite
