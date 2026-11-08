@@ -37,7 +37,7 @@ stub('aws', `case "$*" in
   *describe-services*) echo "svc \${STUB_SERVICE:-1 COMPLETED 2 2}" ;;
   *list-tasks*RUNNING*"--output json"*) cat "$STUB/running.json" ;;
   *list-tasks*STOPPED*) cat "$STUB/stopped.json" ;;
-  *list-tasks*) echo "${PREFIX}task/telesphoros-staging-api/1" ;;
+  *list-tasks*) case "\${STUB_LIST_TASKS:-}" in fail) echo "throttled" >&2; exit 255 ;; none) ;; *) echo "${PREFIX}task/telesphoros-staging-api/1" ;; esac ;;
   *describe-tasks*"--output json"*) cat "$STUB/tasks.json" ;;
   *describe-tasks*) echo "\${STUB_TASK_TD:-${TD}}" ;;
   *describe-task-definition*"--output json"*) cat "$STUB/taskdef.json" ;;
@@ -173,6 +173,8 @@ test('verify: each failed check fails the run and writes nothing', () => {
     [{ STUB_HTTP: '503' }, /\/api\/v1\/ready returned 503/],
     [{ STUB_INALARM: 'telesphoros-staging-api-5xx' }, /in ALARM: telesphoros-staging-api-5xx/],
     [{ STUB_NO_LEDGER: '1' }, /no ledger-full-check-completed line/],
+    [{ STUB_LIST_TASKS: 'fail' }, /cannot list the running tasks of telesphoros-staging-api/],
+    [{ STUB_LIST_TASKS: 'none' }, /no running task listed for telesphoros-staging-api/],
     [{ STUB_SERVICE: '2 IN_PROGRESS 1 2' }, /telesphoros-staging-api is not steady/],
     [{ STUB_TASK_TD: `${PREFIX}task-definition/telesphoros-staging-api:11` }, /runs sha256:a{64}, not sha256:c{64}/],
     [{}, /fence checker holds/, () => observe({ writes: 'enabled' })],

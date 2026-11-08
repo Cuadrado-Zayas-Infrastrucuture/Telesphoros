@@ -12,7 +12,7 @@ import { flagProblems } from './fence-plan.mjs';
 import { FLAG_MODES } from './fence-vars.mjs';
 import { canonical, harmlessDrift } from './plan-drift.mjs';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from '../is-main.mjs';
 
 const IMAGE_RE = /^[0-9]{12}\.dkr\.ecr\.us-east-2\.amazonaws\.com\/telesphoros-staging-api@sha256:[0-9a-f]{64}$/;
 const REPLACE = [canonical(['delete', 'create']), canonical(['create', 'delete'])];
@@ -83,7 +83,7 @@ export function problems(mode, plan, oldImage, newImage) {
   return out;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   const [mode, file, oldImage, newImage] = process.argv.slice(2);
   if (!newImage) { console.error('usage: node release-check.mjs MIGRATE|IMAGE|INFRA|FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF plan.json OLD_IMAGE NEW_IMAGE'); process.exit(2); }
   let plan;
