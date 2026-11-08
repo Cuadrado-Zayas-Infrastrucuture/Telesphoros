@@ -42,7 +42,14 @@ gate_identity() {
   fi
 }
 
-gate_quiet() { if pgrep -f 'terraform.*(apply|plan|import|untaint)' >/dev/null 2>&1; then die "a terraform process is running"; fi; }
+# shellcheck source=scripts/staging/terraform-running.sh
+. "$HERE/../terraform-running.sh"
+gate_quiet() { # an unreadable process list (exit 2) stops the step too
+  local st=0
+  terraform_running || st=$?
+  [ "$st" != 0 ] || die "a terraform process is running"
+  [ "$st" != 2 ] || die "the process list could not be read, so a running terraform cannot be ruled out"
+}
 
 gate_clone() { # the commit this release plans from
   [ "$(git -C "$C" rev-parse --abbrev-ref HEAD)" = main ] || die "the clone is not on main"

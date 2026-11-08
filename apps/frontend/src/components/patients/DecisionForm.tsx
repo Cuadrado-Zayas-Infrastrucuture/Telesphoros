@@ -24,12 +24,15 @@ export function DecisionForm({
   initial,
   onCancel,
   onSaved,
+  onStale,
 }: {
   history: ClinicianDecisionHistoryDto;
   kind: ClinicianDecisionCreate['entryKind'];
   initial?: ClinicianDecisionDto;
   onCancel: () => void;
   onSaved: () => void;
+  /** Called when the server refused the entry because the result or its history changed (409). */
+  onStale: () => void;
 }) {
   const { apiFetch } = useAuth();
   const formId = useId();
@@ -76,6 +79,7 @@ export function DecisionForm({
     } catch (caught) {
       setUncertain(caught instanceof DecisionUnconfirmed);
       setRefused(caught instanceof SubmitError && [403, 404, 409].includes(caught.status ?? 0));
+      if (caught instanceof SubmitError && caught.status === 409) onStale();
       setError(caught instanceof Error ? caught.message : 'Decision could not be saved. Your draft is kept.');
     } finally {
       pending.current = false;

@@ -27,6 +27,8 @@ mkdirSync(stubDir);
 const bin = join(box, 'bin');
 mkdirSync(bin);
 const stub = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\necho "$*" >> "$STUB/${name}.log"\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+// No Terraform runs on this machine as far as these scripts can tell; the check itself is tested in scripts/staging/terraform-running.test.mjs.
+stub('pgrep', 'exit 1');
 stub('aws', `case "$*" in
   *"--query Account"*) echo "${ACCOUNT}" ;;
   *"--query Arn"*) echo "arn:aws:sts::${ACCOUNT}:assumed-role/StagingRole/s" ;;
@@ -59,6 +61,7 @@ stub('terraform', `case "$*" in
   *"output -raw api_log_group"*) printf /ecs/telesphoros-staging-api ;;
   *"output -raw db_endpoint"*) printf 'telesphoros-staging.example.us-east-2.rds.amazonaws.com' ;;
   *"output -json api_task_subnet_ids"*) echo '["subnet-1","subnet-2"]' ;;
+  *"state pull"*) cat "$STUB/state.json" ;;
   *) echo "unexpected terraform $*" >&2; exit 99 ;;
 esac`);
 stub('gh', `case "$*" in
@@ -210,6 +213,16 @@ const migrateReady = (pending) => {
   rmSync(join(stubDir, 'migrated'), { force: true });
   clearLogs();
 };
+// This release's IMAGE plan as plan.sh leaves it once the release check passed: the plan, its var file and its record (the real plan-record.mjs).
+const STATE = { serial: 40, lineage: 'lineage-1' };
+const imagePlanned = () => {
+  writeFileSync(join(stubDir, 'state.json'), JSON.stringify({ version: 4, ...STATE, resources: [] }));
+  writeFileSync(join(rel, 'i.tfplan'), 'a saved plan\n');
+  writeFileSync(join(rel, 'release.tfvars'), `api_image = "${NEW}"\napi_migrate_image = "${NEW}"\n`);
+  const w = spawnSync(process.execPath, [join(here, 'plan-record.mjs'), 'write', join(rel, 'i.tfplan.meta.json'), 'IMAGE', COMMIT,
+    sha(join(rel, 'release.tfvars')), sha(join(rel, 'i.tfplan'))], { input: JSON.stringify(STATE), encoding: 'utf8' });
+  assert.equal(w.status, 0, w.stderr);
+};
 const noChange = () => {
   assert.ok(!/create-db-snapshot/.test(log('aws')), 'no snapshot was taken');
   assert.ok(!/migrate-up/.test(log('run-task')), 'nothing was migrated');
@@ -221,10 +234,38 @@ test('migrate: the MIGRATE apply, the migration task on NEW and steady services 
   assert.match(out(run('migrate.sh', [COMMIT])), /usage: migrate\.sh MIGRATE COMMIT/);
   assert.match(out(run('migrate.sh', ['MIGRATE', COMMIT])), /MIGRATE apply of this release did not finish/);
   writeFileSync(join(rel, 'm-apply.txt'), 'x\n== apply exit status: 0\n');
+  imagePlanned();
   writeFileSync(join(stubDir, 'migrate_image'), `${OLD}\n`);
   assert.match(out(run('migrate.sh', ['MIGRATE', COMMIT])), /migrate task definition runs sha256:a{64}, not the NEW image/);
   writeFileSync(join(stubDir, 'migrate_image'), `${NEW}\n`);
   assert.match(out(run('migrate.sh', ['MIGRATE', COMMIT], { STUB_SERVICE: '2 IN_PROGRESS 1 1' })), /telesphoros-staging-api is not steady/);
+  noChange();
+});
+
+test('migrate: the schema waits for this release IMAGE plan, recorded (so the release check passed it) and still matching the stack', () => {
+  migrateReady('0071');
+  const refused = (why, re) => {
+    const r = run('migrate.sh', ['MIGRATE', COMMIT]);
+    assert.equal(r.status, 1, why);
+    assert.match(out(r), re, why);
+    assert.ok(!/migrate-status/.test(log('run-task')), `${why}: not even migrate status ran`);
+    noChange();
+    imagePlanned();
+  };
+  for (const f of ['i.tfplan', 'i.tfplan.meta.json', 'release.tfvars']) {
+    rmSync(join(rel, f));
+    refused(`no ${f}`, /no recorded IMAGE plan for this release: run plan\.sh IMAGE/);
+  }
+  writeFileSync(join(rel, 'i.tfplan.meta.json'), 'not a record\n');
+  refused('an unreadable record', /STALE: no record next to the plan[\s\S]*plan IMAGE again before migrating/);
+  writeFileSync(join(stubDir, 'state.json'), JSON.stringify({ version: 4, serial: STATE.serial + 1, lineage: STATE.lineage, resources: [] }));
+  refused('another apply since the plan', /STALE: serial: the plan was made at 40, now 41[\s\S]*plan IMAGE again before migrating/);
+  writeFileSync(join(rel, 'i.tfplan'), 'a different plan\n');
+  refused('the plan file replaced', /STALE: planSha256[\s\S]*plan IMAGE again/);
+  writeFileSync(join(rel, 'release.tfvars'), 'api_image = "edited"\n');
+  refused('the var file edited', /STALE: varSha256[\s\S]*plan IMAGE again/);
+  const ok = run('migrate.sh', ['MIGRATE', COMMIT], { STUB_NO_GETS: '1' });
+  assert.match(out(ok), /expected pending: 0071\nok\n/, 'with the recorded plan the gates pass (and the idle window stops it before any change)');
   noChange();
 });
 

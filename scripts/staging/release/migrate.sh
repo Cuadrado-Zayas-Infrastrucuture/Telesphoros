@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# The migration step of a release onto running synthetic staging (spec 027, PR 3b), after the MIGRATE apply and before the IMAGE plan.
-# Founder-run, under the claim. Changes the schema.
+# The migration step of a release onto running synthetic staging (spec 027, PR 3b), after the MIGRATE apply and the IMAGE plan, and right
+# before the IMAGE apply. Founder-run, under the claim. Changes the schema.
 #   CLAIM_OWNER=NAME scripts/staging/release/migrate.sh MIGRATE COMMIT
-# MIGRATE confirms that nobody is using staging: between migrate-up and the IMAGE apply the old API and worker run on the new schema, and an
-# idle window keeps writes out of that gap. Order: gates -> migrate status, which must show exactly the migrations at COMMIT after
+# MIGRATE confirms that nobody is using staging. Between migrate-up and the IMAGE apply staging is DOWN: the running API answers 503 on
+# /api/v1/ready to a schema it does not know, and that is the load balancer's health check. So this step refuses to start until this
+# release's IMAGE plan exists, passed the release check (plan.sh records only such a plan) and still matches the stack, which keeps the
+# schema from moving ahead of a release that cannot finish (the 859e964a release, 2026-11-08). An idle window keeps writes out of the gap.
+# Order: gates -> migrate status, which must show exactly the migrations at COMMIT after
 # `newestMigration` in docs/ops/staging-expected.json on origin/main (migration-pending.mjs) -> the idle window (no write request to the API
 # in 30 minutes, with its GETs as the positive control) -> an RDS snapshot, waited for -> migrate-up -> migrate status, which must say
 # `pending: (none)` (saved as migrate-status.txt, which the IMAGE and assessment steps read). With nothing to migrate it records that and
@@ -30,6 +33,10 @@ gate_identity
 gate_clone "$COMMIT"
 grep -qx '== apply exit status: 0' "$OUT/m-apply.txt" 2>/dev/null || die "the MIGRATE apply of this release did not finish with exit 0"
 NEW=$(cat "$OUT/new_image.txt") || die "no new_image.txt"
+[ -f "$OUT/i.tfplan" ] && [ -f "$OUT/i.tfplan.meta.json" ] && [ -f "$OUT/release.tfvars" ] \
+  || die "no recorded IMAGE plan for this release: run plan.sh IMAGE $COMMIT and read it before migrating"
+state_identity | node "$HERE/plan-record.mjs" check "$OUT/i.tfplan.meta.json" IMAGE "$COMMIT" "$(sha "$OUT/release.tfvars")" "$(sha "$OUT/i.tfplan")" \
+  || die "the IMAGE plan no longer matches the stack (above): plan IMAGE again before migrating"
 export ECS_CLUSTER MIGRATE_TASK_FAMILY PROVISION_TASK_FAMILY TASK_SUBNETS TASK_SECURITY_GROUP TASK_ASSIGN_PUBLIC_IP API_LOG_GROUP
 ECS_CLUSTER=$(tf_out api_cluster_name); MIGRATE_TASK_FAMILY=$(tf_out api_migrate_task_family); PROVISION_TASK_FAMILY=$(tf_out api_provision_task_family)
 TASK_SECURITY_GROUP=$(tf_out api_tasks_security_group_id); TASK_ASSIGN_PUBLIC_IP=$(tf_out api_task_assign_public_ip); API_LOG_GROUP=$(tf_out api_log_group)
@@ -58,7 +65,7 @@ PENDING=$(node "$HERE/migration-pending.mjs" check "$EXPECTED" "$OUT/migrate-sta
 echo "$PENDING"
 if [ "${PENDING%%;*}" = "pending: (none)" ]; then
   printf 'pending: (none)\n' > "$OUT/migrate-status.txt"
-  echo "Nothing to migrate: migrate-status.txt says pending: (none). Next: plan.sh IMAGE $COMMIT"
+  echo "Nothing to migrate: migrate-status.txt says pending: (none). Next: apply.sh IMAGE $COMMIT with the plan's sha256"
   exit 0
 fi
 
@@ -91,4 +98,4 @@ echo "== 6. migrate status after"
 scripts/staging/run-task.sh migrate-status --yes </dev/null > "$OUT/migrate-status-after.txt" 2>&1 || { cat "$OUT/migrate-status-after.txt"; die "migrate-status failed after migrating; tell Claude"; }
 node "$HERE/migration-pending.mjs" check "" "$OUT/migrate-status-after.txt" || die "migrations still pending: tell Claude"
 printf 'pending: (none)\n' > "$OUT/migrate-status.txt"
-echo "Done $(date -u +%H:%M:%SZ). Next: plan.sh IMAGE $COMMIT"
+echo "Done $(date -u +%H:%M:%SZ). Staging is down until the IMAGE apply. Next, now: apply.sh IMAGE $COMMIT with the plan's sha256"

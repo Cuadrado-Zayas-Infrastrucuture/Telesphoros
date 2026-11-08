@@ -6,8 +6,15 @@
 //   node staging-status.mjs project-plan   < plan.json       prints "actions address" per change; no-ops and reads dropped
 //   node staging-status.mjs collect WORKDIR                  prints, as JSON, what staging-status.sh left in its work directory
 //   node staging-status.mjs report FACTS OBSERVED            prints the table; exits 0 only when there is nothing to do
+//   node staging-status.mjs terraform-pathspecs              prints the git pathspecs of the files an apply reads, one per line
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
+
+// What an apply reads, as terraform-inputs.json lists it: the two folders, less tests, docs and examples. A test change merged after the
+// applied commit is not waiting for an apply (#320, 2026-11-08). The freshness Lambda keeps the same rule in its handler.ts; its tests
+// compare the two, and both rules are tested on terraform-inputs.fixtures.json.
+export const TERRAFORM_INPUTS = JSON.parse(readFileSync(new URL('./terraform-inputs.json', import.meta.url), 'utf8'));
+export const terraformPathspecs = ({ paths, notInputs } = TERRAFORM_INPUTS) => [...paths, ...notInputs.map((s) => `:(exclude,glob)**/*${s}`)];
 
 const CLAIM_ABANDONED_HOURS = 24;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -72,8 +79,8 @@ export function report({ rows, plan, unapplied = [], savedPlans = [], legacyPlan
   else { lines.push(`plan: ${plan?.exit === 1 ? 'failed (exit 1)' : `not run${plan?.why ? `: ${plan.why}` : ''}`}`); problems.push('plan'); }
   lines.push(`state serial: ${serial ?? 'unknown'}`);
   if (serial === null) problems.push('serial');
-  if (unapplied.length) { lines.push(`merged after the applied commit, under infrastructure/terraform/: ${unapplied.length}`, ...unapplied.map((u) => `  ${u}`)); problems.push('unapplied'); }
-  else lines.push('merged after the applied commit, under infrastructure/terraform/: none');
+  if (unapplied.length) { lines.push(`merged after the applied commit, Terraform inputs: ${unapplied.length}`, ...unapplied.map((u) => `  ${u}`)); problems.push('unapplied'); }
+  else lines.push('merged after the applied commit, Terraform inputs: none');
   for (const p of savedPlans) {
     if (p.applied === 0) { lines.push(`saved plan ${p.path}: applied (exit 0)`); continue; }
     if (Number.isInteger(p.applied)) { lines.push(`saved plan ${p.path}: APPLY FAILED (exit ${p.applied}): read its log`); problems.push(p.path); continue; }
@@ -141,6 +148,7 @@ const stdin = () => readFileSync(0, 'utf8');
 
 function main([mode, factsPath, observedPath]) {
   if (mode === 'project-state') return console.log(JSON.stringify(stateIdentity(stdin())));
+  if (mode === 'terraform-pathspecs') return console.log(terraformPathspecs().join('\n'));
   if (mode === 'project-plan') {
     let plan;
     try { plan = JSON.parse(stdin()); } catch { throw new Error('the plan is not JSON'); }
@@ -158,9 +166,9 @@ function main([mode, factsPath, observedPath]) {
     process.exitCode = r.exitCode;
     return;
   }
-  throw new Error('usage: staging-status.mjs project-state | project-plan | report FACTS OBSERVED');
+  throw new Error('usage: staging-status.mjs project-state | project-plan | collect WORKDIR | report FACTS OBSERVED | terraform-pathspecs');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   try { main(process.argv.slice(2)); } catch (e) { console.error(`staging-status: ${e.message}`); process.exitCode = 2; }
 }

@@ -5,8 +5,8 @@
 //   node plan-record.mjs write META MODE HEAD VAR_SHA PLAN_SHA < state-identity.json
 //   node plan-record.mjs check META MODE HEAD VAR_SHA PLAN_SHA < state-identity.json   exits 1 naming each mismatch
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { FLAG_MODES } from './fence-vars.mjs';
+import { isMain } from '../is-main.mjs';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -51,6 +51,6 @@ function main([cmd, meta, mode, head, varSha256, planSha256, sourceVarSha256]) {
   throw new Error('usage: plan-record.mjs state | write META ... | check META ...');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   try { main(process.argv.slice(2)); } catch (e) { console.error(`plan-record: ${e.message}`); process.exitCode = 2; }
 }

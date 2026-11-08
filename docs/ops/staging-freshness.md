@@ -15,7 +15,7 @@ message; its role can change nothing. Counts, revisions, digests, file names and
 | `alarms` | The number of CloudWatch alarms with the stack's prefix changed | An apply added or removed alarms. Update the facts file and the page |
 | `cloudfrontCachePaths` | The distribution's cache behaviours changed | Same |
 | `ready` | The API's `/api/v1/ready` did not answer 200 | The API is down or its migrations are behind its image: look at the service first |
-| `terraform-unapplied` | Files under `infrastructure/terraform/` changed on `main` after the applied commit | Merged and not applied. Plan it as its own INFRA plan ([staging-release.md](staging-release.md)) before the next release |
+| `terraform-unapplied` | Terraform inputs changed on `main` after the applied commit: files under `infrastructure/terraform/` or `infrastructure/lambda/`, less tests, docs and examples ([terraform-inputs.json](../../scripts/staging/terraform-inputs.json)) | Merged and not applied. Plan it as its own INFRA plan ([staging-release.md](staging-release.md)) before the next release |
 | `image-behind-main` | An application change merged 7 or more days ago is not in the running image | Release it, or record why not |
 | `exception:<id>` | An accepted exception passed its review date | Review it: fix it, or extend the date in the facts file with a reason |
 | `could not read <thing> (<error class>)` | A read failed (AWS, GitHub or the facts file). The run is **incomplete**, never clean | Usually GitHub's unauthenticated rate limit or a permission change; open the log group |
