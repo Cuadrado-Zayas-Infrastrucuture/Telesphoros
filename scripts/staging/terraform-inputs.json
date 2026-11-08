@@ -1,0 +1,4 @@
+{
+  "paths": ["infrastructure/terraform", "infrastructure/lambda"],
+  "notInputs": [".test.mjs", ".test.ts", ".tftest.hcl", ".md", ".example"]
+}

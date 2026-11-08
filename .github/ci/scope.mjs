@@ -32,7 +32,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /** The six checks the ruleset requires. guard tests pin this list to .github/rulesets/main.json. */
-export const requiredChecks = ['verify', 'database-and-storage', 'browser', 'terraform', 'secret-scan', 'image'];
+export const requiredChecks = ['verify', 'database-and-storage', 'browser', 'terraform', 'terraform-lint', 'secret-scan', 'image'];
 
 const sha40 = /^[a-f0-9]{40}$/;
 const everything = reason => ({ heavy: true, guards: true, terraform: true, postgres: true, archive: true, reason });

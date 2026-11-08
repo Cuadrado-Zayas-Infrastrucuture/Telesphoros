@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { EvaluationSummaryDto } from '@telesphoros/shared-types';
+import { drugPresentation, type EvaluationSummaryDto } from '@telesphoros/shared-types';
 import { Button } from '@/components/ui/Button';
 import { ResultDetails } from '@/components/ResultDetails';
 import type { DecisionLink } from '@/lib/clinicianDecisions';
@@ -24,9 +24,12 @@ export function StoredResult({
   decisions?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const drug = drugPresentation({ name: result.drug });
   return (
     <section aria-label={`Stored result ${result.drug}`} className="flex flex-col gap-3 border-t border-border py-4">
-      <h4 className="font-medium">{result.drug}</h4>
+      <h4 className="font-medium" aria-label={drug.ariaLabel}>
+        {drug.displayName}
+      </h4>
       <ResultDetails
         result={result}
         geneStates={evaluation.geneStates}
