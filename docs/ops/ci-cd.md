@@ -21,7 +21,7 @@ A first job, `changes`, decides how much of the rest a run must do (next section
 | `secret-scan` | yes | gitleaks over the **full git history** (rules and the one named allowlist entry in `.gitleaks.toml`) |
 | `image` | yes | Build/scan and synthetic TLS/provisioning/migration/two-task containment rehearsal; proves the scanned image is the OCI archive's image; rehearses the release (`release-rehearsal.sh`: local registry, throwaway key, no public network); no registry push or AWS proof |
 | `release-image` | no (runs after merge) | INF-03. On a push to `main` only, after `image`: pushes that job's archive to ECR **without a rebuild**, checks ECR kept its digest, signs the digest with the KMS image-signing key (no transparency log), verifies it. **Skipped until the founder sets the repository variables** below |
-| `terraform-lint` | no (advisory) | tflint with the AWS ruleset. Promote it once it has run clean on `main` (below) |
+| `terraform-lint` | yes | tflint with the AWS ruleset. Same skip condition as `terraform` |
 
 A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform is applied by hand, to synthetic staging only ([environments.md](environments.md)).
 
@@ -52,7 +52,7 @@ skip or hang a required check.
 2. `M` is a merge commit with exactly two parents `B` and `P` (a squash or rebase merge records no head, so it runs everything);
 3. `tree(M)` equals `tree(P)`, and `P` contains `B` (`git merge-base --is-ancestor B P`);
 4. a completed run of `ci.yml` in this repository (not a fork) has event `pull_request`, `head_sha` `P` and conclusion success;
-5. that run's latest attempt shows each of the six required checks as a job that completed with conclusion **success**. A skipped job
+5. that run's latest attempt shows each of the seven required checks as a job that completed with conclusion **success**. A skipped job
    does not count: a draft or documentation-only run reports every check as skipped, which proves nothing about code.
 
 When the proof holds, the push run still runs `secret-scan`, and `image` only while the release variables are set. The step
@@ -113,7 +113,7 @@ closed, and a public repository gets it on the Free plan. Until then: mark ready
 requests: memory and PostgreSQL + S3 do, and between them they exercise the database specs, the PostgreSQL store and the S3 protocol; what
 only the standalone profile adds is that exact pairing. A `schedule` run (07:41 UTC, 03:41 in Puerto Rico) and a manual `workflow_dispatch`
 run execute the whole workflow with all three profiles, so `main` is still proved in full every day it changes. A scheduled run is skipped when an
-earlier scheduled run already passed all six required checks and `service-postgres` at the same commit of `main`; a manual run is never skipped.
+earlier scheduled run already passed all seven required checks and `service-postgres` at the same commit of `main`; a manual run is never skipped.
 The nightly shares the concurrency group of pushes to `main` (`cancel-in-progress` is false for it), and GitHub keeps one running and one
 queued run per group, so a queued nightly can be replaced by a queued push run or the reverse; the early hour makes that unlikely. Its cost is
 a knob: the cron line in `ci.yml`.
@@ -386,11 +386,11 @@ is not break-glass and gets no row here: it is CI's scanned archive and its reco
 Renaming a job in `ci.yml` silently stops requiring it, which is why `pnpm test:ci-config` fails if the job names and the
 ruleset's required checks disagree.
 
-### Promoting `terraform-lint`
+### A check that cannot go red
 
-When the advisory job has been green on `main` for a few merges: remove `continue-on-error: true` from it, drop it from
-`ADVISORY` in `.github/ci/guard.test.mjs`, and add `{ "context": "terraform-lint", "integration_id": 15368 }` to the ruleset
-file (then re-import or edit the ruleset in the UI).
+`.github/ci/can-go-red.test.mjs` (part of `pnpm test:ci-config`) fails when `continue-on-error` is set, when a test script that skips without
+a database runs only in jobs that have none, when no workflow reaches a package `test*` script, or when a CI test names a path that does not
+exist. An exception goes in the list at the top of that file with its reason; an entry that stops matching fails too.
 
 ## Other automation
 
