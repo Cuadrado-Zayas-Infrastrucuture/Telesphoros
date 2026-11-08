@@ -35,8 +35,8 @@ release resumed from `main` `2a66207b` (#318, #319): its MIGRATE step found noth
 definition revision 12 and the worker on 7, both on the new image, and the frontend build was unchanged, so it was not republished. No CI
 job holds cloud credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `2a66207b` (the 2026-11-08 `IMAGE` apply): anything merged after it under `infrastructure/terraform/` is not
-applied until a release says so here. The values in the table below are kept as data in
+The last apply read the backend clone at, and so applied from `main` `2a66207b` (the 2026-11-08 `IMAGE` apply): anything merged after it that an apply reads (`infrastructure/terraform/` and `infrastructure/lambda/`, less tests,
+docs and examples: [terraform-inputs.json](../../scripts/staging/terraform-inputs.json)) is not applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
 

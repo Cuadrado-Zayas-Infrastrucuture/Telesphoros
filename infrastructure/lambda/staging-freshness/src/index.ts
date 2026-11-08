@@ -2,7 +2,7 @@ import { CloudFrontClient, GetDistributionCommand } from '@aws-sdk/client-cloudf
 import { CloudWatchClient, paginateDescribeAlarms } from '@aws-sdk/client-cloudwatch';
 import { DescribeServicesCommand, DescribeTaskDefinitionCommand, ECSClient } from '@aws-sdk/client-ecs';
 import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
-import { type Facts, run, type Service, type Sources } from './handler';
+import { type Facts, isTerraformInput, run, type Service, type Sources } from './handler';
 
 /** The public repository this stack is built from. Read unauthenticated: a refusal makes the run incomplete, which emails the founder (spec 027, D3). */
 const REPO = 'Cuadrado-Zayas-Infrastrucuture/Telesphoros';
@@ -78,7 +78,7 @@ export function realSources(): Sources {
       const compare = await github<Compare>(`compare/${commit}...main`);
       if (compare.status !== 'ahead' && compare.status !== 'identical') throw new GithubError('applied commit is not an ancestor of main');
       const all = compare.files ?? [];
-      return { files: all.map((f) => f.filename).filter((f) => f.startsWith('infrastructure/terraform/')), truncated: all.length >= COMPARE_FILE_LIMIT };
+      return { files: all.map((f) => f.filename).filter(isTerraformInput), truncated: all.length >= COMPARE_FILE_LIMIT };
     },
     async applicationChangeSince(commit) {
       const compare = await github<Compare>(`compare/${commit}...main`);
