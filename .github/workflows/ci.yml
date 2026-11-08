@@ -117,11 +117,11 @@ jobs:
       - name: Production builds
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm build
-      # The demo's users come from the fake identity provider's own list and the verify scripts report the failing step. This job has no
-      # PostgreSQL, so the run that seeds an empty database skips here and says so; `TEST_DATABASE_URL=... pnpm test:demo-seed` runs it.
+      # The demo's users come from the fake identity provider's own list and the verify scripts report the failing step. Needs no database and
+      # the built fake-idp, so it stays after the builds; the run that seeds an empty database is in service-postgres.
       - name: Demo users and verify-script reports
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
-        run: pnpm test:demo-seed
+        run: node --test scripts/local-review/personas.test.cjs
       # A cold run spends about 140 s of its ~165 s downloading the validator, the IG and the packages it resolves (2026-10-28: one cold
       # download stalled past the validator's 360 s limit). validate.mjs pins both artifacts by sha256 and checks them on every load, so the
       # key follows that file; the validator-resolved packages stay at the versions first fetched until validate.mjs changes.
@@ -678,6 +678,13 @@ jobs:
           node .github/ci/service-budget.mjs run <<'BUDGET'
           TEST_STORAGE=postgres scripts/check-without-reader.sh --measure --listed
           BUDGET
+      # Seeds an empty database twice. The test imports the compiled migrator, and nothing above compiles the API, so the build comes first.
+      - name: Demo users seed an empty PostgreSQL database
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pnpm --filter @telesphoros/backend build
+          pnpm test:demo-seed
+          BUDGET
       - name: PostgreSQL fixture lifecycle regressions
         run: |
           node .github/ci/service-budget.mjs run <<'BUDGET'
@@ -1091,7 +1098,6 @@ jobs:
     needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    continue-on-error: true
     defaults:
       run:
         working-directory: infrastructure/terraform
