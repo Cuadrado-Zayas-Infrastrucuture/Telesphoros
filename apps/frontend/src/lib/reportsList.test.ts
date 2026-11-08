@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { listReports } from './ownedStorageApi';
+import { getReport, listReports } from './ownedStorageApi';
 import { NotSignedInError } from '@/auth/AuthProvider';
 
 const patientId = '11111111-1111-4111-8111-111111111111';
@@ -25,13 +25,16 @@ it('uses the existing bounded reports endpoint with a validated optional patient
   await expect(listReports(api, 1, signal, patientId)).resolves.toEqual(page);
   expect(api).toHaveBeenCalledWith(`/api/v1/reports?page=1&pageSize=20&patientId=${patientId}`, { signal });
 });
+it('accepts the merged group returned by the server while preserving original patient IDs', async () => {
+  const grouped = { ...page, data: [{ ...report, patientId: report.id }] };
+  await expect(listReports(vi.fn().mockResolvedValue(json(grouped)), 1, undefined, patientId)).resolves.toEqual(grouped);
+});
 it.each([
-  { ...page, data: [{ ...report, patientId: report.id }] },
   { ...page, meta: { ...page.meta, page: 2 } },
   { ...page, meta: { ...page.meta, pageSize: 100 } },
   { ...page, meta: { ...page.meta, totalPages: 2 } },
   { ...page, meta: { ...page.meta, total: 0, totalPages: 0 } },
-])('refuses page or patient disagreement instead of displaying it', async (bad) => {
+])('refuses page disagreement instead of displaying it', async (bad) => {
   await expect(listReports(vi.fn().mockResolvedValue(json(bad)), 1, undefined, patientId)).rejects.toThrow('Reports could not be loaded');
 });
 it('rejects an invalid patient or page before making a request', async () => {
@@ -44,4 +47,18 @@ it('does not expose service payloads, and preserves session control errors', asy
   await expect(listReports(vi.fn().mockResolvedValue(json({ message: 'private' }, 403)), 1)).rejects.toThrow('Reports could not be loaded. Please retry.');
   const expired = new NotSignedInError();
   await expect(listReports(vi.fn().mockRejectedValue(expired), 1)).rejects.toBe(expired);
+});
+
+it('reads a known report directly, independently of patient-list pagination', async () => {
+  const api = vi.fn().mockResolvedValue(json(report));
+  const signal = new AbortController().signal;
+  await expect(getReport(api, report.id, signal)).resolves.toEqual(report);
+  expect(api).toHaveBeenCalledWith(`/api/v1/reports/${report.id}`, { signal, cache: 'no-store' });
+});
+
+it('refuses another report or an unavailable report and preserves session control errors', async () => {
+  await expect(getReport(vi.fn().mockResolvedValue(json({ ...report, id: patientId })), report.id)).rejects.toThrow('The report could not be loaded. Please retry.');
+  await expect(getReport(vi.fn().mockResolvedValue(json({ message: 'private' }, 404)), report.id)).rejects.toThrow('The report could not be loaded. Please retry.');
+  const expired = new NotSignedInError();
+  await expect(getReport(vi.fn().mockRejectedValue(expired), report.id)).rejects.toBe(expired);
 });
