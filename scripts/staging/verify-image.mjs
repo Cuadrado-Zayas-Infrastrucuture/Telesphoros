@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 export const RECORD_FORMAT = 1;
 export const RECORD_FILE = 'verified-image.json';
@@ -126,7 +127,7 @@ export function main(argv) {
   console.log(`verified ${images.length} image(s) against ${signed.keyAlias} (${signed.keyArn}); record: ${options.record}`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try {
     main(process.argv.slice(2));
   } catch (error) {

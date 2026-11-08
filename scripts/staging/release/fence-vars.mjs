@@ -3,7 +3,7 @@
 //   FENCE-CLOSE / FENCE-OPEN         medication_writes_enabled = false / true
 //   ASSESSMENT-OFF / ASSESSMENT-ON   synthetic_assessment_enabled = false / true   (spec 032 S3, PR 3c-3a)
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from '../is-main.mjs';
 
 export const FLAGS = {
   'FENCE-CLOSE': ['medication_writes_enabled', false],
@@ -29,7 +29,7 @@ export function fenceVars(source, mode) {
   }
   return `${source}${source.endsWith('\n') || !source ? '' : '\n'}${replacement}\n`;
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   try {
     const [command, source, destination, mode] = process.argv.slice(2);
     if (!['create', 'check'].includes(command) || !source || !destination || process.argv.length !== 6) throw new Error();
