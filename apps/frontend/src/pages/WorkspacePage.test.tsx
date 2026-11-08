@@ -42,11 +42,13 @@ function api(roles: Role[]) {
     const url = String(input);
     const body = url.includes('/api/v1/patients')
       ? page([PATIENT])
-      : url.includes('/api/v1/reports')
-        ? page([report(listed, listedUploaded)])
-        : url.endsWith('/api/v1/me/recovery-scope')
-          ? { recoveryScope: RECOVERY_SCOPE }
-          : { roles };
+      : url.endsWith(`/api/v1/reports/${REPORT_ID}`)
+        ? report(listed, listedUploaded)
+        : url.includes('/api/v1/reports')
+          ? page([report(listed, listedUploaded)])
+          : url.endsWith('/api/v1/me/recovery-scope')
+            ? { recoveryScope: RECOVERY_SCOPE }
+            : { roles };
     return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
   });
 }
@@ -535,7 +537,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     else expect(within(thread).getByRole('alert')).toHaveTextContent('The upload was interrupted.');
   });
 
-  it('"Check status" reloads the report from the list and shows its new status word (CH-3)', async () => {
+  it('"Check status" reloads the known report and shows its new status word (CH-3)', async () => {
     const { fetchImpl } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
     await userEvent.upload(file(), json());
