@@ -46,6 +46,9 @@ const INVENTED_PATHS = [
 const DATABASE_ENV = 'TEST_DATABASE_URL';
 const SKIP = /\b(?:describe|test|it)\.skip\b|\bskipIf\b|\bskip:|NOT RUNNING|\bskipped\.push\b/;
 const uncommented = text => text.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The manifest of a package matched by a pnpm-workspace glob, where each `*` stands for one directory name. */
+const manifestOf = glob => new RegExp(`^${glob.split('*').map(escapeRegExp).join('[^/]+')}/package\\.json$`);
 
 /** The jobs of one workflow, comments removed so that a comment can neither run a script nor set an option. */
 function jobsOf(text) {
@@ -162,7 +165,7 @@ function unreachedProblems(tree, allowed = LOCAL_ONLY_SCRIPTS) {
 /** Every string literal in a CI test that is shaped like a path inside this repository, as [file, line, path]. */
 function pinnedPaths(tree) {
   const tops = [...new Set(tree.files.filter(file => file.includes('/')).map(file => file.split('/')[0]))];
-  const literal = new RegExp(`(['"\`])((?:${tops.map(top => top.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&')).join('|')})/[\\w@.\\-/]*[\\w@.\\-])\\1`, 'g');
+  const literal = new RegExp(`(['"\`])((?:${tops.map(escapeRegExp).join('|')})/[\\w@.\\-/]*[\\w@.\\-])\\1`, 'g');
   const found = [];
   for (const [file, text] of Object.entries(tree.ciTests)) text.split('\n').forEach((line, index) => { for (const match of line.matchAll(literal)) found.push([file, index + 1, match[2]]); });
   return found;
@@ -190,7 +193,7 @@ function realTree() {
   const read = file => { try { return readFileSync(join(root, file), 'utf8'); } catch { return null; } };
   const lines = read('pnpm-workspace.yaml').split('\n');
   const patterns = lines.slice(lines.indexOf('packages:') + 1).map(line => line.match(/^ {2}- "(.+)"$/)?.[1]);
-  const globs = patterns.slice(0, patterns.indexOf(undefined)).map(glob => new RegExp(`^${glob.replace('*', '[^/]+')}/package\\.json$`));
+  const globs = patterns.slice(0, patterns.indexOf(undefined)).map(manifestOf);
   const manifests = ['package.json', ...files.filter(file => globs.some(glob => glob.test(file)))];
   const packages = manifests.map(file => { const manifest = JSON.parse(read(file)); return { dir: file === 'package.json' ? '' : dirname(file), name: manifest.name, scripts: manifest.scripts ?? {} }; });
   const workflowDir = join(root, '.github/workflows');
@@ -236,6 +239,13 @@ function sampleTree({ workflows = { 'ci.yml': workflow('verify') }, scripts = { 
     read: file => contents[file] ?? null, exists: path => existing.includes(path), ignored: paths => new Set(paths.filter(path => gitignored.includes(path))) };
 }
 const allow = (extra = {}) => ({ why: 'A reason long enough to mean something.', ...extra });
+
+test('control: a workspace glob reads every star as one directory and every other character literally', () => {
+  assert.ok(manifestOf('infrastructure/lambda/*').test('infrastructure/lambda/x/package.json'));
+  assert.ok(manifestOf('a/*/b/*').test('a/x/b/y/package.json'), 'every star counts, not only the first');
+  assert.ok(!manifestOf('a/*').test('a/x/y/package.json'), 'a star stops at a slash');
+  assert.ok(!manifestOf('a.b/*').test('axb/c/package.json'), 'a dot is a dot');
+});
 
 test('control, rule 1: a job or a step that cannot fail is refused, whatever the spelling; false and a written reason are not', () => {
   for (const value of ['true', '"true"', '${{ matrix.experimental }}']) {
