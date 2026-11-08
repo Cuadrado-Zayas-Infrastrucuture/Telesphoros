@@ -7,6 +7,10 @@
 locals {
   freshness_count   = local.synthetic && local.api_service_count == 1 && local.web_count == 1 ? 1 : 0
   freshness_metrics = "${local.name}/Freshness"
+  # The two services by name, not by aws_ecs_service ids: every IMAGE release updates both services, and a policy document that reads their ids
+  # is then read only at apply, so the plan shows this policy as "known after apply" and the release check refuses it (the 859e964a release).
+  # The names are the cluster's and the services' in api-compute.tf and worker.tf; the freshness guard checks that they still agree.
+  freshness_services = [for s in ["api", "worker"] : "arn:aws:ecs:${var.region}:${local.audit_account_id}:service/${local.name}-api/${local.name}-${s}"]
 }
 
 data "archive_file" "staging_freshness" {
@@ -41,7 +45,7 @@ data "aws_iam_policy_document" "staging_freshness" {
   statement {
     sid       = "ReadTheTwoServices"
     actions   = ["ecs:DescribeServices"]
-    resources = [aws_ecs_service.api[0].id, aws_ecs_service.worker[0].id]
+    resources = local.freshness_services
   }
   # These two read calls accept no resource: ECS task definitions and CloudWatch alarms are named per call, not per ARN.
   statement {

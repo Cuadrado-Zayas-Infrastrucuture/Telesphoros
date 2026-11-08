@@ -74,6 +74,16 @@ for (const [name, edit] of [
   assert.ok(problems('FENCE-CLOSE', plan, FENCE_IMAGE, FENCE_IMAGE).length > 0);
 });
 
+test('a fence transition reads a role\'s own policy read-back from the same plan, and refuses one Terraform does not hold', () => {
+  const doc = JSON.stringify({ Version: '2012-10-17', Statement: [] });
+  const plan = fencePlan('FENCE-CLOSE', true);
+  plan.prior_state = { values: { root_module: { resources: [{ address: 'aws_iam_role_policy.x', mode: 'managed', type: 'aws_iam_role_policy', values: { role: 'example-role', name: 'own', policy: doc } }] } } };
+  const role = (name) => ({ address: 'aws_iam_role.x', mode: 'managed', type: 'aws_iam_role', change: { actions: ['update'], before: { name: 'example-role', inline_policy: [] }, after: { name: 'example-role', inline_policy: [{ name, policy: doc }] } } });
+  plan.resource_drift = [role('own')];
+  assert.deepEqual(problems('FENCE-CLOSE', plan, FENCE_IMAGE, FENCE_IMAGE), []);
+  plan.resource_drift = [role('foreign')];
+  assert.ok(problems('FENCE-CLOSE', plan, FENCE_IMAGE, FENCE_IMAGE).length > 0);
+});
 test('Terraform may omit empty drift and output sections', () => {
   const p = fencePlan(); delete p.resource_drift; delete p.output_changes;
   assert.deepEqual(problems('FENCE-CLOSE', p, FENCE_IMAGE, FENCE_IMAGE), []);

@@ -14,6 +14,7 @@ export const FALLBACK_TEXT: Readonly<Record<string, string>> = {
   'allele-not-in-definitions': 'No explanation is generated. An allele in the report is not in the gene definitions.',
   'no-phenotype-mapping': 'No explanation is generated. The report result has no phenotype mapping.',
   'no-gene-definition': 'No explanation is generated. There is no gene definition for a gene in the report.',
+  'knowledge-gap': 'No explanation is generated. The guideline file has no entry for this combination of results; a pharmacist must review it first.',
   'association-abstained': 'No explanation is generated. The engine abstained on this gene and drug association.',
   'no-published-recommendation': 'No explanation is generated. The guideline publishes no recommendation for this case.',
   'no-guideline-for-drug': 'No explanation is generated. No guideline is loaded for this drug.',

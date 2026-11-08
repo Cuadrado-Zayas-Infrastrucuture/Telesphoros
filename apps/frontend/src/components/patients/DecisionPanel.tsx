@@ -1,7 +1,7 @@
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { ClinicianDecisionCreate, ClinicianDecisionHistoryDto, EvaluationSummaryDto } from '@telesphoros/shared-types';
-import { CDR_CODE_LABELS } from '@telesphoros/shared-types';
+import { CDR_CODE_LABELS, drugPresentation } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { currentDecisionEntry, decisionLabels, readDecisionHistory, type DecisionLink } from '@/lib/clinicianDecisions';
@@ -14,11 +14,14 @@ export function DecisionPanel({
   result,
   followupBusy,
   onFollowup,
+  onStale,
 }: {
   evaluation: EvaluationSummaryDto;
   result: EvaluationSummaryDto['results'][number];
   followupBusy: boolean;
   onFollowup: (link: DecisionLink) => void;
+  /** A write was refused because the result changed (409): the list re-reads, so `evaluation.current` here is fresh again. */
+  onStale: () => void;
 }) {
   const { apiFetch, roles } = useAuth();
   const [read, setRead] = useState<{ history: ClinicianDecisionHistoryDto; actor: string } | null>(null);
@@ -85,7 +88,7 @@ export function DecisionPanel({
       )}
       {!eligible && <p className="text-sm text-warning">New decisions are unavailable for this result. State: {history.basis.join(', ')}.</p>}
       {editing ? (
-        <DecisionForm history={history} kind={editing} initial={head} onCancel={() => reload()} onSaved={() => reload(true)} />
+        <DecisionForm history={history} kind={editing} initial={head} onCancel={() => reload()} onSaved={() => reload(true)} onStale={onStale} />
       ) : (
         <div className="flex flex-wrap gap-2">
           {canWrite && (
@@ -114,7 +117,7 @@ export function DecisionPanel({
               size="sm"
               variant="outline"
               disabled={followupBusy}
-              onClick={() => onFollowup({ id: history.currentDecisionId!, label: `${result.drug} · ${decisionLabels[current.response!]}` })}
+              onClick={() => onFollowup({ id: history.currentDecisionId!, label: `${drugPresentation({ name: result.drug }).displayName} · ${decisionLabels[current.response!]}` })}
             >
               Schedule linked follow-up
             </Button>

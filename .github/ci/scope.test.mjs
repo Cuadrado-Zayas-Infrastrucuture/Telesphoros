@@ -316,7 +316,7 @@ test('docsPath accepts only markdown under docs/ and in the repository root', ()
 test('every harness path that can change what the evaluation gate measures runs the whole verify job (FR-013)', () => {
   // The evaluation gate is a test in apps/ai-service, run by `pnpm test` inside verify. verify runs in full unless EVERY changed file is documentation,
   // so the model ID, SDK version, decoding settings, templates, lexicons and cases must live in files that are never documentation (not .md, not under docs/).
-  for (const path of ['apps/ai-service/src/model-clients/config.ts', 'apps/ai-service/src/prompts/explain-v1.ts', 'apps/ai-service/src/evaluators/lexicons.ts', 'apps/ai-service/evals/golden/cases.ts',
+  for (const path of ['apps/ai-service/src/model-clients/port.ts', 'apps/ai-service/src/prompts/explain-v1.ts', 'apps/ai-service/src/evaluators/lexicons.ts', 'apps/ai-service/evals/golden/cases.ts',
     'apps/ai-service/evals/pinned.ts', 'apps/ai-service/package.json', 'pnpm-lock.yaml']) {
     assert.equal(docsPath(path), false, path);
     assert.deepEqual(classify([path]), { docsOnly: false, terraform: false }, path);

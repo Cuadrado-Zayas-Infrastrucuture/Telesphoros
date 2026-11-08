@@ -3,8 +3,8 @@
 // against this stack's signing key, or recorded as break-glass for synthetic staging.
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { RECORD_FILE, RECORD_FORMAT, signingKeyAlias, validReason } from './verify-image.mjs';
+import { isMain } from './is-main.mjs';
 
 export const IMAGE_POLICY_UPDATES = [
   'aws_iam_role_policy.api_execution_service[0]',
@@ -307,7 +307,7 @@ export function planProblems(plan, stage, record) {
   return problems;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try {
     if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C|SES|WEB plan.json');
     const plan = JSON.parse(readFileSync(process.argv[3], 'utf8'));

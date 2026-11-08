@@ -8,20 +8,25 @@
 # Reads the Terraform state's serial and lineage (nothing else of it) and runs `plan -lock=false -detailed-exitcode` on the backend clone's
 # HEAD, printing addresses and actions only. Lists the Terraform merged on origin/main after the applied commit, the saved plans and the claim.
 # A saved plan whose apply log ends `== apply exit status: 0` is listed as applied and does not count; a failed apply does.
+# It builds nothing: a Lambda bundle missing, or older than its source, makes the plan row "not run" and names the Lambda (plan.sh builds it).
 # It does not fetch: run `git -C "$BACKEND_CLONE" fetch origin` first if origin/main may be behind.
 #
 # Live values come from a private file outside the repository, ~/telesphoros-private/staging/stack.env (override with STACK_ENV):
 #   STAGING_ACCOUNT_ID   the staging account (12 digits)          BACKEND_CLONE   the founder's backend clone (on main)
 #   TERRAFORM            the pinned Terraform 1.16.5 binary       TF_DATA_DIR     the backend's data directory
-#   STAGING_VAR_FILE     the canonical var file (optional here; without it the plan row is "not run")
+# The plan reads the same var file as every release step, ~/telesphoros-private/staging/current.tfvars (scripts/staging/release/lib.sh),
+# and only while it matches its recorded current.tfvars.sha256; otherwise the plan row is "not run". STAGING_VAR_FILE is no longer read.
 # Docs: docs/ops/environments.md, specs/027-staging-freshness/.
 set -euo pipefail
 umask 077
 
 die() { echo "staging-status: $*" >&2; exit 2; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/staging/terraform-running.sh
+. "$HERE/terraform-running.sh"
 PRIVATE="${PRIVATE_DIR:-$HOME/telesphoros-private}"
 STACK_ENV="${STACK_ENV:-$PRIVATE/staging/stack.env}"
+CURRENT="$PRIVATE/staging/current.tfvars"
 [ -f "$STACK_ENV" ] || die "no $STACK_ENV (see the header of this script)"
 # shellcheck source=/dev/null
 . "$STACK_ENV"
@@ -77,16 +82,42 @@ if [ "$(cat "$WORK/api-digest" 2>/dev/null)" = "$(fact image.digest)" ] && git -
   git -C "$C" ls-tree --name-only "$IMAGE_COMMIT" apps/backend/migrations/ | grep -oE '/[0-9]{4}_' | tr -d '/_' | sort | tail -1 > "$WORK/migration"
 fi
 
+# The first Lambda whose bundle is not built for this checkout, or nothing. Terraform zips infrastructure/lambda/<name>/dist as it finds it,
+# so a missing dist fails the plan and one older than its source (a merge or fast-forward rewrites the files it changes) shows a change that
+# is not real. File times only: nothing is built here.
+unbuilt_lambda() {
+  local dir name f
+  for dir in "$C"/infrastructure/lambda/*/; do
+    [ -f "$dir/package.json" ] || continue
+    dir=${dir%/}; name=${dir##*/}
+    if [ -z "$(ls -A "$dir/dist" 2>/dev/null)" ]; then echo "$name"; return 0; fi
+    for f in "$dir"/dist/*; do
+      if [ -n "$(find "$dir/src" "$dir/package.json" "$dir"/tsup.config.* "$dir"/tsconfig*.json "$C/pnpm-lock.yaml" -type f -newer "$f" -print -quit 2>/dev/null)" ]; then
+        echo "$name"; return 0
+      fi
+    done
+  done
+  return 0
+}
+
 echo "== state and plan"
 "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$MJS" project-state > "$WORK/state.json" 2>/dev/null || echo '{}' > "$WORK/state.json"
 PLAN_EXIT=null; PLAN_WHY=""
-if [ -z "${STAGING_VAR_FILE:-}" ] || [ ! -f "$STAGING_VAR_FILE" ]; then
-  PLAN_WHY="no canonical var file (STAGING_VAR_FILE)"
-elif pgrep -f 'terraform.*(apply|plan|import|untaint)' >/dev/null; then
+UNBUILT=$(unbuilt_lambda)
+TF_RUNNING=0; terraform_running || TF_RUNNING=$?
+if [ ! -f "$CURRENT" ] || [ ! -f "$CURRENT.sha256" ]; then
+  PLAN_WHY="no canonical var file (current.tfvars with its .sha256)"
+elif [ "$(shasum -a 256 "$CURRENT" | cut -c1-64)" != "$(cut -c1-64 "$CURRENT.sha256")" ]; then
+  PLAN_WHY="current.tfvars does not match its recorded sha256 (edited by hand)"
+elif [ -n "$UNBUILT" ]; then
+  PLAN_WHY="the $UNBUILT Lambda is not built for this checkout (plan.sh builds it)"
+elif [ "$TF_RUNNING" = 0 ]; then
   PLAN_WHY="another terraform process is running"
+elif [ "$TF_RUNNING" = 2 ]; then
+  PLAN_WHY="the process list could not be read, so another terraform process cannot be ruled out"
 else
   set +e
-  "$TERRAFORM" -chdir="$TFDIR" plan -input=false -no-color -lock=false -detailed-exitcode -var-file="$STAGING_VAR_FILE" -out="$WORK/status.tfplan" </dev/null > "$WORK/plan.log" 2>&1
+  "$TERRAFORM" -chdir="$TFDIR" plan -input=false -no-color -lock=false -detailed-exitcode -var-file="$CURRENT" -out="$WORK/status.tfplan" </dev/null > "$WORK/plan.log" 2>&1
   PLAN_EXIT=$?
   set -e
   if [ "$PLAN_EXIT" = 2 ]; then "$TERRAFORM" -chdir="$TFDIR" show -json "$WORK/status.tfplan" </dev/null | node "$MJS" project-plan > "$WORK/changes" || PLAN_EXIT=1; fi
@@ -95,7 +126,10 @@ fi
 
 APPLIED=$(fact appliedCommit)
 if git -C "$C" merge-base --is-ancestor "$APPLIED" origin/main 2>/dev/null; then
-  git -C "$C" log --first-parent --format='%h %s' "$APPLIED..origin/main" -- infrastructure/terraform > "$WORK/unapplied"
+  node "$MJS" terraform-pathspecs > "$WORK/pathspecs" || die "cannot read terraform-inputs.json"
+  SPECS=(); while IFS= read -r p; do SPECS+=("$p"); done < "$WORK/pathspecs"
+  [ "${#SPECS[@]}" -gt 0 ] || die "terraform-inputs.json names no path"
+  git -C "$C" log --first-parent --format='%h %s' "$APPLIED..origin/main" -- "${SPECS[@]}" > "$WORK/unapplied"
 else
   echo "?????? the applied commit is not on origin/main: the facts file is wrong" > "$WORK/unapplied"
 fi

@@ -20,15 +20,23 @@ They must look and behave differently everywhere (icon, shape, colour and wordin
 | Outcome | Meaning | Shows guideline wording? |
 | --- | --- | --- |
 | `shown` | Every gene resolved to a canonical phenotype and a **verified** cell applies | Yes, verbatim, with its citation |
-| `held` | A person must act before anything can be shown | **Never** |
+| `held` | A person must act before anything can be shown, including when the guideline file has no cell for the case | **Never** |
 | `abstained` | The report lists values with no key tying them to genes; nothing was assigned | **Never** |
-| `no-published-recommendation` | The guideline was consulted and publishes no recommendation for this case | Only when a verified cell itself says "No recommendation" |
+| `no-published-recommendation` | A verified cell of the guideline itself says "No recommendation" for this case | Yes, the cell's wording, with its citation |
 | `no-guideline` | No loaded guideline covers the drug | n/a |
 
 A result is `shown` only if all of these hold, which a test checks over every combination of states for a
 two-gene table: each gene is a clean canonical phenotype; the guideline has a cell for exactly that combination;
 that cell is `verified`. The wording of an unverified or disputed cell is never placed in any field, not even to a
 reviewer-facing one; the result carries only the cell's location.
+
+**A missing cell is a gap, not a published answer (audit DATA-01, 2026-11-07).** When the guideline file has no cell for
+the combination of phenotypes, the result is `held` with `knowledge-gap`, never `no-published-recommendation`: the two
+used to share one outcome and one reason, and a gap read as "no pharmacogenomic action needed". A combined table that
+lacks the combination is held the same way, with no fallback to the single-gene table it replaces. Under the production
+rules the loader refuses a guideline unless every combination of its genes' phenotypes is a cell or is listed, with a
+note, under the file's signed `notCovered` (schema 1.3); a listed combination is still held as `knowledge-gap`. Results
+stored before this change keep `no-published-recommendation` with no citation, and the database still accepts that form.
 
 ## Gene states
 
@@ -59,8 +67,9 @@ value from a report.
 | `allele-not-in-definitions` | held | An allele is not in the reviewed definitions | Obtain the phenotype, or add the allele through the reviewed definition process |
 | `no-phenotype-mapping` | held | The tables define no phenotype for this allele combination | Obtain the phenotype from the lab |
 | `no-gene-definition` | held | The system has no definitions for this gene | Obtain the phenotype; the gene needs a reviewed definition |
+| `knowledge-gap` | held | The guideline file has no cell for this combination of phenotypes | Add the missing cell, or sign it as not covered, through the reviewed knowledge process |
 | `association-abstained` | abstained | Values listed with no key tying them to genes | Request a corrected or differently laid out report |
-| `no-published-recommendation` | no-published-recommendation | The guideline publishes none for this case | none |
+| `no-published-recommendation` | no-published-recommendation | A verified cell says "No recommendation" for this case | none |
 | `no-guideline-for-drug` | no-guideline | No loaded guideline covers the drug | none |
 
 The last four rows of gene-level problems exist because the engine can also be fed a **diplotype** (a structured
@@ -70,8 +79,8 @@ lab feed). A report read from a PDF gives phenotypes.
 applies in this order, and holds come before abstention (if a person is needed, say so):
 `duplicate-gene-conflict`, `duplicate-identical`, `sentinel-literal-in-source`, `other-gene-unresolved`,
 `malformed-diplotype`, `allele-not-in-definitions`, `no-phenotype-mapping`, `no-gene-definition`, `gene-absent`,
-`association-abstained`. (`out-of-review-scope` and `cell-disputed` belong to a cell, not a gene, and arise only
-when every gene is clean.) All the genes' individual states are listed in the result either way.
+`association-abstained`. (`out-of-review-scope`, `cell-disputed` and `knowledge-gap` belong to a cell or its absence, not a
+gene, and arise only when every gene is clean.) All the genes' individual states are listed in the result either way.
 
 **Codes a caller may attach (amended 2026-10-08).** The engine accepts a gene the caller could not resolve together with
 one reason code, and only from a short list: `other-gene-unresolved` and `association-abstained`. The report adapter

@@ -65,6 +65,11 @@ const held = (p: StructuredAssessmentPlan) => {
 };
 
 describe('planStructuredAssessment', () => {
+  it('holds a report with no findings: nothing was reviewed, so "every finding was reviewed" must not pass on an empty list', () => {
+    const noFindings = { ...base, findings: [] } as unknown as SyntheticPgxLabReport; // the manifest stays: a valid report that simply lists nothing
+    expect(held(plan(snapshot([revision(noFindings)])))).toEqual({ holdCode: 'unsupported-source', detail: ['no-findings'] });
+  });
+
   it('is ready only when every finding is an accepted, tested, resolved, interpretable diplotype, and reads the diplotype, not the lab phenotype', () => {
     const p = plan(snapshot([revision(withFindings([finding()]))], [review(REV1, findingA.id)]));
     expect(p.kind).toBe('ready');
