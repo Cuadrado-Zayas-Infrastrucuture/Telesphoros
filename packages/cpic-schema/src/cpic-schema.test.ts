@@ -688,6 +688,46 @@ describe('schema 1.3 identifiers and origin (spec 033 K2)', () => {
   });
 });
 
+describe('review signatures (audit CLIN-01)', () => {
+  const signed = { status: 'reviewed', reviewedBy: 'A. Reviewer', reviewedAt: '2026-02-01', contentSha256: 'a'.repeat(64) } as const;
+  const signature = (keyId: string, over: Record<string, unknown> = {}) => ({ keyId, algorithm: 'ecdsa-p256-sha256', signature: 'MEUCIQ' + 'A'.repeat(90) + '==', ...over });
+  const real13 = (review: Record<string, unknown>) => ({
+    ...guideline(),
+    schemaVersion: '1.3',
+    rxcui: '999999999999',
+    synthetic: false,
+    provenance: { ...base.provenance, license: 'cc0-1.0', redistribution: 'allowed' },
+    recommendations: [cell({ GENEA: 'Normal' }, { origin: 'cpic' })],
+    review,
+  });
+
+  it('a reviewed 1.3 file may carry signatures, and parses to exactly its input', () => {
+    const file = real13({ ...signed, signatures: [signature('signer-a'), signature('signer-b')] });
+    const parsed = guidelineFileSchema.safeParse(file);
+    expect(parsed.error?.issues ?? []).toEqual([]);
+    expect(parsed.data).toStrictEqual(file);
+  });
+
+  it('a 1.2 file may not carry signatures, and an unreviewed file has nothing to sign', () => {
+    expect(issuesOf(guidelineFileSchema, { ...guideline(), review: { ...signed, signatures: [signature('signer-a')] } })).toContain(
+      'review.signatures: Not part of schema 1.2: declare schemaVersion "1.3" to use it.',
+    );
+    expect(guidelineFileSchema.safeParse(real13({ status: 'unreviewed', signatures: [signature('signer-a')] })).success).toBe(false);
+  });
+
+  it('refuses an unknown algorithm, a signature that is not base64, a bad key id, an empty list and more than four', () => {
+    for (const bad of [
+      [signature('signer-a', { algorithm: 'rsa-sha256' })],
+      [signature('signer-a', { signature: 'not base64!' })],
+      [signature('Signer A')],
+      [],
+      ['a', 'b', 'c', 'd', 'e'].map((k) => signature(`signer-${k}`)),
+    ]) {
+      expect(guidelineFileSchema.safeParse(real13({ ...signed, signatures: bad })).success, JSON.stringify(bad).slice(0, 80)).toBe(false);
+    }
+  });
+});
+
 describe('cells a guideline marks as not covered (audit DATA-01)', () => {
   const combined13 = (over: Record<string, unknown> = {}) => ({
     ...combined(),

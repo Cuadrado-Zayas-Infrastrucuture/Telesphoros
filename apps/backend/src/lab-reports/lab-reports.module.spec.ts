@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import type { Env } from '../config/env';
 import { KnowledgeLoadError } from '../services/knowledge/knowledge-loader';
+import { SignerKeysError } from '../services/knowledge/signatures';
 import { ReaderNotApprovedError } from '../services/report-reader/report-reader';
 import { cleanupTempDirs, reviewedCopyOf, tempDir } from '../../test/helpers/knowledge';
 import { labKnowledgeFactory, labReaderFactory, syntheticKnowledgeFactory } from './lab-reports.module';
@@ -18,6 +19,10 @@ describe('the lab-report pipeline applies production rules when NODE_ENV is prod
   it('the knowledge loader applies the production rules (test-only content is refused); non-production loads it (control)', async () => {
     await expect(labKnowledgeFactory(envOf('production'))).rejects.toBeInstanceOf(KnowledgeLoadError);
     await expect(labKnowledgeFactory(envOf('development'))).resolves.toBeDefined();
+  });
+
+  it('refuses to start with signer keys it cannot read (audit CLIN-01)', async () => {
+    await expect(labKnowledgeFactory({ ...envOf('production'), KNOWLEDGE_SIGNER_KEYS: '{' })).rejects.toBeInstanceOf(SignerKeysError);
   });
 
   it('builds neither when the pipeline is off', async () => {

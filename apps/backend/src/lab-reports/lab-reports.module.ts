@@ -1,6 +1,7 @@
 import { Logger, Global, Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
 import { Database } from '../db/database';
+import { parseSignerKeys } from '../services/knowledge/signatures';
 import { loadKnowledge } from '../services/knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
 import { assertReaderEnginePresent } from '../services/report-reader/engine-presence';
@@ -36,7 +37,7 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
 const modeOf = (env: Env) => (env.NODE_ENV === 'production' ? 'production' : 'non-production');
 
 export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> =>
-  enabled(env) ? loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env) }) : undefined;
+  enabled(env) ? loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env), signerKeys: parseSignerKeys(env.KNOWLEDGE_SIGNER_KEYS) }) : undefined;
 
 /**
  * The synthetic knowledge for the structured assessment: loaded only while SYNTHETIC_ASSESSMENT is on, from its own directory and never from the
