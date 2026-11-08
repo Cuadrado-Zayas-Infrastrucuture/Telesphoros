@@ -90,4 +90,5 @@ PLANSHA=$(sha "$PLAN")
 printf '%s\n' "$STATE" | node "$HERE/plan-record.mjs" write "$PLAN.meta.json" "$MODE" "$COMMIT" "$VARSHA" "$PLANSHA" ${SOURCE_ARGS[@]+"${SOURCE_ARGS[@]}"} || die "could not write the plan record"
 bundle_record "$PLAN.bundles"
 echo "plan sha256: $PLANSHA"
+if [ "$MODE" = IMAGE ] && [ ! -e "$OUT/migrate-status.txt" ]; then echo "migrations next: CLAIM_OWNER=$CLAIM_OWNER $HERE/migrate.sh MIGRATE $COMMIT, then at once the apply below (staging is down in between)"; fi
 echo "NOT APPLIED. Read $OUT/$T.txt line by line, then: CLAIM_OWNER=$CLAIM_OWNER $HERE/apply.sh $MODE $COMMIT $PLANSHA${OPERATION:+ $OPERATION}"
