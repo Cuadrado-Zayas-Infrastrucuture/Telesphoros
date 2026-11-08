@@ -697,6 +697,11 @@ cd ../worker && pnpm test                                    # the job queue and
 Python 3 is needed on the PATH for the reader tests. Without the reader engine in the checkout (the public repository has none) the specs that need it are skipped and announced; `scripts/check-without-reader.sh` runs the suite that way ([lab-report-reader.md](lab-report-reader.md#the-engine-is-optional)). Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
 ([docs/database.md](database.md)).
 
+**Run one backend test loop per machine at a time.** The database specs keep Jest's 5-second default, and each run is already serialized
+(`maxWorkers: 1`). Two loops at once, even against separate PostgreSQL clusters, share the CPU and push the slower specs past that deadline. Root
+`pnpm test` counts as a loop, because it tests the backend, worker and frontend in parallel. A 5-second timeout seen while another loop was
+running proves nothing either way: re-run that tier alone ([2026-11-07 fragment](status/2026-11-07-report-registration-deadline.md)).
+
 ## Synthetic FHIR terminology/profile slice
 
 The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). The final synthetic workflow acceptance slice is described above.
