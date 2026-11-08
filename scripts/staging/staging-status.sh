@@ -123,7 +123,10 @@ fi
 
 APPLIED=$(fact appliedCommit)
 if git -C "$C" merge-base --is-ancestor "$APPLIED" origin/main 2>/dev/null; then
-  git -C "$C" log --first-parent --format='%h %s' "$APPLIED..origin/main" -- infrastructure/terraform > "$WORK/unapplied"
+  node "$MJS" terraform-pathspecs > "$WORK/pathspecs" || die "cannot read terraform-inputs.json"
+  SPECS=(); while IFS= read -r p; do SPECS+=("$p"); done < "$WORK/pathspecs"
+  [ "${#SPECS[@]}" -gt 0 ] || die "terraform-inputs.json names no path"
+  git -C "$C" log --first-parent --format='%h %s' "$APPLIED..origin/main" -- "${SPECS[@]}" > "$WORK/unapplied"
 else
   echo "?????? the applied commit is not on origin/main: the facts file is wrong" > "$WORK/unapplied"
 fi

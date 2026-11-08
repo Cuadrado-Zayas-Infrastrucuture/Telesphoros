@@ -1,0 +1,18 @@
+[
+  { "path": "infrastructure/terraform/main.tf", "input": true },
+  { "path": "infrastructure/terraform/.terraform.lock.hcl", "input": true },
+  { "path": "infrastructure/terraform/templates/policy.tftpl", "input": true },
+  { "path": "infrastructure/terraform/cognito/settings.json", "input": true },
+  { "path": "infrastructure/lambda/staging-freshness/src/index.ts", "input": true },
+  { "path": "infrastructure/lambda/password-change-notifier/package.json", "input": true },
+  { "path": "infrastructure/lambda/staging-freshness/tsup.config.ts", "input": true },
+  { "path": "infrastructure/terraform/guard.test.mjs", "input": false },
+  { "path": "infrastructure/terraform/staging.tftest.hcl", "input": false },
+  { "path": "infrastructure/terraform/README.md", "input": false },
+  { "path": "infrastructure/terraform/backend.s3.tfbackend.example", "input": false },
+  { "path": "infrastructure/lambda/staging-freshness/src/handler.test.ts", "input": false },
+  { "path": "infrastructure/terraform-state/main.tf", "input": false },
+  { "path": "infrastructure/docker/api.Dockerfile", "input": false },
+  { "path": "apps/backend/src/main.ts", "input": false },
+  { "path": "docs/ops/environments.md", "input": false }
+]
