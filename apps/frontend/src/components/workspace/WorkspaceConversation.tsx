@@ -18,7 +18,7 @@ import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { incompleteness } from '@/lib/demographicsDraft';
 import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
-import { cancelOwnedUpload, listReports, removeUnfinishedReport } from '@/lib/ownedStorageApi';
+import { cancelOwnedUpload, getReport, removeUnfinishedReport } from '@/lib/ownedStorageApi';
 import { productUploadSchema } from '@/lib/productUploadSchema';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 import { readRecovery } from '@/lib/uploadRecovery';
@@ -71,7 +71,6 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     if (!next) return;
     attachment.discard();
     setFile(next);
-    setFailedId(null);
     setUploadError(null);
     setSynthetic(false);
     setTried(false);
@@ -84,7 +83,6 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     setDetailsOpen(false);
     attachment.offer(file);
     setFile(null);
-    setFailedId(null);
     setFileError(null);
     setUploadError(null);
     setTried(false);
@@ -125,7 +123,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     if (canAttach && !busy) choose(event.dataTransfer.files[0]);
   }
 
-  const busy = uploading;
+  const busy = uploading || cancelling;
   const text = input.trim();
   const chosen = patients?.find((p) => p.id === patientId);
   const chosenIncomplete = chosen ? incompleteness(chosen) === 'incomplete' : false;
@@ -141,13 +139,12 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         : 'Type a question.'
       : null;
 
-  /** The report's status word, read from the list. Not finding it is said plainly rather than guessed. */
-  async function readStatus(id: number, reportId: string, forPatientId: string, announce: boolean) {
+  /** Read the known report directly: a patient's history can span many pages or a merged group. */
+  async function readStatus(id: number, reportId: string, announce: boolean) {
     update(id, { checking: true, checkNote: undefined });
     try {
-      const page = await listReports(apiFetch, 1, undefined, forPatientId);
-      const found = page.data.find((report) => report.id === reportId);
-      update(id, found ? { status: found.status, checking: false } : { checking: false, checkNote: 'This report is not in the latest list yet. Check again shortly.' });
+      const report = await getReport(apiFetch, reportId);
+      update(id, { status: report.status, checking: false });
       if (announce) announceReportsChanged();
     } catch (error) {
       if (error instanceof SessionEndedError) return;
@@ -184,11 +181,12 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         ]);
         setUploading(true);
         transfer.current = new AbortController();
-        progress.current = {};
+        // Keep registration and attempt identities until success or acknowledged cancellation, including after a lost reply.
         const watch = window.setInterval(() => update(id, { stage: uploadStage(progress.current.attempt?.state) }), 150);
         let reportId: string;
         try {
           reportId = (await submitReport(parsed.data, apiFetch, progress.current, transfer.current.signal, recoverySession ?? undefined)).reference;
+          progress.current = {};
           update(id, { stage: UPLOAD_STEPS.length, phase: 'sent', reportId, status: 'received' });
           setFile(null);
           setDetailsOpen(false);
@@ -204,7 +202,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
               : 'The upload was interrupted. Your file is kept; please retry.';
           setUploadError(message);
           update(id, { phase: 'failed', message });
-          setFailedId(progress.current.cancelRequested ? null : id);
+          setFailedId(id);
           announceReportsChanged();
           return;
         } finally {
@@ -213,7 +211,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
           setUploading(false);
         }
         announceReportsChanged();
-        void readStatus(id, reportId, patient.id, false);
+        void readStatus(id, reportId, false);
         setInput('');
         return;
       }
@@ -410,7 +408,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         {!started ? (
           <ConversationWelcome preferredName={preferredName} canAttach={canAttach} />
         ) : (
-          <ConversationEntries entries={entries} onCheckStatus={(entry) => void readStatus(entry.id, entry.reportId!, entry.patientId, true)} />
+          <ConversationEntries entries={entries} onCheckStatus={(entry) => void readStatus(entry.id, entry.reportId!, true)} />
         )}
       </div>
       {/* The expanded attachment form can exceed a mobile viewport; let it flow below the heading. */}

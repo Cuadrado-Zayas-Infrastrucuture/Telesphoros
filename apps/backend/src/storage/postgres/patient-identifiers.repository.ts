@@ -82,12 +82,13 @@ export class PostgresPatientIdentifiersRepository extends PatientIdentifiersRepo
           if (raced) return raced;
           if (constraint === 'patient_identifiers_creation_request_uq') throw error;
           const holder = await client.query<{ patient_id: string }>(
-            `SELECT patient_id::text AS patient_id FROM patient_identifiers WHERE tenant_id = $1 AND system = $2 AND value_digest = $3 AND status = 'active'`,
-            [tenantId, input.system, input.digest],
+            // Compare UUIDs in PostgreSQL: their spelling (including letter case) does not identify a different patient.
+            `SELECT patient_id::text AS patient_id FROM patient_identifiers WHERE tenant_id = $1 AND system = $2 AND value_digest = $3 AND status = 'active' AND patient_id <> $4::uuid`,
+            [tenantId, input.system, input.digest, input.patientId],
           );
           const other = holder.rows[0]?.patient_id;
           // Another patient holds this number: a possible duplicate, one flag per unordered pair. Nothing about the number is kept.
-          if (other && other !== input.patientId) {
+          if (other) {
             await client.query(
               `INSERT INTO patient_duplicate_flags (tenant_id, patient_id, other_patient_id, system, flagged_by)
                VALUES ($1, LEAST($2::uuid, $3::uuid), GREATEST($2::uuid, $3::uuid), $4, $5) ON CONFLICT ON CONSTRAINT patient_duplicate_flags_pair_uq DO NOTHING`,
