@@ -31,6 +31,8 @@ export function planStructuredAssessment(tenantId: string, report: { id: string;
   }
 
   const { laboratoryReport: lab } = revision;
+  // Every check below reads "each finding is ...", which an empty list passes: a report with no findings would be assessed with no person having reviewed anything.
+  if (lab.findings.length === 0) return { kind: 'held', revision, holdCode: 'unsupported-source', detail: ['no-findings'] };
   const decisions = lab.findings.map((f) => ({ finding: f, review: snapshot.reviews.find((x) => x.revisionId === revision.id && x.findingId === f.id) }));
   const notAccepted = decisions.filter((d) => !d.review || d.review.decision === 'held');
   if (notAccepted.length > 0)
