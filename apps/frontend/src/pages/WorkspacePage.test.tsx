@@ -237,6 +237,14 @@ describe('the chat-first home in every build (specs/024)', () => {
     await waitFor(() => expect(removeUnfinishedReport).toHaveBeenCalledWith(expect.any(Function), REPORT_ID));
   });
 
+  it.each(['reader', 'reviewer'] as const)('offers a %s no removal: the API lets only a clinician remove a report', async (role) => {
+    listedUploaded = false;
+    open([role]);
+    const list = within(await screen.findByRole('list', { name: 'Recent reports' }));
+    expect(await list.findByText('Upload not finished')).toBeVisible(); // the row is there: only the action is withheld
+    expect(list.queryByRole('button', { name: /^Remove unfinished upload/ })).not.toBeInTheDocument();
+  });
+
   it('offers no removal for a recent report whose file is stored', async () => {
     open(['clinician']);
     const list = within(await screen.findByRole('list', { name: 'Recent reports' })); // specs/034 D3: the former Past reports
