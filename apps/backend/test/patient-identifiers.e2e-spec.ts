@@ -42,6 +42,27 @@ afterAll(async () => {
 });
 
 describe('registering and listing', () => {
+  (usingPostgres() ? it.each([false, true]) : it.skip.each([false, true]))(
+    'returns identifier-in-use for the same patient UUID in uppercase (new request id: %s), without flagging a duplicate patient',
+    async (retryKey) => {
+      const clin = await as(tenantOf(), ['clinician']);
+      const patient = await newPatient(clin);
+      const value = 'SYN-CASE-7001';
+      await register(clin, patient, 'hospital-a-mrn', value).expect(201);
+      const conflict = await api()
+        .post(`/api/v1/patients/${patient.toUpperCase()}/identifiers`)
+        .set(clin)
+        .send({ system: 'hospital-a-mrn', value, ...(retryKey ? { requestId: randomUUID() } : {}) })
+        .expect(409);
+      expect(conflict.body.error.details[0].reason).toBe('identifier-in-use');
+      const duplicates = await api().get('/api/v1/patient-duplicates').set(clin).expect(200);
+      expect(duplicates.body.meta.total).toBe(0);
+      const listed = await api().get(`/api/v1/patients/${patient}/identifiers`).set(clin).expect(200);
+      expect(listed.body.data).toHaveLength(1);
+      await register(clin, patient.toUpperCase(), 'hospital-a-mrn', 'SYN-CASE-7002').expect(201);
+    },
+  );
+
   it('registers an identifier and lists it without the value or the digest', async () => {
     const tenant = tenantOf();
     const clin = await as(tenant, ['clinician']);

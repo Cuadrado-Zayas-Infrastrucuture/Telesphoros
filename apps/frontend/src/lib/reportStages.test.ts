@@ -71,11 +71,14 @@ describe('countReportStages', () => {
     expect(api).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses a page that breaks the list contract', async () => {
-    const wrongPatient = vi.fn(async () =>
+  it('counts reports whose original patient is in the server-resolved merged group', async () => {
+    const mergedPatient = vi.fn(async () =>
       json({ data: [report('processed', true, '22222222-2222-4222-8222-222222222222')], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } }),
     );
-    await expect(countReportStages(wrongPatient, undefined, patient)).rejects.toBeInstanceOf(SubmitError);
+    await expect(countReportStages(mergedPatient, undefined, patient)).resolves.toEqual({ registered: 1, uploaded: 1, read: 1, failed: 0, total: 1, capped: false });
+  });
+
+  it('refuses a page that breaks the list contract', async () => {
     const shifting = vi.fn(async (path: string) => {
       const page = Number(new URL(path, 'https://api.test').searchParams.get('page'));
       return json({ data: [report('processed', true)], meta: { page, pageSize: 100, total: page === 1 ? 150 : 151, totalPages: 2 } });
