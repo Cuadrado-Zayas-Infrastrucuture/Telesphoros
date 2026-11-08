@@ -3,6 +3,8 @@
 What runs on every pull request, what `main` requires before a merge, and the exact steps to turn that protection on.
 Synthetic data only: no CI job has cloud credentials, and nothing is deployed from CI (see [deployment.md](deployment.md)).
 
+**Reading order.** This page is long because it keeps dated acceptance records. The parts that describe CI as it is now: [the jobs](#the-jobs-githubworkflowsciyml), [what each required check does now](#required-checks-what-each-does-now) (which checks run on your pull request), [branch protection](#branch-protection-githubrulesetsmainjson), [other automation](#other-automation) and [running the same checks locally](#running-the-same-checks-locally). The sections headed with a pull request number and a date (`#162`, `#160`, `#151`, "Merged acceptance and superseded drafts") are history: each speaks for its own date and is not edited. The command-by-command test matrix, with what each skips, is in [database.md](../database.md#verification-matrix).
+
 ## The jobs (`.github/workflows/ci.yml`)
 
 Runs on every pull request and on every push to `main`. A newer push to the same pull request cancels the older run;

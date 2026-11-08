@@ -1,7 +1,7 @@
 # Contributing
 
 - Branch every PR off `main`; never stack PRs.
-- Backend: NestJS, TypeScript on Node >=22. Workspace: pnpm; an external dependency uses one version range in every package, and a workspace package is referenced as `workspace:*` (`pnpm test` fails otherwise). Python only under `ml/training/` and `sidecars/` (a sidecar is a small process the backend starts; today, `sidecars/report-reader/`).
+- Backend: NestJS, TypeScript on Node >=22. Workspace: pnpm; an external dependency uses one version range in every package, and a workspace package is referenced as `workspace:*` (`pnpm test` fails otherwise). Python only under `ml/training/` and `sidecars/` (a sidecar is a small helper outside the TypeScript workspace. The public checkout holds one, `sidecars/report-lookup/`, a Python oracle that only the offline conformance tests run. The report-reader sidecar the backend starts, `sidecars/report-reader/`, is optional and private: it is not in this checkout).
 - Parameterized SQL, every query tenant-scoped; no PHI in logs.
 - A promise is awaited, handled or explicitly `void`ed: `pnpm lint` checks it with types (`scripts/lint/promise-rules.mjs`). A suppression names the rule and gives its reason after `--`; one that suppresses nothing fails lint.
 - An import used only as a type is written `import type`, on its own line (`scripts/lint/type-imports.mjs`; `eslint --fix` writes it). In the backend, decorator metadata needs the runtime import, so the rule runs only with type information there; `pnpm test` fails if it does not.
@@ -25,10 +25,10 @@ Requirements: Node.js 22.22.0 (CI pins this exact release), pnpm 10.28.0, Python
 ```bash
 pnpm install --frozen-lockfile
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
-pnpm test:infra && pnpm test:ci-config
+pnpm test:infra && pnpm test:ci-config && pnpm check:workflows
 ```
 
-The database and S3 test tiers are in [docs/STATUS.md](docs/STATUS.md#running-things-locally) and [docs/database.md](docs/database.md). A green run without them proves nothing about the schema.
+The database and S3 test tiers: the [verification matrix](docs/database.md#verification-matrix) says which command needs which service, what it skips and what CI runs on a pull request versus nightly; the exact local sequence is in [docs/STATUS.md](docs/STATUS.md#running-things-locally). A green run without them proves nothing about the schema.
 
 What you can do with the repository alone, and what access only the founder holds today (AWS, the private release folder, DNS): [docs/ops/team-access.md](docs/ops/team-access.md).
 
