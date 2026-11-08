@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
+import { WRITER_ROLES } from '@/auth/roles';
 import { Button } from '@/components/ui/Button';
 import { SubmitError } from '@/lib/api';
 import { removeUnfinishedReport } from '@/lib/ownedStorageApi';
@@ -7,10 +8,10 @@ import { announceReportsChanged } from '@/lib/workspaceEvents';
 
 /**
  * "Remove" for a report whose file never arrived, with a second step to confirm. Offered only for such reports: the request reads the report again and
- * refuses one whose file is stored. On success the report lists reload.
+ * refuses one whose file is stored. On success the report lists reload. Shown only to a role the API lets remove a report.
  */
 export function RemoveUnfinishedReport({ reportId, filename }: { reportId: string; filename: string }) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, roles } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function RemoveUnfinishedReport({ reportId, filename }: { reportId: strin
     }
   }
 
+  if (!roles.some((role) => WRITER_ROLES.includes(role))) return null;
   if (!confirming)
     return (
       <span className="flex flex-col items-start">

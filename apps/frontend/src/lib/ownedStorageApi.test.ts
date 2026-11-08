@@ -226,6 +226,19 @@ it('removes a report whose file never arrived, after reading it again', async ()
   ]);
   expect(api.mock.calls[1]![1]).toMatchObject({ redirect: 'error', credentials: 'omit', cache: 'no-store' });
 });
+it.each([
+  ['reading the report', () => vi.fn().mockImplementation(async () => response({}, 403)), () => vi.fn().mockImplementation(async () => response({}, 429))],
+  [
+    'removing it',
+    () => vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({}, 403)),
+    () => vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({}, 429)),
+  ],
+])('says remove, not upload, when the API refuses while %s', async (_step, forbidden, limited) => {
+  await expect(removeUnfinishedReport(forbidden(), id)).rejects.toThrow('You do not have permission to remove this report.');
+  const refused = removeUnfinishedReport(limited(), id);
+  await expect(refused).rejects.toThrow('Too many requests. Wait a moment, then retry.');
+  await expect(refused).rejects.not.toThrow('entries');
+});
 it('never removes a report whose file is stored', async () => {
   const api = vi.fn().mockResolvedValueOnce(response(report(true)));
   await expect(removeUnfinishedReport(api, id)).rejects.toThrow('file stored');
