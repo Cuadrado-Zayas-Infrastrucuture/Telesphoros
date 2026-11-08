@@ -99,16 +99,18 @@ test('the real pgrep shows a running stand-in as a shell command line, and the c
   write(stand, 'sleep 30');
   const child = spawn(stand, ['-chdir=/tmp/clone', 'plan', '-input=false'], { stdio: 'ignore' });
   try {
-    // The real pgrep, narrowed to this process: what another session's suite would show this one.
+    // The real pgrep, narrowed to this process by its PID: what another session's suite would show this one. Not by its path: macOS (BSD) pgrep
+    // -fl prints the whole command line, but procps pgrep -fl, on Linux and so in CI, prints only the process name, here `bash`.
     const narrowed = join(box, 'narrowed');
     mkdirSync(narrowed);
-    write(join(narrowed, 'pgrep'), `/usr/bin/pgrep "$@" | grep -F -- "${stand}"`);
+    write(join(narrowed, 'pgrep'), `/usr/bin/pgrep "$@" | grep -E -- "^${child.pid} "`);
     let seen = '';
     for (let i = 0; i < 50 && !seen; i++) {
       seen = spawnSync(join(narrowed, 'pgrep'), ['-fl', 'terraform.*(apply|plan|import|untaint)'], { encoding: 'utf8' }).stdout.trim();
       if (!seen) await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    assert.match(seen, /^[0-9]+ (\S*\/)?bash \S+\/stand\/terraform -chdir=\/tmp\/clone plan -input=false$/);
+    assert.match(seen, new RegExp(`^${child.pid} (\\S*/)?bash( |$)`), 'either form is a shell line');
+    if (process.platform === 'darwin') assert.match(seen, /^[0-9]+ (\S*\/)?bash \S+\/stand\/terraform -chdir=\/tmp\/clone plan -input=false$/);
     const r = spawnSync('bash', ['-c', `set -euo pipefail; . "${check}"; if terraform_running; then echo running; else echo quiet; fi`], {
       encoding: 'utf8',
       env: { PATH: `${narrowed}:${process.env.PATH}`, HOME: box, TMPDIR: box },
