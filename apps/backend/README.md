@@ -10,6 +10,53 @@ pnpm --filter @telesphoros/backend lint
 pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter @telesphoros/backend start
 ```
 
+## Where to start
+
+[`src/main.ts`](src/main.ts) starts the API and [`src/app.module.ts`](src/app.module.ts) registers every domain module. This package has three other entry points: [`src/db/cli.ts`](src/db/cli.ts) (the `db:*` commands: migrate, backup, restore, each with its own database login), [`src/issuer/main.ts`](src/issuer/main.ts) (optional, with its own enable switch) and [`src/evaluation-worker.ts`](src/evaluation-worker.ts) (gated). The queue worker is a different package: [`apps/worker`](../worker). Documentation map: [docs/README.md](../../docs/README.md).
+
+### Folders that look alike
+
+| Folder | What it is |
+| --- | --- |
+| `src/auth/` | Verifies the token, builds the `Principal`, enforces `@Roles`. [`membership.service.ts`](src/auth/membership.service.ts) reads the caller's current roles from the database on every request |
+| `src/members/` | HTTP routes for an organization's administrators over their own people. It creates no account and no organization |
+| `src/membership/` | Operator commands ([`membership-cli.ts`](src/membership/membership-cli.ts), [`tenant-cli.ts`](src/membership/tenant-cli.ts)) that run with the migration login. There is no API route for them ([membership runbook](../../docs/ops/membership.md)) |
+| `src/storage/` | Record storage: an abstract repository class with an in-memory implementation beside it and a PostgreSQL one in `postgres/`. [`storage.module.ts`](src/storage/storage.module.ts) picks one from `STORAGE_DRIVER` |
+| `src/object-storage/` | File bytes only: in memory or S3, picked from `OBJECT_STORAGE_DRIVER` in [`object-storage.module.ts`](src/object-storage/object-storage.module.ts). Separate from record storage |
+| `src/db/` | Database infrastructure: the pool, the migrator, the `db:*` CLI, backup and restore, the evidence catalogue |
+| `src/services/` | The clinical engines and readers behind a generic name: knowledge loading, the phenotype and recommendation engines, the report adapter, the optional report reader and the offline `report-lookup` |
+| `src/ledger/` | The per-tenant hash-chained audit ledger. A change here must keep the tenant and the transaction in view |
+
+### Direction of dependencies
+
+- A request goes controller, then service, then an abstract repository from `src/storage/`. No controller or service runs SQL at this commit. Record SQL lives in `src/storage/postgres/` and the migrations; the ledger ([`src/ledger/`](src/ledger)), [`src/auth/session-admission.ts`](src/auth/session-admission.ts) and [`src/db/`](src/db) also run SQL of their own.
+- Every repository method takes the tenant id, and it comes from the `Principal`, never from the request body.
+- The stores are chosen in `storage.module.ts` and `object-storage.module.ts`, but they are not the only readers of `STORAGE_DRIVER`: `auth/auth.module.ts`, `health/health.module.ts`, `config/env.ts`, `reports/intake/local-policy.ts`, `patient-identity/structured-preview.service.ts` and `storage/ledger-records.repository.ts` read it too. Search for it before assuming a change is independent of the store.
+- A change to a repository touches the abstract class and its in-memory implementation (the same file) and the PostgreSQL implementation. Run the API suite on both stores, `pnpm test` and `pnpm test:db` (the second needs `TEST_DATABASE_URL`); a green in-memory run says nothing about the SQL.
+
+### One traced path: create a patient
+
+1. **UI.** [`NewPatientPage.tsx`](../frontend/src/pages/NewPatientPage.tsx) shows [`PatientCreateForm.tsx`](../frontend/src/components/patients/PatientCreateForm.tsx), which calls `createPatient` in [`api.ts`](../frontend/src/lib/api.ts). It parses the body with the shared schema and `POST`s `/api/v1/patients` with a retry `requestId`.
+2. **Contract.** `patientCreateSchema` in [`packages/shared-types/src/patient.ts`](../../packages/shared-types/src/patient.ts); the controller validates the same schema with `ZodValidationPipe`.
+3. **Controller and service.** [`patients.controller.ts`](src/patients/patients.controller.ts) (`@Roles(...CAN_WRITE)`, the clinician) calls [`patients.service.ts`](src/patients/patients.service.ts), which replays a prior creation with the same `requestId` and returns a DTO through [`patients.mapper.ts`](src/patients/patients.mapper.ts).
+4. **Repository.** `PatientsRepository` and `InMemoryPatientsRepository` in [`src/storage/patients.repository.ts`](src/storage/patients.repository.ts); the PostgreSQL one in [`src/storage/postgres/patients.repository.ts`](src/storage/postgres/patients.repository.ts).
+5. **PostgreSQL.** The `patients` table is made in [`0001_core_tables`](migrations/0001_core_tables.up.sql); the retry record in [`0039_patient_creation_requests`](migrations/0039_patient_creation_requests.up.sql). Row-level security by tenant: [docs/database.md](../../docs/database.md).
+6. **Tests.** [`patients.service.spec.ts`](src/patients/patients.service.spec.ts) and [`patients.mapper.spec.ts`](src/patients/patients.mapper.spec.ts) (unit); [`test/patients.e2e-spec.ts`](test/patients.e2e-spec.ts) (the API, in-memory store); [`test/db/patient-registration.pg-spec.ts`](test/db/patient-registration.pg-spec.ts) (PostgreSQL, needs `TEST_DATABASE_URL`).
+
+### Where a change goes
+
+Every row also needs a new numbered migration when it changes the schema (never edit an applied one: [docs/database.md](../../docs/database.md#migrations)), and a status fragment ([CONTRIBUTING](../../CONTRIBUTING.md)).
+
+| Task | Contract and UI | Server | Tests | Read first |
+| --- | --- | --- | --- | --- |
+| Add a patient field | The traced path above. A name or birth date is different: it goes through [`src/patient-demographics/`](src/patient-demographics) (encrypted per patient, migration `0064`) | `src/patients/`, `src/storage/patients.repository.ts` and `postgres/` | As above, plus [`test/db/patient-demographics.pg-spec.ts`](test/db/patient-demographics.pg-spec.ts) for demographics | [spec 025](../../specs/025-patient-demographics) |
+| Change upload validation | [`REPORT_CONTENT_TYPES`](../../packages/shared-types/src/report.ts); the browser check ([`productUploadSchema.ts`](../frontend/src/lib/productUploadSchema.ts)) is advisory | [`src/reports/intake/`](src/reports/intake): `intake.service.ts`, `structural-validator.ts`, `stage.ts`, `scope.ts`, `local-policy.ts` | `src/reports/intake/*.spec.ts`, [`test/reports-upload.e2e-spec.ts`](test/reports-upload.e2e-spec.ts), [`test/local-storage-intake.e2e-spec.ts`](test/local-storage-intake.e2e-spec.ts) | [docs/ops/report-evidence.md](../../docs/ops/report-evidence.md) |
+| Change a clinical gate (the pipeline or the synthetic assessment) | Build flags in [`storageMode.ts`](../frontend/src/lib/storageMode.ts) | `LAB_REPORT_PIPELINE` and `SYNTHETIC_ASSESSMENT` start-up rules in [`src/config/env.ts`](src/config/env.ts); the route guard [`src/lab-reports/pipeline-switch.ts`](src/lab-reports/pipeline-switch.ts); [`structured-assessment.controller.ts`](src/lab-reports/structured-assessment.controller.ts); the Terraform side in [`api-compute.tf`](../../infrastructure/terraform/api-compute.tf) | [`test/lab-reports-gate.e2e-spec.ts`](test/lab-reports-gate.e2e-spec.ts), [`test/synthetic-assessment.e2e-spec.ts`](test/synthetic-assessment.e2e-spec.ts), `pnpm test:infra` | [the switch](../../docs/ops/synthetic-assessment-switch.md), [the reader](../../docs/lab-report-reader.md) |
+| Add a job | A new `defineJob` in [`packages/jobs/src/definitions.ts`](../../packages/jobs/src/definitions.ts) | A consumer in [`apps/worker/src/handlers/`](../worker/src/handlers) registered in [`apps/worker/src/main.ts`](../worker/src/main.ts); the database function and the schedule or outbox route in a migration (see [`0023_jobs`](migrations/0023_jobs.up.sql), [`0024_outbox_consumers`](migrations/0024_outbox_consumers.up.sql)) | `apps/worker/test/*.pg.test.ts` (need `TEST_DATABASE_URL`) | [docs/ops/jobs.md](../../docs/ops/jobs.md) |
+| Change who may do what | `Role` in [`packages/shared-types/src/roles.ts`](../../packages/shared-types/src/roles.ts) and the frontend's [`roles.ts`](../frontend/src/auth/roles.ts), which must match the API | `@Roles(...)` on the controller, [`roles.guard.ts`](src/auth/roles.guard.ts), [`clinical-read.ts`](src/auth/clinical-read.ts), `tenant_memberships` ([`0017_membership`](migrations/0017_membership.up.sql)) | [`test/auth.e2e-spec.ts`](test/auth.e2e-spec.ts), [`test/membership.e2e-spec.ts`](test/membership.e2e-spec.ts), [`test/no-role-reads.e2e-spec.ts`](test/no-role-reads.e2e-spec.ts), [`test/db/membership.pg-spec.ts`](test/db/membership.pg-spec.ts) | [docs/auth.md](../../docs/auth.md#authority-and-revocation) |
+
+On the gate row: `PGX_CLINICAL_HOLD_LIFTED` is named in [the AI safety requirements](../../docs/ai-safety-and-hallucination-controls.md) but no code under `apps/` or `packages/` reads it at this commit, so there is nothing to change for it here. Enabling clinical processing is its own approved intention, never a side effect of another change.
+
 ## Endpoints (all under `/api/v1`)
 
 | Method | Path | Auth | Notes |
