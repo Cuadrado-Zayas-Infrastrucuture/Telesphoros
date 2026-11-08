@@ -118,13 +118,14 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
         problems.push(`${path}: no phenotype map exists for gene ${gene}.`);
         continue;
       }
-      for (const row of file.recommendations) {
-        const phenotype = row.when[gene];
+      for (const entry of [...file.recommendations, ...(file.notCovered ?? [])]) {
+        const phenotype = entry.when[gene];
         if (phenotype !== undefined && !map.phenotypes.includes(phenotype)) {
           problems.push(`${path}: phenotype "${phenotype}" is not one of the phenotypes defined for ${gene}.`);
         }
       }
     }
+    if (strict) checkCoverage(path, file, geneMaps, problems);
     checkSupersession(path, file, guidelineById, supersededBy, problems);
   }
 
@@ -132,6 +133,37 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
 
   const id = knowledgeSetId(candidates.map(({ path, file }) => ({ path, fullSha256: fullSha256(file) })));
   return new KnowledgeSet(id, strict ? 'production' : 'non-production', [...geneMaps.values()], guidelines, infos);
+}
+
+const MAX_LISTED_GAPS = 3;
+
+/**
+ * Production only: every combination of the phenotypes of the guideline's genes must be a cell or signed as not covered. A gap would otherwise
+ * be signed and shown without anyone deciding it (audit DATA-01), and in a combined table it would also hide the single-gene table it replaces.
+ * Outside production the gaps load, and the engine holds them as `knowledge-gap`.
+ */
+function checkCoverage(path: string, file: GuidelineFile, maps: ReadonlyMap<string, GeneMapFile>, problems: string[]): void {
+  const phenotypes = file.genes.map((gene) => maps.get(gene)?.phenotypes);
+  if (phenotypes.some((list) => list === undefined)) return; // already reported: no phenotype map for a gene
+  const keyOf = (when: Readonly<Record<string, string | undefined>>) => JSON.stringify(file.genes.map((gene) => when[gene]));
+  const covered = new Set([...file.recommendations, ...(file.notCovered ?? [])].map((entry) => keyOf(entry.when)));
+  // Cells and markers are unique (the schema) and use defined phenotypes (checked above), so the count alone says how many are missing, and the
+  // walk below meets at most `covered.size` covered combinations before it has listed enough gaps.
+  const missing = phenotypes.reduce((count, list) => count * list!.length, 1) - covered.size;
+  if (missing <= 0) return;
+  const index = file.genes.map(() => 0);
+  let listed = 0;
+  while (listed < MAX_LISTED_GAPS) {
+    const when = Object.fromEntries(file.genes.map((gene, position) => [gene, phenotypes[position]![index[position]!]!]));
+    if (!covered.has(keyOf(when))) {
+      problems.push(`${path}: has no cell for ${file.genes.map((gene) => `${gene} "${when[gene]}"`).join(' + ')}. Add the cell, or sign the combination under notCovered.`);
+      listed += 1;
+    }
+    let position = file.genes.length - 1;
+    while (position >= 0 && ++index[position]! === phenotypes[position]!.length) index[position--] = 0;
+    if (position < 0) break;
+  }
+  if (missing > listed) problems.push(`${path}: and ${missing - listed} more combinations with no cell.`);
 }
 
 /**

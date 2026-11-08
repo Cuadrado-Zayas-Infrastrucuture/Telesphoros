@@ -2,7 +2,7 @@ import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { KnowledgeFile } from '@telesphoros/cpic-schema';
+import type { GuidelineFile, KnowledgeFile } from '@telesphoros/cpic-schema';
 import { contentSha256 } from '../../src/services/knowledge/content-hash';
 import { signingMessage, type SignerKeys } from '../../src/services/knowledge/signatures';
 
@@ -85,18 +85,35 @@ export function signatureBy(by: TestSigner, fileId: string, hash: string) {
 export const signerKeysJson = (signers: readonly TestSigner[] = TEST_SIGNERS) =>
   JSON.stringify(Object.fromEntries(signers.map((s) => [s.keyId, s.publicKey.export({ type: 'spki', format: 'pem' }).toString()])));
 
+/** Every combination of the gene maps' phenotypes that a guideline has no cell for, in gene order. */
+export function uncoveredCombinations(file: GuidelineFile, phenotypes: ReadonlyMap<string, readonly string[]>): Record<string, string>[] {
+  const combinations = file.genes.reduce<Record<string, string>[]>(
+    (partial, gene) => partial.flatMap((when) => (phenotypes.get(gene) ?? []).map((phenotype) => ({ ...when, [gene]: phenotype }))),
+    [{}],
+  );
+  return combinations.filter((when) => !file.recommendations.some((row) => file.genes.every((gene) => row.when[gene] === when[gene])));
+}
+
 /**
  * A copy of the synthetic fixtures turned into properly SIGNED-OFF content: not synthetic, reviewed,
  * with a correct content hash. Used to prove the production path works. Never written to the repo.
  * Files are raised to schema 1.3, which production requires, unless `schema: '1.2'` asks for them as they are. A 1.3 copy is signed by
  * `signers` (both TEST_SIGNERS unless told otherwise), so a production load needs `signerKeys: TEST_SIGNER_KEYS` (audit CLIN-01).
+ * Production refuses a guideline with a combination that has no cell (audit DATA-01), so each one the fixture leaves out is signed as not
+ * covered, unless `coverage: 'as-written'` keeps the gaps (schema 1.2 cannot state the marker, so a 1.2 copy keeps them too).
  */
 export async function reviewedCopyOf(
   source: string,
   edit?: (file: KnowledgeFile) => void,
-  options: { schema?: '1.2' | '1.3'; signers?: readonly TestSigner[] } = {},
+  options: { schema?: '1.2' | '1.3'; signers?: readonly TestSigner[]; coverage?: 'marked' | 'as-written' } = {},
 ): Promise<string> {
   const dir = await copyOf(source);
+  const phenotypes = new Map<string, readonly string[]>();
+  for (const name of await readdir(join(dir, 'phenotypes'))) {
+    const file = name.endsWith('.json') ? await readJson(join(dir, 'phenotypes', name)) : undefined;
+    if (file?.kind === 'gene-phenotype-map') phenotypes.set(file.gene, file.phenotypes);
+  }
+  const markGaps = options.schema !== '1.2' && options.coverage !== 'as-written';
   for (const folder of ['phenotypes', 'guidelines']) {
     for (const name of await readdir(join(dir, folder))) {
       if (!name.endsWith('.json')) continue;
@@ -104,6 +121,10 @@ export async function reviewedCopyOf(
       const file = await readJson(path);
       file.synthetic = false;
       if (options.schema !== '1.2') toSchema13(file);
+      if (markGaps && file.kind === 'guideline') {
+        const gaps = uncoveredCombinations(file, phenotypes);
+        if (gaps.length > 0) file.notCovered = gaps.map((when) => ({ when, note: 'Test copy: not covered by this table.' }));
+      }
       edit?.(file);
       const hash = contentSha256(file);
       const signers = options.schema === '1.2' ? [] : (options.signers ?? TEST_SIGNERS);

@@ -353,6 +353,18 @@ const recommendationRowSchema = z.strictObject({
 });
 export type RecommendationRow = z.infer<typeof recommendationRowSchema>;
 
+/**
+ * Schema 1.3: a combination of phenotypes the guideline's table does not address, signed with the rest of the file. The production loader
+ * refuses a guideline unless every combination of its genes' phenotypes is a cell or one of these (audit DATA-01); the engine still holds
+ * such a result as `knowledge-gap`, because nothing published says what to do.
+ */
+const notCoveredSchema = z.strictObject({
+  when: z.record(geneSymbolSchema, label(100)),
+  /** Why the table does not address it, for the reviewer who signs the file. */
+  note: prose(1000),
+});
+export type NotCovered = z.infer<typeof notCoveredSchema>;
+
 export const guidelineFileSchema = z
   .strictObject({
     ...envelope,
@@ -372,6 +384,7 @@ export const guidelineFileSchema = z
      */
     supersedes: z.array(fileIdSchema).max(10),
     recommendations: z.array(recommendationRowSchema).min(1).max(500),
+    notCovered: z.array(notCoveredSchema).min(1).max(500).optional(),
   })
   .superRefine((file, ctx) => {
     requireStatedLicense(file, ctx);
@@ -390,6 +403,8 @@ export const guidelineFileSchema = z
       file.recommendations.map((row, index) => ({ path: ['recommendations', index, 'origin'], origin: row.origin })),
       ctx,
     );
+    // Optional in 1.3, so not a requireVersionedFields field: absent means every combination has a cell.
+    if (file.schemaVersion !== '1.3' && file.notCovered !== undefined) addIssue(ctx, ['notCovered'], 'Not part of schema 1.2: declare schemaVersion "1.3" to use it.');
     if (new Set(file.genes).size !== file.genes.length) addIssue(ctx, ['genes'], 'Genes must be unique.');
     if (new Set(file.supersedes).size !== file.supersedes.length) addIssue(ctx, ['supersedes'], 'Ids must be unique.');
     if (file.supersedes.includes(file.id)) addIssue(ctx, ['supersedes'], 'A guideline cannot supersede itself.');
@@ -404,6 +419,18 @@ export const guidelineFileSchema = z
       const key = JSON.stringify(wanted.map((gene) => row.when[gene]));
       if (seen.has(key)) addIssue(ctx, ['recommendations', index, 'when'], 'This combination of phenotypes appears more than once.');
       seen.add(key);
+    });
+    const marked = new Set<string>();
+    file.notCovered?.forEach((gap, index) => {
+      const given = Object.keys(gap.when).sort();
+      if (given.length !== wanted.length || given.some((gene, position) => gene !== wanted[position])) {
+        addIssue(ctx, ['notCovered', index, 'when'], "A marker must give a phenotype for exactly this guideline's genes.");
+        return;
+      }
+      const key = JSON.stringify(wanted.map((gene) => gap.when[gene]));
+      if (seen.has(key)) addIssue(ctx, ['notCovered', index, 'when'], 'This combination has a cell; it cannot also be marked not covered.');
+      else if (marked.has(key)) addIssue(ctx, ['notCovered', index, 'when'], 'This combination of phenotypes appears more than once.');
+      marked.add(key);
     });
   });
 export type GuidelineFile = z.infer<typeof guidelineFileSchema>;

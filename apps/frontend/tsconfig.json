@@ -26,6 +26,9 @@
       ],
       "@telesphoros/shared-types": [
         "../../packages/shared-types/src/index.ts"
+      ],
+      "@telesphoros/cpic-schema/vocabulary": [
+        "../../packages/cpic-schema/src/vocabulary.ts"
       ]
     }
   },

@@ -134,6 +134,16 @@ describe('evaluate: what may be shown, checked over EVERY combination of states 
     expect(heldWithCell.some((r) => r.reasonCode === 'cell-disputed')).toBe(true);
   });
 
+  it('"no published recommendation" always comes from a verified cell that says so, with its citation; a missing cell is never read as one', () => {
+    const none = results.filter((r): r is Extract<DrugResult, { outcome: 'no-published-recommendation' }> => r.outcome === 'no-published-recommendation');
+    expect(none.length).toBeGreaterThanOrEqual(2);
+    for (const result of none) {
+      expect(result.citation).not.toBeNull();
+      expect(result.strength).toBe('No recommendation');
+    }
+    expect(results.some((r) => r.outcome === 'held' && r.reasonCode === 'knowledge-gap')).toBe(true);
+  });
+
   it('every non-shown result carries a reason whose outcome is the one it reports', () => {
     for (const result of results) {
       if (result.outcome === 'shown') continue;
@@ -262,7 +272,7 @@ describe('evaluate: standard identifiers on results (spec 033 K2-6)', () => {
     expect('identifiers' in held).toBe(false);
     // a combination with no cell
     const none = byDrug(run(identified, 'Synthetic Intermediate', 'Synthetic High'), 'drugz');
-    expect(none).toMatchObject({ outcome: 'no-published-recommendation', citation: null });
+    expect(none).toMatchObject({ outcome: 'held', reasonCode: 'knowledge-gap', citation: null });
     expect('identifiers' in none).toBe(false);
   });
 
@@ -293,5 +303,40 @@ describe('evaluate: the signers of the cited file are named in the citation (aud
   it('adds nothing outside production, so every existing citation keeps its exact shape', () => {
     const result = drugx(knowledge);
     expect(result.outcome === 'shown' && 'signedBy' in result.citation).toBe(false);
+  });
+});
+
+describe('evaluate: a combination with no cell is held, never "no published recommendation" (audit DATA-01)', () => {
+  // In the synthetic fixtures drugy-geneb has no cell for GENEB "Synthetic High", and the combined drugv-genea-genee, which replaces
+  // drugv-genea, has none for Poor + Slow although drugv-genea has a verified Strong cell for Poor.
+  // drugx has a table per gene; the first gene named picks the table.
+  const only = (set: KnowledgeSet, inputs: GeneInput[], drug: string) =>
+    evaluate(set, inputs, { drugs: [drug] }).results.find((result) => (result.genes as readonly string[]).includes(inputs[0]!.gene))!;
+  const gap = { outcome: 'held', reasonCode: 'knowledge-gap', citation: null };
+
+  it('a phenotype the table has no cell for is held as knowledge-gap, with no citation, strength or wording', () => {
+    const result = only(knowledge, [canonical('GENEB', 'Synthetic High')], 'drugy');
+    expect(result).toMatchObject(gap);
+    expect(result).not.toHaveProperty('recommendationText');
+    expect(result).not.toHaveProperty('strength');
+    expect(REASON_OUTCOME['knowledge-gap']).toBe('held');
+  });
+
+  it('a combination missing from a combined table is held; the single-gene table it replaces is not consulted', () => {
+    expect(only(knowledge, [canonical('GENEA', 'Synthetic Poor'), canonical('GENEE', 'Synthetic Slow')], 'drugv')).toMatchObject(gap);
+  });
+
+  it('control: a verified "No recommendation" cell still reports no-published-recommendation, with its citation and wording', () => {
+    const result = only(knowledge, [canonical('GENEC', 'Synthetic Beta')], 'drugx');
+    expect(result).toMatchObject({ outcome: 'no-published-recommendation', reasonCode: 'no-published-recommendation', strength: 'No recommendation' });
+    expect(result.outcome === 'no-published-recommendation' && result.citation).toMatchObject({ guidelineId: 'drugx-genec' });
+  });
+
+  it('a combination the signed file marks as not covered is held the same way: nothing published says what to do', async () => {
+    const signed = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
+    const drugv = signed.guidelinesForDrug('drugv').find((guideline) => guideline.id === 'drugv-genea-genee')!;
+    expect(drugv.notCovered).toEqual([{ when: { GENEA: 'Synthetic Poor', GENEE: 'Synthetic Slow' }, note: expect.any(String) }]);
+    expect(only(signed, [canonical('GENEA', 'Synthetic Poor'), canonical('GENEE', 'Synthetic Slow')], 'drugv')).toMatchObject(gap);
+    expect(only(signed, [canonical('GENEB', 'Synthetic High')], 'drugy')).toMatchObject(gap);
   });
 });

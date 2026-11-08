@@ -1,6 +1,6 @@
 {
   "name": "no-cell-for-this-phenotype",
-  "description": "The guideline has no cell for the phenotype: no published recommendation, and no citation to invent.",
+  "description": "The guideline has no cell for the phenotype: held as a gap in the knowledge (not a published \"No recommendation\"), and no citation to invent.",
   "inputs": [
     {
       "gene": "GENEB",
@@ -25,7 +25,7 @@
     ],
     "results": [
       {
-        "outcome": "no-published-recommendation",
+        "outcome": "held",
         "drug": "drugy",
         "genes": [
           "GENEB"
@@ -38,11 +38,8 @@
             "reasonCode": null
           }
         ],
-        "reasonCode": "no-published-recommendation",
-        "citation": null,
-        "strength": null,
-        "recommendationText": null,
-        "implication": null
+        "reasonCode": "knowledge-gap",
+        "citation": null
       }
     ]
   }

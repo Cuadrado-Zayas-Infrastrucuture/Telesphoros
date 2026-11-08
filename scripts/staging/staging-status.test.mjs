@@ -3,11 +3,11 @@
 // output to identifiers. What this cannot prove: that AWS answers the shell's queries the way the fixtures do.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { collect, compare, planSummary, report, stateIdentity } from './staging-status.mjs';
+import { collect, compare, planSummary, report, stateIdentity, terraformPathspecs } from './staging-status.mjs';
 
 const root = new URL('../../', import.meta.url).pathname;
 const cli = join(root, 'scripts/staging/staging-status.mjs');
@@ -181,4 +181,26 @@ test('report prints fields and identifiers only, and the CLI exits with its code
   assert.equal(drift.status, 1);
   assert.match(drift.stdout, /DRIFT/);
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('Terraform inputs: git with these pathspecs lists exactly the commits that change an input, and each rule broken shows', () => {
+  const fixtures = JSON.parse(readFileSync(new URL('./terraform-inputs.fixtures.json', import.meta.url), 'utf8'));
+  const dir = mkdtempSync(join(tmpdir(), 'tf-inputs-'));
+  const git = (...a) => { const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...a], { cwd: dir, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
+  try {
+    git('init', '-q', '-b', 'main');
+    git('commit', '-q', '--allow-empty', '-m', 'base');
+    const base = git('rev-parse', 'HEAD');
+    for (const f of fixtures) {
+      mkdirSync(dirname(join(dir, f.path)), { recursive: true });
+      writeFileSync(join(dir, f.path), 'x\n');
+      git('add', '-A');
+      git('commit', '-q', '-m', f.path);
+    }
+    const listed = (specs) => git('log', '--format=%s', `${base}..HEAD`, '--', ...specs).split('\n').filter(Boolean).sort();
+    const want = fixtures.filter((f) => f.input).map((f) => f.path).sort();
+    assert.deepEqual(listed(terraformPathspecs()), want);
+    assert.notDeepEqual(listed(terraformPathspecs({ paths: ['infrastructure/terraform', 'infrastructure/lambda'], notInputs: [] })), want, 'without the exclusions a test file counts');
+    assert.notDeepEqual(listed(terraformPathspecs({ paths: ['infrastructure/terraform'], notInputs: ['.test.mjs', '.test.ts', '.tftest.hcl', '.md', '.example'] })), want, 'without the Lambda folder a Lambda change is missed');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

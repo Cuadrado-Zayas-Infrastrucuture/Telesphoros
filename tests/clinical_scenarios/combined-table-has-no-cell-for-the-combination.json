@@ -1,6 +1,6 @@
 {
   "name": "combined-table-has-no-cell-for-the-combination",
-  "description": "No cell exists for this pair of phenotypes: no published recommendation, and no fallback.",
+  "description": "No cell exists for this pair of phenotypes: held as a gap in the knowledge (not a published \"No recommendation\"), and no fallback to the single-gene table.",
   "inputs": [
     {
       "gene": "GENEA",
@@ -38,7 +38,7 @@
     ],
     "results": [
       {
-        "outcome": "no-published-recommendation",
+        "outcome": "held",
         "drug": "drugv",
         "genes": [
           "GENEA",
@@ -58,11 +58,8 @@
             "reasonCode": null
           }
         ],
-        "reasonCode": "no-published-recommendation",
-        "citation": null,
-        "strength": null,
-        "recommendationText": null,
-        "implication": null
+        "reasonCode": "knowledge-gap",
+        "citation": null
       }
     ]
   }

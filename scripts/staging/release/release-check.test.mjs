@@ -23,6 +23,17 @@ const alarm = (address, actions) => ({ address, mode: 'managed', type: 'aws_clou
 const infra = () => base({ api_image: OLD, api_migrate_image: OLD }, [alarm('aws_cloudwatch_metric_alarm.sweep_failing[0]', ['create'])]);
 const find = (p, a) => p.resource_changes.find((c) => c.address === a);
 const drift = (address, type, before, after) => [{ address, mode: 'managed', type, change: { actions: ['update'], before, after } }];
+// A role whose own aws_iam_role_policy reads back as an inline policy (the freshness role, first INFRA plan after it was applied), invented names.
+const POLICY = JSON.stringify({ Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: ['sns:Publish'], Resource: 'arn:aws:sns:us-east-2:111122223333:example' }] });
+const REFORMATTED = JSON.stringify({ Statement: [{ Resource: 'arn:aws:sns:us-east-2:111122223333:example', Action: ['sns:Publish'], Effect: 'Allow' }], Version: '2012-10-17' }, null, 2);
+const held = (role, name, policy) => ({ address: `aws_iam_role_policy.${name}`, mode: 'managed', type: 'aws_iam_role_policy', values: { role, name, policy } });
+const roleReadBack = (inline, policies = [held('example-role', 'check-and-publish', POLICY)]) => {
+  const p = infra();
+  p.prior_state = { values: { root_module: { resources: policies } } };
+  p.resource_drift = drift('aws_iam_role.example[0]', 'aws_iam_role', { name: 'example-role', inline_policy: [], tags: null }, { name: 'example-role', inline_policy: inline, tags: {} });
+  return p;
+};
+const newAttr = (type, key, before, after) => () => { const p = infra(); p.resource_drift = drift(`${type}.x`, type, { [key]: before }, { [key]: after }); return p; };
 
 const cases = [
   ['MIGRATE good', 'MIGRATE', migrate, true],
@@ -56,6 +67,20 @@ const cases = [
   ['real drift: SNS subscription back to pending', 'MIGRATE', () => { const p = migrate(); p.resource_drift = drift('aws_sns_topic_subscription.audit_alarms_email', 'aws_sns_topic_subscription', { pending_confirmation: false }, { pending_confirmation: true }); return p; }, false],
   ['real drift: a filter value changed', 'IMAGE', () => { const p = image(); p.resource_drift = drift('aws_cloudwatch_log_metric_filter.x[0]', 'aws_cloudwatch_log_metric_filter', { metric_transformation: [{ value: '1' }] }, { metric_transformation: [{ value: '0' }] }); return p; }, false],
   ['an output changes', 'IMAGE', () => { const p = image(); p.output_changes = { api_service_name: { actions: ['update'] } }; return p; }, false],
+  ['harmless drift: CloudTrail reads recursive_logging, new in the provider', 'INFRA', newAttr('aws_cloudtrail', 'recursive_logging', null, true), true],
+  ['harmless drift: RDS reads multi_tenant, new in the provider, with its restore mark', 'INFRA', () => {
+    const p = infra(); p.resource_drift = drift('aws_db_instance.main', 'aws_db_instance', { latest_restorable_time: 'a', multi_tenant: null }, { latest_restorable_time: 'b', multi_tenant: false }); return p; }, true],
+  ['real drift: a new-in-provider attribute changes value', 'INFRA', newAttr('aws_cloudtrail', 'recursive_logging', true, false), false],
+  ['real drift: an attribute not on the reviewed list reads a value', 'INFRA', newAttr('aws_cloudtrail', 'enable_log_file_validation', null, false), false],
+  ['real drift: a reviewed attribute name on another type', 'INFRA', newAttr('aws_s3_bucket', 'multi_tenant', null, false), false],
+  ['real drift: a new-in-provider attribute reads an object', 'INFRA', newAttr('aws_db_instance', 'multi_tenant', null, { enabled: true }), false],
+  ['harmless drift: a role reads back its own policy (same document, other formatting)', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: REFORMATTED }]), true],
+  ['real drift: a role gains an inline policy Terraform does not hold', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: POLICY }, { name: 'deny-publish', policy: POLICY }]), false],
+  ['real drift: a role policy whose document was edited', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: POLICY.replace('sns:Publish', 'sns:*') }]), false],
+  ['real drift: a role reads back a policy another role holds', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: POLICY }], [held('other-role', 'check-and-publish', POLICY)]), false],
+  ['real drift: a role reads back its policy twice', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: POLICY }, { name: 'check-and-publish', policy: POLICY }]), false],
+  ['real drift: a role read-back with no prior state to check it against', 'INFRA', () => { const p = roleReadBack([{ name: 'check-and-publish', policy: POLICY }]); delete p.prior_state; return p; }, false],
+  ['real drift: a held policy whose document is not JSON', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: 'not json' }], [held('example-role', 'check-and-publish', 'not json')]), false],
 ];
 
 for (const [name, mode, make, pass] of cases) {

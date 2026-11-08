@@ -181,7 +181,8 @@ describe('loadKnowledge: production rules', () => {
 
   it('refuses signed-off schema 1.2 content in production, naming each file, and still reads it outside production (spec 033 K2-4)', async () => {
     const dir = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { schema: '1.2' });
-    const problems = await problemsOf(dir, 'production');
+    // A 1.2 file cannot sign a gap as not covered, so the two incomplete fixture tables are also refused for coverage.
+    const problems = (await problemsOf(dir, 'production')).filter((p) => !p.includes('has no cell'));
     expect(problems).toHaveLength(11);
     expect(problems.every((p) => p.endsWith(': schema 1.2 states no origin; production needs schema 1.3 with a stated origin.'))).toBe(true);
     expect(await problemsOf(dir, 'non-production')).toEqual([]);
@@ -406,6 +407,19 @@ describe('loadKnowledge: two signers sign real content, under the production rul
     ]);
   });
 
+  it('refuses a not-covered marker edited after the sign-off: what is signed as not covered is part of the signed content', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR);
+    const gapPath = 'guidelines/drugy-geneb.json';
+    const file = (await readJson(join(dir, gapPath))) as GuidelineFile;
+    file.notCovered![0]!.note = 'Changed after the sign-off.';
+    if (file.review.status === 'reviewed') file.review = { ...file.review, contentSha256: contentSha256(file) };
+    await writeJson(join(dir, gapPath), file);
+    expect((await problemsOf(dir, 'production')).filter((p) => p.startsWith(gapPath))).toEqual([
+      `${gapPath}: the signature by "test-signer-a" does not match this file's content.`,
+      `${gapPath}: the signature by "test-signer-b" does not match this file's content.`,
+    ]);
+  });
+
   it('refuses one signer, the same signer twice, and a signer that is not configured', async () => {
     const once = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [a] });
     expect(only(await problemsOf(once, 'production'))).toEqual([`${path}: needs valid signatures from 2 distinct signers; has 1.`]);
@@ -434,5 +448,60 @@ describe('loadKnowledge: two signers sign real content, under the production rul
     expect(await problemsOf(dir, 'non-production', new Map())).toEqual([]);
     const set = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'non-production' });
     expect(set.files.every((f) => f.signedBy === undefined)).toBe(true);
+  });
+});
+
+describe('loadKnowledge: every combination has a cell or is signed as not covered, in production (audit DATA-01)', () => {
+  // The synthetic fixtures leave two gaps: drugy-geneb has no cell for GENEB "Synthetic High", and drugv-genea-genee none for Poor + Slow.
+  it('refuses a guideline that leaves a phenotype or a combination out, naming each gap', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { coverage: 'as-written' });
+    expect(await problemsOf(dir, 'production')).toEqual([
+      'guidelines/drugv-genea-genee.json: has no cell for GENEA "Synthetic Poor" + GENEE "Synthetic Slow". Add the cell, or sign the combination under notCovered.',
+      'guidelines/drugy-geneb.json: has no cell for GENEB "Synthetic High". Add the cell, or sign the combination under notCovered.',
+    ]);
+  });
+
+  it('refuses a release that is its predecessor minus one cell: a source that drops cells is not loaded', async () => {
+    const complete = await reviewedCopyOf(SYNTHETIC_DIR);
+    await expect(loadKnowledge({ directory: complete, mode: 'production', signerKeys: TEST_SIGNER_KEYS })).resolves.toBeDefined();
+    const dropped = await reviewedCopyOf(SYNTHETIC_DIR, (file) => {
+      if (file.kind === 'guideline' && file.id === 'drugx-genea') file.recommendations = file.recommendations.filter((row) => row.when.GENEA !== 'Synthetic Poor');
+    });
+    expect(await problemsOf(dropped, 'production')).toEqual([
+      'guidelines/drugx-genea.json: has no cell for GENEA "Synthetic Poor". Add the cell, or sign the combination under notCovered.',
+    ]);
+  });
+
+  it('counts the rest when a table has many gaps, and lists only the first few', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, (file) => {
+      if (file.kind === 'guideline' && file.id === 'drugv-genea-genee') {
+        file.recommendations = file.recommendations.slice(0, 1);
+        delete file.notCovered;
+      }
+    });
+    const problems = (await problemsOf(dir, 'production')).filter((p) => p.startsWith('guidelines/drugv-genea-genee.json'));
+    expect(problems).toHaveLength(4);
+    expect(problems[3]).toBe('guidelines/drugv-genea-genee.json: and 2 more combinations with no cell.');
+  });
+
+  it('accepts the gaps once they are signed as not covered', async () => {
+    const set = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
+    expect(set.guidelinesForDrug('drugy')[0]!.notCovered).toEqual([{ when: { GENEB: 'Synthetic High' }, note: expect.any(String) }]);
+  });
+
+  it('control: outside production the same gaps load, and are held when evaluated', async () => {
+    expect(await problemsOf(await reviewedCopyOf(SYNTHETIC_DIR, undefined, { coverage: 'as-written' }), 'non-production')).toEqual([]);
+    expect(await problemsOf(SYNTHETIC_DIR, 'non-production')).toEqual([]);
+  });
+
+  it('refuses a marker that names a phenotype the gene map does not define, in every mode', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, (file) => {
+      if (file.kind === 'guideline' && file.id === 'drugy-geneb') file.notCovered = [{ when: { GENEB: 'Synthetic Unknown' }, note: 'Typo.' }];
+    });
+    for (const mode of ['production', 'non-production'] as const) {
+      expect(`${mode}: ${(await problemsOf(dir, mode)).join('\n')}`).toContain(
+        'guidelines/drugy-geneb.json: phenotype "Synthetic Unknown" is not one of the phenotypes defined for GENEB.',
+      );
+    }
   });
 });

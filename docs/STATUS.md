@@ -682,6 +682,8 @@ clinician, reviewer and admin only; `dispute-active` is **tenant-wide** until th
 nvm use                                                     # Node 22.22.0, from .nvmrc (the lab-report matcher refuses another Unicode version)
 pnpm install
 pnpm typecheck && pnpm lint && pnpm build && pnpm test:infra && pnpm test:ci-config
+export PATH=/opt/homebrew/opt/postgresql@16/bin:$PATH      # macOS: Homebrew's libpq puts pg_dump, pg_restore and pg_config 18 first; the backup,
+                                                            # restore and recovery specs need 16 (with 18, 75 of them fail)
 apps/backend/scripts/dev-postgres.sh start                 # a disposable PostgreSQL on 127.0.0.1:54329 that checks passwords, as CI's does
                                                             # (macOS: PGBIN=/opt/homebrew/opt/postgresql@16/bin first)
 pip install -r .github/ci/requirements.txt                  # moto, the S3 emulator CI uses
@@ -696,6 +698,11 @@ cd ../worker && pnpm test                                    # the job queue and
 
 Python 3 is needed on the PATH for the reader tests. Without the reader engine in the checkout (the public repository has none) the specs that need it are skipped and announced; `scripts/check-without-reader.sh` runs the suite that way ([lab-report-reader.md](lab-report-reader.md#the-engine-is-optional)). Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
 ([docs/database.md](database.md)).
+
+**Run one backend test loop per machine at a time.** The database specs keep Jest's 5-second default, and each run is already serialized
+(`maxWorkers: 1`). Two loops at once, even against separate PostgreSQL clusters, share the CPU and push the slower specs past that deadline. Root
+`pnpm test` counts as a loop, because it tests the backend, worker and frontend in parallel. A 5-second timeout seen while another loop was
+running proves nothing either way: re-run that tier alone ([2026-11-07 fragment](status/2026-11-07-report-registration-deadline.md)).
 
 ## Synthetic FHIR terminology/profile slice
 

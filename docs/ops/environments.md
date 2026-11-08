@@ -4,7 +4,7 @@ This page is the one place that says what exists outside a developer's machine. 
 is deployed". Dated records (`docs/status/`, `docs/verification/`, `docs/design/plans/`, `CHANGELOG.md`, the dated sections of
 [STATUS.md](../STATUS.md)) keep the wording of their own date and are not rewritten.
 
-**Last checked against AWS: 2026-11-07**, read-only, by the commands at the end of this page. A pull request that changes what is applied
+**Last checked against AWS: 2026-11-08**, read-only, by the commands at the end of this page. A pull request that changes what is applied
 updates this page in the same pull request.
 
 | Environment | Exists | Data | Where |
@@ -25,23 +25,31 @@ migrations 0066 to 0070, then the synthetic assessment switched on (`ASSESSMENT-
 gave the intake its multipart listing (#288). On 2026-11-06 `main` `661512c9`: the image with a writable `/tmp` for upload staging (#289),
 migration 0071 (spec 033 slice 1), the frontend with unfinished uploads (#290) and the new sidebar (#291), then one rehearsal of the
 assessment kill switch (`ASSESSMENT-OFF` and back on). On 2026-11-07 an `INFRA` apply from `main` `01325995` added the daily freshness check
-(spec 027 PR 4, #304; the plan built both Lambdas first, #303): no image, task definition or migration changed. No CI job holds cloud
-credentials or applies anything.
+(spec 027 PR 4, #304; the plan built both Lambdas first, #303): no image, task definition or migration changed. That evening a second
+`INFRA` apply from `main` `e6050644` changed only the freshness Lambda's code, so a failed publish reports the error's class only (#313); it
+was the first plan with the AWS provider at 6.72.0 (#295), whose read-back the release check accepts since #314. On 2026-11-08 the release
+of `main` `859e964a` stopped halfway: its MIGRATE step applied migrations 0072 and 0073 (#299, #302), then its IMAGE plan was refused,
+because the freshness policy named the two services by resource and so was read only at apply (#318). The old `661512c9` API refused
+readiness on the new schema, so the load balancer kept replacing its task: the staging API was down from about 00:16 to 02:29 UTC. The
+release resumed from `main` `2a66207b` (#318, #319): its MIGRATE step found nothing pending, its IMAGE apply put the API on task
+definition revision 12 and the worker on 7, both on the new image, and the frontend build was unchanged, so it was not republished. Later that
+day an `INFRA` apply from `main` `d4ea5572` changed only the freshness Lambda's code, so its daily check counts only the files an apply
+reads (#333). No CI job holds cloud credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `01325995` (the 2026-11-07 `INFRA` apply): anything merged after it under `infrastructure/terraform/` is not
-applied until a release says so here. The values in the table below are kept as data in
+The last apply read the backend clone at, and so applied from `main` `d4ea5572` (the 2026-11-08 `INFRA` apply): anything merged after it that an apply reads (`infrastructure/terraform/` and `infrastructure/lambda/`, less tests,
+docs and examples: [terraform-inputs.json](../../scripts/staging/terraform-inputs.json)) is not applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
 
-| Piece | What runs (read 2026-11-07) | What production adds or changes |
+| Piece | What runs (read 2026-11-08) | What production adds or changes |
 | --- | --- | --- |
-| API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 11, image `sha256:7f3ee46a91e8…` (commit `661512c9`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context. `MEDICATION_WRITES=disabled` (medication recording answers with a fixed pause message) and `SYNTHETIC_ASSESSMENT=enabled` (next row) | At least 2 tasks; only images signed in CI |
-| Worker | Service `telesphoros-staging-worker`, 1 task (task definition revision 6), the same image. It runs the upload sweep and stale-file checks, and since 2026-10-31 removes expired tenant capabilities every minute (its first run removed the 73 that had accumulated; [jobs.md](jobs.md)) | |
+| API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 12, image `sha256:28eb01f9866d…` (commit `2a66207b`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context. `MEDICATION_WRITES=disabled` (medication recording answers with a fixed pause message) and `SYNTHETIC_ASSESSMENT=enabled` (next row) | At least 2 tasks; only images signed in CI |
+| Worker | Service `telesphoros-staging-worker`, 1 task (task definition revision 7), the same image. It runs the upload sweep and stale-file checks, and since 2026-10-31 removes expired tenant capabilities every minute (its first run removed the 73 that had accumulated; [jobs.md](jobs.md)) | |
 | Issuer | **No service runs.** Its roles exist; its log alarms were removed on 2026-10-31 (#210), since only the issuer's own logs could raise them. Tenant binding is still `dual` (the database accepts the tenant the API sets) | The issuer service, and capability-only binding before real data |
 | Synthetic assessment | **On** since 2026-11-05 (spec 032 S3): the API evaluates a reviewed structured report against the synthetic knowledge baked into the image (`/app/synthetic-knowledge`) and the frontend is built with the assessment controls. `ASSESSMENT-OFF` is the kill switch: the routes answer 503 again and stored evaluations stay stored (rehearsed off and on 2026-11-06). The two-person check SC-001 has not been run on staging yet | None: `synthetic_assessment_enabled` is accepted only by the synthetic profile |
 | Lab-report pipeline and queued evaluation | **Off.** `NODE_ENV=production` refuses `LAB_REPORT_PIPELINE` and `EVALUATION_REQUESTS` (`apps/backend/src/config/env.ts`), so those routes answer 503 | |
 | Frontend | S3 and CloudFront for `app.staging`, `www.staging` and `staging.telesphoros.app`. `index.html` was last published 2026-11-06 12:49 UTC from commit `661512c9`, built with the synthetic assessment controls ([frontend-publish.md](frontend-publish.md)). The hashed build output (`/assets/*`) is cached and compressed at the edge (managed CachingOptimized policy). The production build accepts structured JSON reports only | |
-| Database | RDS PostgreSQL 16.13, `db.t4g.micro`, one Availability Zone, automated backups kept 1 day. Migrated through 0071; manual snapshots `telesphoros-staging-pre-6c4714de`, `telesphoros-staging-pre-299efbb3`, `telesphoros-staging-pre-767bd0b5` and `telesphoros-staging-pre-661512c9` were taken before 0064, 0065, 0066 and 0071 | Multi-AZ, deletion protection, at least 7 days of backups, a copy in a second Region (`database.tf` preconditions) |
+| Database | RDS PostgreSQL 16.13, `db.t4g.micro`, one Availability Zone, automated backups kept 1 day. Migrated through 0073; manual snapshots `telesphoros-staging-pre-6c4714de`, `telesphoros-staging-pre-299efbb3`, `telesphoros-staging-pre-767bd0b5`, `telesphoros-staging-pre-661512c9` and `telesphoros-staging-pre-859e964a` were taken before 0064, 0065, 0066, 0071 and 0072 | Multi-AZ, deletion protection, at least 7 days of backups, a copy in a second Region (`database.tf` preconditions) |
 | Sign-in | Cognito user pool `telesphoros-staging` (invite only, authenticator-app MFA required); mail through SES | |
 | Report files | Versioned S3 bucket with Object Lock in **GOVERNANCE** mode, 1-day default retention, no replication | Object Lock **COMPLIANCE** (`profile.tf` precondition) |
 | Audit trail | CloudTrail `telesphoros-staging-audit`, logging, **single Region**. It records every object read and write in the reports bucket, and deletes and lock changes in the audit bucket. The audit bucket has Object Lock in GOVERNANCE mode with 1-day retention ([audit-trail.md](audit-trail.md)) | A multi-Region trail and COMPLIANCE lock |
@@ -77,9 +85,11 @@ live staging with `docs/ops/staging-expected.json` on `origin/main`, runs `terra
 clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale (one already applied
 with exit 0 is listed as applied and does not count: `apply.sh` never runs a plan twice; a failed apply does count), and shows who holds
 the stack claim. It prints identifiers and counts, never a state, plan or variable value, and exits 0 only when there is nothing to do.
+It builds nothing: when a Lambda bundle in the clone is missing or older than its source, the plan row says "not run" and names the
+Lambda; `plan.sh` builds every bundle before it plans.
 A plan for staging quotes its table; a session that has not seen it does not know what staging runs. Its live values (the account, the
-clone, the Terraform binary and data directory, the canonical var file) come from the private `~/telesphoros-private/staging/stack.env`,
-described in the script's header.
+clone, the Terraform binary and data directory) come from the private `~/telesphoros-private/staging/stack.env`, described in the script's
+header. It plans with the same `current.tfvars` the release steps read, and only while that file matches its recorded sha256.
 
 The single commands below are what it runs, for reading one thing by hand. Run these with the staging identity, and confirm that identity first. The reports and audit bucket names end in the account id, so read them
 from the console or `aws s3api list-buckets`; they are not written here.
