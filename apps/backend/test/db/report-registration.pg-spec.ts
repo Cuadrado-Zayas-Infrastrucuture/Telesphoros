@@ -7,10 +7,12 @@ import { PostgresReportsRepository } from '../../src/storage/postgres/reports.re
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { revertAbove, revertThrough, versionsFrom } from '../helpers/migration-history';
 import { assertSchemaAcceptance } from '../helpers/schema-acceptance';
+import { specDeadline } from '../helpers/spec-deadline';
 
 // Two tests revert and re-apply migrations: about 3 s each on an idle machine, so past Jest's 5 s default when several test loops share the
-// host (twice on 2026-11-07, both passing alone). The scratch-database hook gets the same budget.
-jest.setTimeout(30_000);
+// host (twice on 2026-11-07, both passing alone). The scratch-database hook gets the same budget. The fixture-lifecycle control runs the
+// lock test with a deadline of its own, through specDeadline, because it times that test out on purpose.
+jest.setTimeout(specDeadline(30_000));
 
 let pg: EphemeralDatabase;
 let first: Database;
