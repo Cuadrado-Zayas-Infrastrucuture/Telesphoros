@@ -1,13 +1,13 @@
 {
-  "checked": "2026-11-07",
-  "appliedCommit": "013259951f525159b5b9c062c40cd0f4dfda686d",
+  "checked": "2026-11-08",
+  "appliedCommit": "859e964a4c955c734d4ce2f4c2894a23d6532f45",
   "image": {
     "digest": "sha256:7f3ee46a91e8564e91281d7295e5437bc8ca539259b34cfd9688783a233bfa77",
     "commit": "661512c9bf97609a313c326d4f255ad7fb059667"
   },
   "taskDefinitions": { "api": 11, "worker": 6 },
   "alarms": 36,
-  "newestMigration": "0071",
+  "newestMigration": "0073",
   "cloudfrontCachePaths": ["/assets/*"],
   "acceptedExceptions": [
     {

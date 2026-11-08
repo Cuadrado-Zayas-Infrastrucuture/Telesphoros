@@ -4,7 +4,8 @@
 // same way, or that the real Terraform's exit codes match (`-detailed-exitcode` is documented as 0, 1, 2).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -19,6 +20,9 @@ const DIGEST = `sha256:${'d5'.repeat(32)}`;
 const bin = join(box, 'bin');
 mkdirSync(bin);
 const stub = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+// The processes this machine runs are never read: pgrep prints STUB_PGREP, and nothing (exit 1) by default. The check itself is tested in
+// scripts/staging/terraform-running.test.mjs.
+stub('pgrep', '[ -n "${STUB_PGREP:-}" ] || exit 1\nprintf "%s\\n" "$STUB_PGREP"');
 stub('aws', `case "$*" in
   *get-caller-identity*) echo "$STUB_ACCOUNT" ;;
   *describe-services*"--services telesphoros-staging-worker "*) echo "arn:aws:ecs:us-east-2:$STUB_ACCOUNT:task-definition/telesphoros-staging-worker:3" ;;
@@ -36,7 +40,7 @@ stub('terraform', `case "$*" in
   version) echo "\${STUB_TF_VERSION:-Terraform v1.16.5}"; if [ -n "\${STUB_TF_SLOW:-}" ]; then sleep 0.2; echo "on darwin_arm64"; echo "Your version of Terraform is out of date!"; fi ;;
   *state\\ pull*) echo '{"version":4,"serial":42,"lineage":"l-1","outputs":{"x":{"value":"SENTINEL-STATE"}}}' ;;
   *show\\ -json*) echo '{"resource_changes":[{"address":"aws_cloudfront_distribution.web[0]","change":{"actions":["update"],"after":{"x":"SENTINEL-PLAN"}}}]}' ;;
-  *\\ plan\\ *) echo "SENTINEL-PLAN-LOG"; exit "$STUB_PLAN_EXIT" ;;
+  *\\ plan\\ *) echo "$*" > "$TMPDIR/plan-args"; echo "SENTINEL-PLAN-LOG"; exit "$STUB_PLAN_EXIT" ;;
   *) exit 99 ;;
 esac`);
 
@@ -67,10 +71,14 @@ git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
 const priv = join(box, 'private');
 mkdirSync(join(priv, 'staging'), { recursive: true });
 mkdirSync(join(priv, 'maindata'));
-writeFileSync(join(priv, 'staging/current.tfvars'), 'SENTINEL-VARS = "x"\n');
+const current = join(priv, 'staging/current.tfvars');
+const writeCurrent = () => {
+  writeFileSync(current, 'SENTINEL-VARS = "x"\n');
+  writeFileSync(`${current}.sha256`, `${createHash('sha256').update(readFileSync(current)).digest('hex')}\n`);
+};
+writeCurrent();
 const stackEnv = (extra = '') => writeFileSync(join(priv, 'staging/stack.env'), [
-  `STAGING_ACCOUNT_ID=${ACCOUNT}`, `BACKEND_CLONE=${clone}`, `TERRAFORM=${join(bin, 'terraform')}`, `TF_DATA_DIR=${join(priv, 'maindata')}`,
-  `STAGING_VAR_FILE=${join(priv, 'staging/current.tfvars')}`, extra,
+  `STAGING_ACCOUNT_ID=${ACCOUNT}`, `BACKEND_CLONE=${clone}`, `TERRAFORM=${join(bin, 'terraform')}`, `TF_DATA_DIR=${join(priv, 'maindata')}`, extra,
 ].join('\n'));
 
 const run = (env = {}) => spawnSync('bash', [script], {
@@ -86,6 +94,16 @@ test('staging that matches its facts, with no plan changes, exits 0 and prints n
   assert.match(r.stdout, /current: nothing to do/);
   assert.match(r.stdout, /state serial: 42/);
   noSentinel(r);
+});
+
+test('the plan is not run while a real Terraform runs, and a stand-in run by a shell does not stop it', () => {
+  stackEnv();
+  const busy = run({ STUB_PGREP: '4242 /opt/homebrew/bin/terraform -chdir=/x plan -input=false' });
+  assert.equal(busy.status, 1, busy.stdout + busy.stderr);
+  assert.match(busy.stdout, /plan: not run: another terraform process is running/);
+  const stand = run({ STUB_PGREP: `4242 bash ${join(bin, 'terraform')} -chdir=/x plan -input=false` });
+  assert.equal(stand.status, 0, stand.stdout + stand.stderr);
+  assert.match(stand.stdout, /current: nothing to do/);
 });
 
 test('each kind of staleness fails the run and is named', () => {
@@ -121,11 +139,34 @@ test('the Terraform version check reads the whole output: a binary still writing
   assert.match(other.stderr, /TERRAFORM is not 1\.16\.5/);
 });
 
-test('a missing var file, a wrong account and a missing stack.env stop or fail the run, never pass it', () => {
-  stackEnv('STAGING_VAR_FILE=');
-  const noVars = run();
-  assert.equal(noVars.status, 1);
-  assert.match(noVars.stdout, /plan: not run: no canonical var file/);
+test('the plan reads current.tfvars, the release steps\' var file, only while it matches its sha256; STAGING_VAR_FILE is not read', () => {
+  const elsewhere = join(box, 'other.tfvars');
+  writeFileSync(elsewhere, 'SENTINEL-OTHER = "y"\n');
+  stackEnv(`STAGING_VAR_FILE=${elsewhere}`);
+  rmSync(join(box, 'plan-args'), { force: true });
+  const ok = run();
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.match(readFileSync(join(box, 'plan-args'), 'utf8'), new RegExp(`-var-file=${current.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} `), 'planned with current.tfvars');
+  stackEnv();
+  writeFileSync(current, 'SENTINEL-VARS = "edited"\n');
+  rmSync(join(box, 'plan-args'), { force: true });
+  const edited = run();
+  assert.equal(edited.status, 1);
+  assert.match(edited.stdout, /plan: not run: current\.tfvars does not match its recorded sha256 \(edited by hand\)/);
+  assert.ok(!existsSync(join(box, 'plan-args')), 'no plan was made with an edited var file');
+  noSentinel(edited);
+  for (const gone of [current, `${current}.sha256`]) {
+    writeCurrent();
+    rmSync(gone);
+    const missing = run();
+    assert.equal(missing.status, 1);
+    assert.match(missing.stdout, /plan: not run: no canonical var file \(current\.tfvars with its \.sha256\)/);
+  }
+  writeCurrent();
+  assert.equal(run().status, 0, 'back to current');
+});
+
+test('a wrong account and a missing stack.env stop the run, never pass it', () => {
   stackEnv();
   const wrong = run({ STUB_ACCOUNT: '210987654321' });
   assert.equal(wrong.status, 2);
@@ -133,6 +174,38 @@ test('a missing var file, a wrong account and a missing stack.env stop or fail t
   const none = run({ PRIVATE_DIR: join(box, 'nowhere') });
   assert.equal(none.status, 2);
   assert.match(none.stderr, /no .*stack\.env/);
+});
+
+test('a Lambda bundle missing or older than its source makes the plan "not run" and names it; a current one lets the plan run', () => {
+  stackEnv();
+  const lambda = join(clone, 'infrastructure/lambda/demo');
+  mkdirSync(join(lambda, 'src'), { recursive: true });
+  writeFileSync(join(lambda, 'package.json'), '{"name":"demo","scripts":{"build":"tsup"}}');
+  writeFileSync(join(lambda, 'src/index.ts'), 'export const handler = 1;\n');
+  writeFileSync(join(clone, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+  const at = (file, minutes) => { const t = new Date(Date.parse('2026-11-07T12:00:00Z') + minutes * 60_000); utimesSync(file, t, t); };
+  for (const f of [join(lambda, 'package.json'), join(lambda, 'src/index.ts'), join(clone, 'pnpm-lock.yaml')]) at(f, 0);
+  const notRun = /plan: not run: the demo Lambda is not built for this checkout \(plan\.sh builds it\)/;
+  const missing = run({ STUB_PLAN_EXIT: '1' });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, notRun, 'no dist: the plan is not run (the stand-in would have failed it)');
+  mkdirSync(join(lambda, 'dist'));
+  assert.match(run({ STUB_PLAN_EXIT: '1' }).stdout, notRun, 'an empty dist');
+  writeFileSync(join(lambda, 'dist/index.mjs'), 'built\n');
+  at(join(lambda, 'dist/index.mjs'), 5);
+  const built = run();
+  assert.equal(built.status, 0, built.stdout + built.stderr);
+  assert.match(built.stdout, /plan: no changes \(exit 0\)/, 'built after its source: the plan runs');
+  for (const [file, what] of [[join(lambda, 'src/index.ts'), 'its source'], [join(clone, 'pnpm-lock.yaml'), 'the lockfile'], [join(lambda, 'package.json'), 'its package.json']]) {
+    at(file, 10);
+    const stale = run();
+    assert.equal(stale.status, 1, what);
+    assert.match(stale.stdout, notRun, `${what} changed after the build`);
+    at(file, 0);
+  }
+  assert.equal(run().status, 0, 'back to current');
+  rmSync(join(clone, 'infrastructure/lambda'), { recursive: true });
+  rmSync(join(clone, 'pnpm-lock.yaml'));
 });
 
 test('saved plans: current, stale, unrecorded and legacy; and the claim', () => {
