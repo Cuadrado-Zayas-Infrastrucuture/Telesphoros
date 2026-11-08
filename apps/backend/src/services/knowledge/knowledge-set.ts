@@ -8,6 +8,8 @@ export interface KnowledgeFileInfo {
   readonly synthetic: boolean;
   readonly reviewStatus: 'reviewed' | 'unreviewed';
   readonly contentSha256: string;
+  /** Under the production rules only: the signers whose signatures over this file verified (audit CLIN-01). Absent otherwise. */
+  readonly signedBy?: readonly string[];
 }
 
 /**

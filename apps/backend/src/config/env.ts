@@ -137,6 +137,11 @@ export const envSchema = z
     LAB_REPORT_FIXTURES_DIR: z.string().min(1).optional(),
     /** The knowledge directory the pipeline evaluates against (loaded once at start, under the non-production rules). Required when enabled. */
     KNOWLEDGE_DIR: z.string().min(1).optional(),
+    /**
+     * The signers whose signatures count on real knowledge (audit CLIN-01): a JSON object of key id to P-256 SPKI PEM public key, set by the
+     * infrastructure, never read from the repository. Under the production rules a real reviewed file needs two of them.
+     */
+    KNOWLEDGE_SIGNER_KEYS: z.string().min(1).optional(),
     /** Stored with every evaluation as the code that produced it. Required when enabled. */
     BUILD_VERSION: z
       .string()
