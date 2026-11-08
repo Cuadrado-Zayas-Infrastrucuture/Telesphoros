@@ -49,8 +49,7 @@ export async function countReportStages(api: ApiFetch, signal?: AbortSignal, pat
         data.length > REPORT_STAGE_PAGE_SIZE ||
         meta.totalPages !== Math.ceil(meta.total / REPORT_STAGE_PAGE_SIZE) ||
         (total !== undefined && meta.total !== total) ||
-        (page < meta.totalPages && data.length !== REPORT_STAGE_PAGE_SIZE) ||
-        data.some((report) => query.patientId && report.patientId !== query.patientId)
+        (page < meta.totalPages && data.length !== REPORT_STAGE_PAGE_SIZE)
       )
         throw new Error();
       return { meta, data };

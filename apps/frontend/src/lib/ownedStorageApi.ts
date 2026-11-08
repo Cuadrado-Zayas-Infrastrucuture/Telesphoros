@@ -213,7 +213,22 @@ export async function submitOwnedReport(
   return verified(await request(api, `/reports/${existing.id}`));
 }
 
-/** One bounded tenant-authorized page; the dashboard keeps filters out of browser history. */
+/** Fetch a known report without depending on the order or size of its patient's history. */
+export async function getReport(api: ApiFetch, id: string, signal?: AbortSignal) {
+  try {
+    const reportId = z.uuid().parse(id);
+    const response = await api(`/api/v1/reports/${reportId}`, { signal, cache: 'no-store' });
+    if (!response.ok) throw new Error();
+    const report = reportDtoSchema.parse(await response.json());
+    if (report.id.toLowerCase() !== reportId.toLowerCase()) throw new Error();
+    return report;
+  } catch (error) {
+    if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
+    throw new SubmitError('The report could not be loaded. Please retry.');
+  }
+}
+
+/** One bounded tenant-authorized page; patient filters include merged records with their original patient IDs. */
 export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal, patientId?: string, order?: 'newest') {
   try {
     const query = reportListQuerySchema.parse({ page, pageSize: 20, ...(patientId ? { patientId } : {}), ...(order === 'newest' ? { order: 'desc' } : {}) });
@@ -228,15 +243,7 @@ export async function listReports(api: ApiFetch, page: number, signal?: AbortSig
     if (!response.ok) throw new Error();
     const result = paginatedSchema(reportDtoSchema).parse(await response.json());
     const { meta, data } = result;
-    if (
-      meta.page !== query.page ||
-      meta.pageSize !== 20 ||
-      data.length > 20 ||
-      meta.totalPages !== Math.ceil(meta.total / 20) ||
-      data.length > meta.total ||
-      data.some((report) => query.patientId && report.patientId !== query.patientId)
-    )
-      throw new Error();
+    if (meta.page !== query.page || meta.pageSize !== 20 || data.length > 20 || meta.totalPages !== Math.ceil(meta.total / 20) || data.length > meta.total) throw new Error();
     return result;
   } catch (error) {
     if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
