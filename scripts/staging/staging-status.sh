@@ -104,14 +104,17 @@ echo "== state and plan"
 "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$MJS" project-state > "$WORK/state.json" 2>/dev/null || echo '{}' > "$WORK/state.json"
 PLAN_EXIT=null; PLAN_WHY=""
 UNBUILT=$(unbuilt_lambda)
+TF_RUNNING=0; terraform_running || TF_RUNNING=$?
 if [ ! -f "$CURRENT" ] || [ ! -f "$CURRENT.sha256" ]; then
   PLAN_WHY="no canonical var file (current.tfvars with its .sha256)"
 elif [ "$(shasum -a 256 "$CURRENT" | cut -c1-64)" != "$(cut -c1-64 "$CURRENT.sha256")" ]; then
   PLAN_WHY="current.tfvars does not match its recorded sha256 (edited by hand)"
 elif [ -n "$UNBUILT" ]; then
   PLAN_WHY="the $UNBUILT Lambda is not built for this checkout (plan.sh builds it)"
-elif terraform_running; then
+elif [ "$TF_RUNNING" = 0 ]; then
   PLAN_WHY="another terraform process is running"
+elif [ "$TF_RUNNING" = 2 ]; then
+  PLAN_WHY="the process list could not be read, so another terraform process cannot be ruled out"
 else
   set +e
   "$TERRAFORM" -chdir="$TFDIR" plan -input=false -no-color -lock=false -detailed-exitcode -var-file="$CURRENT" -out="$WORK/status.tfplan" </dev/null > "$WORK/plan.log" 2>&1

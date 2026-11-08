@@ -1,4 +1,5 @@
-// Real PostgreSQL regression. No forced Jest exit or modified test/hook timeout.
+// Real PostgreSQL regression. No forced Jest exit, and no deadline but the one stated here: DEADLINE_MS, Jest's own default, which a spec that
+// sets a longer budget of its own takes through test/helpers/spec-deadline.ts (.github/ci/lifecycle-deadline.test.mjs checks that it does).
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
@@ -7,6 +8,7 @@ const cwd = path.resolve(__dirname, '../../apps/backend');
 const backendRequire = require('node:module').createRequire(path.join(cwd, 'package.json'));
 const { Client } = backendRequire('pg');
 if (!process.env.TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is required: use a disposable PostgreSQL cluster');
+const DEADLINE_MS = 5000;
 async function databases() {
   const client = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   try {
@@ -27,7 +29,7 @@ for (const [mode, file, name, expected] of [
     const result = spawnSync(process.execPath, [backendRequire.resolve('jest/bin/jest'), '--runInBand',
       '--runTestsByPath', file, '--testNamePattern', name,
       '--setupFilesAfterEnv', path.join(__dirname, 'fixture-delay.cjs')], {
-      cwd, env: { ...process.env, TEST_STORAGE: 'postgres', TEST_OBJECT_STORAGE: 'memory', FIXTURE_REGRESSION_MODE: mode },
+      cwd, env: { ...process.env, TEST_STORAGE: 'postgres', TEST_OBJECT_STORAGE: 'memory', FIXTURE_REGRESSION_MODE: mode, FIXTURE_TEST_TIMEOUT_MS: String(DEADLINE_MS) },
       encoding: 'utf8', timeout: 25000, maxBuffer: 2 * 1024 * 1024,
     });
     // Preserve the child's complete permitted evidence in the producer output, including expected failure.
@@ -37,8 +39,8 @@ for (const [mode, file, name, expected] of [
     assert.equal(result.status, expected);
     const output = (result.stdout ?? '') + (result.stderr ?? '');
     assert.doesNotMatch(output, /Cannot read properties|environment has been torn down|Jest did not exit/);
-    if (mode === 'late') assert.match(output, /Exceeded timeout of 5000 ms for a hook/);
-    if (mode === 'late-lock') assert.match(output, /Exceeded timeout of 5000 ms for a test/);
+    if (mode === 'late') assert.match(output, new RegExp(`Exceeded timeout of ${DEADLINE_MS} ms for a hook`));
+    if (mode === 'late-lock') assert.match(output, new RegExp(`Exceeded timeout of ${DEADLINE_MS} ms for a test`));
     assert.deepEqual(await databases(), before, 'fixture databases must be reclaimed, including after a timed-out hook');
   });
 }

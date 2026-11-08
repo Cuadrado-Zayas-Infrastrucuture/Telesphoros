@@ -5,7 +5,7 @@
 //   node migration-pending.mjs expected MIGRATIONS_DIR FACTS_JSON        prints the expected versions, space separated ("" for none)
 //   node migration-pending.mjs check "EXPECTED" STATUS_FILE [resumed]    exit 0 when the pending line of `migrate status` is allowed
 import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from '../is-main.mjs';
 
 const VERSION = /^[0-9]{4}$/;
 const UP = /^([0-9]{4})_[a-z0-9_]+\.up\.sql$/;
@@ -42,7 +42,7 @@ export function pendingProblem(expected, pending, resumed) {
     : `pending is ${got}, not exactly ${want} (the migrations after newestMigration in docs/ops/staging-expected.json on origin/main)`;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const [cmd, a, b, c] = process.argv.slice(2);
   try {
     if (cmd === 'expected') {

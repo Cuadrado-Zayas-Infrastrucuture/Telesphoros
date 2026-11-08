@@ -7,7 +7,7 @@
 //   node staging-status.mjs collect WORKDIR                  prints, as JSON, what staging-status.sh left in its work directory
 //   node staging-status.mjs report FACTS OBSERVED            prints the table; exits 0 only when there is nothing to do
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 const CLAIM_ABANDONED_HOURS = 24;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -161,6 +161,6 @@ function main([mode, factsPath, observedPath]) {
   throw new Error('usage: staging-status.mjs project-state | project-plan | report FACTS OBSERVED');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   try { main(process.argv.slice(2)); } catch (e) { console.error(`staging-status: ${e.message}`); process.exitCode = 2; }
 }
