@@ -1,13 +1,13 @@
 {
   "checked": "2026-11-08",
-  "appliedCommit": "e45ea3894926380aeba3aa20ef59e54fb400da96",
+  "appliedCommit": "c0cbb367e884ef2f88d6b9fc78c0f040da7976e9",
   "image": {
-    "digest": "sha256:99bd603c5a20409d6f6127f0a0a751432fc6b82443c769122601878530692efb",
-    "commit": "e45ea3894926380aeba3aa20ef59e54fb400da96"
+    "digest": "sha256:525cf336f9c4278e0e159a51780ba8fff9f4eb59693054bdd3423b534bf2646a",
+    "commit": "c0cbb367e884ef2f88d6b9fc78c0f040da7976e9"
   },
-  "taskDefinitions": { "api": 13, "worker": 8 },
+  "taskDefinitions": { "api": 14, "worker": 9 },
   "alarms": 36,
-  "newestMigration": "0073",
+  "newestMigration": "0074",
   "cloudfrontCachePaths": ["/assets/*"],
   "acceptedExceptions": [
     {
@@ -52,7 +52,12 @@
     },
     {
       "id": "break-glass-99bd603c5a20",
-      "reason": "Pushed by hand on 2026-11-08 (commit e45ea389): the organization SCP denies GitHub OIDC, so CI cannot sign. The running image.",
+      "reason": "Pushed by hand on 2026-11-08 (commit e45ea389): the organization SCP denies GitHub OIDC, so CI cannot sign. No longer running.",
+      "reviewBy": "2026-12-08"
+    },
+    {
+      "id": "break-glass-525cf336f9c4",
+      "reason": "Pushed by hand on 2026-11-08 (commit c0cbb367): the organization SCP denies GitHub OIDC, so CI cannot sign. The running image.",
       "reviewBy": "2026-12-08"
     }
   ]
