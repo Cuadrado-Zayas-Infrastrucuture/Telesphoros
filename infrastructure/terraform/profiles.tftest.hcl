@@ -1377,3 +1377,57 @@ run "refuses_the_synthetic_assessment_in_a_production_definition" {
 
   expect_failures = [var.synthetic_assessment_enabled]
 }
+
+# CLIN-01: the knowledge signing keys exist only once the founder names the signers, two at least, each a different principal.
+run "knowledge_signers_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_kms_key.knowledge_signer) == 0 && length(aws_kms_alias.knowledge_signer) == 0 && length(output.knowledge_signer_key_arns) == 0
+    error_message = "no knowledge signing key exists until signers are named"
+  }
+}
+
+run "knowledge_signers_named" {
+  command = plan
+
+  variables {
+    knowledge_signers = {
+      "signer-one" = "arn:aws:iam::123456789012:role/knowledge-signer-one"
+      "signer-two" = "arn:aws:iam::123456789012:role/knowledge-signer-two"
+    }
+  }
+
+  assert {
+    condition     = length(aws_kms_key.knowledge_signer) == 2 && alltrue([for key in aws_kms_key.knowledge_signer : key.customer_master_key_spec == "ECC_NIST_P256" && key.key_usage == "SIGN_VERIFY"])
+    error_message = "each named signer gets one P-256 signing key"
+  }
+  assert {
+    condition     = toset([for alias in aws_kms_alias.knowledge_signer : alias.name]) == toset(["alias/telesphoros-staging-knowledge-signer-signer-one", "alias/telesphoros-staging-knowledge-signer-signer-two"])
+    error_message = "each signing key has its signer's alias"
+  }
+}
+
+run "refuses_a_single_knowledge_signer" {
+  command = plan
+
+  variables {
+    knowledge_signers = { "signer-one" = "arn:aws:iam::123456789012:role/knowledge-signer-one" }
+  }
+
+  expect_failures = [var.knowledge_signers]
+}
+
+run "refuses_one_principal_for_two_signers" {
+  command = plan
+
+  variables {
+    knowledge_signers = {
+      "signer-one" = "arn:aws:iam::123456789012:role/same-person"
+      "signer-two" = "arn:aws:iam::123456789012:role/same-person"
+    }
+  }
+
+  expect_failures = [var.knowledge_signers]
+}
+

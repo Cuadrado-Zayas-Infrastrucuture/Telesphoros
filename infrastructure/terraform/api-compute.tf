@@ -129,7 +129,8 @@ locals {
     # Spec 025: the key that wraps each patient's identity data key (envelope encryption, context {tenant, patient}). Not a secret: an ARN.
     PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn
     # ISSUER_URL (DATA-01) is not typed here: it is built from the issuer's own names in issuer.tf and exists only while the issuer service does.
-  }, local.issuer_client_environment, local.synthetic_assessment_environment)
+    # KNOWLEDGE_SIGNER_KEYS (CLIN-01) is not typed here: knowledge-signing.tf builds it from the signers' KMS public keys, once the founder names them.
+  }, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)
 }
 
 # ------------------------------------------------------------------------------------------------

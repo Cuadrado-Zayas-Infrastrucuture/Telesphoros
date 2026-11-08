@@ -433,8 +433,8 @@ export function issuerProblems(tf, rest = others, sources = {}) {
     );
   const apiFile = code(rest['api-compute.tf'] ?? '');
   need(
-    has(apiFile, 'api_environment = merge({') && has(apiFile, '}, local.issuer_client_environment, local.synthetic_assessment_environment)'),
-    'the API environment must be its own literal plus local.issuer_client_environment and local.synthetic_assessment_environment, and nothing else',
+    has(apiFile, 'api_environment = merge({') && has(apiFile, '}, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)'),
+    'the API environment must be its own literal plus local.issuer_client_environment, local.synthetic_assessment_environment and local.knowledge_signer_environment (knowledge-signing.tf, its own guard), and nothing else',
   );
   const apiService = blocks(apiFile, 'resource "aws_ecs_service" "api"')[0] ?? '';
   const joins = blocks(apiService, 'dynamic "service_connect_configuration" \\{');
@@ -1096,14 +1096,14 @@ test('the issuer guard reports every way another file could let the API (or anyt
         '      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n      service {\n        port_name = "api"\n      }',
       ),
     ],
-    ['the API environment is no longer its literal plus the issuer map', change('api-compute.tf', '}, local.issuer_client_environment, local.synthetic_assessment_environment)', '})')],
+    ['the API environment is no longer its literal plus the issuer map', change('api-compute.tf', '}, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)', '})')],
     [
       'the API is given ISSUER_URL whether or not the issuer exists',
-      change('api-compute.tf', '}, local.issuer_client_environment, local.synthetic_assessment_environment)', '}, { ISSUER_URL = local.issuer_client_url }, local.synthetic_assessment_environment)'),
+      change('api-compute.tf', '}, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)', '}, { ISSUER_URL = local.issuer_client_url }, local.synthetic_assessment_environment)'),
     ],
     [
       'the API environment types the issuer address',
-      change('api-compute.tf', '}, local.issuer_client_environment, local.synthetic_assessment_environment)', '  ISSUER_URL = "http://session-issuer:8082"\n  }, local.issuer_client_environment, local.synthetic_assessment_environment)'),
+      change('api-compute.tf', '}, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)', '  ISSUER_URL = "http://session-issuer:8082"\n  }, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)'),
     ],
     [
       'the worker is told where the issuer is',
