@@ -12,6 +12,8 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       // The shared contract is consumed from source, so no build step is needed first.
       '@telesphoros/shared-types': fileURLToPath(new URL('../../packages/shared-types/src/index.ts', import.meta.url)),
+      // Only the outcome and reason vocabulary: the package index would also pull in the engine's guideline data.
+      '@telesphoros/cpic-schema/vocabulary': fileURLToPath(new URL('../../packages/cpic-schema/src/vocabulary.ts', import.meta.url)),
     },
   },
   build: {

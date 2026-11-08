@@ -14,11 +14,14 @@ export function DecisionPanel({
   result,
   followupBusy,
   onFollowup,
+  onStale,
 }: {
   evaluation: EvaluationSummaryDto;
   result: EvaluationSummaryDto['results'][number];
   followupBusy: boolean;
   onFollowup: (link: DecisionLink) => void;
+  /** A write was refused because the result changed (409): the list re-reads, so `evaluation.current` here is fresh again. */
+  onStale: () => void;
 }) {
   const { apiFetch, roles } = useAuth();
   const [read, setRead] = useState<{ history: ClinicianDecisionHistoryDto; actor: string } | null>(null);
@@ -85,7 +88,7 @@ export function DecisionPanel({
       )}
       {!eligible && <p className="text-sm text-warning">New decisions are unavailable for this result. State: {history.basis.join(', ')}.</p>}
       {editing ? (
-        <DecisionForm history={history} kind={editing} initial={head} onCancel={() => reload()} onSaved={() => reload(true)} />
+        <DecisionForm history={history} kind={editing} initial={head} onCancel={() => reload()} onSaved={() => reload(true)} onStale={onStale} />
       ) : (
         <div className="flex flex-wrap gap-2">
           {canWrite && (
