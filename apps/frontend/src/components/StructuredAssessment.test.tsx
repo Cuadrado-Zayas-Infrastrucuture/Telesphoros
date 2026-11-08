@@ -136,7 +136,9 @@ it('posts to the assessment route of this report with no body, then shows the st
   const shown = await screen.findByRole('status', { name: 'Assessment result' });
   expect(shown).toHaveTextContent('Stored just now.');
   expect(shown).toHaveTextContent('drugz');
-  expect(shown).toHaveTextContent('GENEA, GENEB · shown');
+  expect(shown).toHaveTextContent('Recommendation');
+  expect(shown).toHaveTextContent('GENEA · GENEB');
+  expect(shown).toHaveTextContent('Outcome code: shown');
   expect(shown).toHaveTextContent('Z normal-low.');
   expect(shown).toHaveTextContent('Recorded strength: Strong');
   expect(shown).toHaveTextContent('Synthetic Table 3');

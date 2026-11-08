@@ -127,7 +127,16 @@ describe.each(cases)('$plain', ({ tall, plain }) => {
 
   it(`the stored result shows ${tall}; its heading and section keep the plain name`, () => {
     const evaluation = summary(plain) as never;
-    render(<StoredResult evaluation={evaluation} result={(evaluation as { results: never[] }).results[0]} followupBusy={false} onFollowup={() => undefined} decisions={false} />);
+    render(
+      <StoredResult
+        evaluation={evaluation}
+        result={(evaluation as { results: never[] }).results[0]}
+        followupBusy={false}
+        onFollowup={() => undefined}
+        onStale={() => undefined}
+        decisions={false}
+      />,
+    );
     const section = screen.getByRole('region', { name: `Stored result ${plain}` });
     const heading = within(section).getByRole('heading', { name: plain });
     expect(heading).toHaveTextContent(tall);
@@ -137,7 +146,9 @@ describe.each(cases)('$plain', ({ tall, plain }) => {
   it(`the linked follow-up names the decision with ${tall}`, async () => {
     const onFollowup = vi.fn();
     const evaluation = summary(plain) as never;
-    render(<DecisionPanel evaluation={evaluation} result={(evaluation as { results: never[] }).results[0]} followupBusy={false} onFollowup={onFollowup} />);
+    render(
+      <DecisionPanel evaluation={evaluation} result={(evaluation as { results: never[] }).results[0]} followupBusy={false} onFollowup={onFollowup} onStale={() => undefined} />,
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'Schedule linked follow-up' }));
     expect(onFollowup).toHaveBeenCalledWith({ id: decided.currentDecisionId, label: `${tall} · Accepted` });
   });

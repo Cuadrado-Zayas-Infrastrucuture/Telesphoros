@@ -1,6 +1,27 @@
-# Product capabilities and delivery state — 2026-10-14
+# Product capabilities and delivery state
 
-Source baseline: main `4400efae920f4cefa918e9b3c8862b3e5e6af9e9`, after merged PRs [#100](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/100) and [#101](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/101). This is a source/build matrix, not hosted acceptance or clinical approval. One row was added later and is dated; the rest of the page is the 2026-10-14 baseline. What runs in AWS: [ops/environments.md](ops/environments.md).
+Two sections follow. **Current supported modes** is read against main `859e964a` on 2026-11-07 and is the one to use. **Baseline of 2026-10-14** is kept as the dated record it was; where it disagrees with the current section, the current section wins. Neither is hosted acceptance or clinical approval. What runs in AWS: [ops/environments.md](ops/environments.md).
+
+## Current supported modes (2026-11-07)
+
+Read from source on main `859e964a`: [routes](../apps/frontend/src/app/routes.tsx), [roles](../apps/frontend/src/auth/roles.ts), [build flags](../apps/frontend/src/lib/storageMode.ts), the [reports page](../apps/frontend/src/pages/ReportsPage.tsx), the [upload page](../apps/frontend/src/pages/UploadReportPage.tsx) and the [server configuration](../apps/backend/src/config/env.ts). A flag that shows a screen does not make the API accept what the screen sends: the server gates each action again.
+
+Screens in every build, whichever mode below: `/workspace` and `/settings` (any signed-in member); `/reports` (metadata list; `reader`, `clinician`, `reviewer`); `/reports/upload` and `/patients/new` (`clinician`); `/patients` and `/patients/:id` (`reader`, `clinician`, `reviewer`); `/usage` (`admin`, no clinical access). An `admin` alone is refused the clinical pages.
+
+| Mode | How it is built or run | What it adds or changes | What is unavailable in it |
+| --- | --- | --- | --- |
+| **Normal build** | Neither build flag set: `VITE_SYNTHETIC_ASSESSMENT` absent or `false`, and `VITE_LOCAL_STORAGE_INTAKE` absent or `false` | Upload is structured JSON through validated API intake. `/reports` lists metadata | File download ("File downloads are not available in this build"), the PDF choice, every development route |
+| **Local storage** (owned, disposable run) | `VITE_LOCAL_STORAGE_INTAKE=true`, a non-production build served from `127.0.0.1`; the server needs its own `LOCAL_STORAGE_RUN_ID` ([start-here](start-here.md)) | `.pdf` or `.json` upload up to 10 MiB. `clinician` and `reviewer` can download a verified file by a signed, version-pinned GET link that needs `VITE_REPORT_STORAGE_ORIGINS` | Clinical processing (disabled). The synthetic assessment (the server refuses it in a disposable local run, and the two build flags cannot be set together) |
+| **Development server** (`vite` dev) | `import.meta.env.DEV` | Adds `/local-interpretation`, `/local-workspace`, `/local-upload`, `/local-review` and `/local-operations`. Their server calls keep role and independent-review gates; the review launcher uses synthetic fixtures only | Absent from every production build; `demo:review` also needs the private reader captures |
+| **Browser test build** | `vite build --mode e2e` | Adds one test page, `/e2e/result-acknowledgements`, for synthetic result ids | Absent from production builds (a build check enforces it) |
+| **Synthetic staging** (the one hosted environment) | Server `SYNTHETIC_ASSESSMENT=enabled` with a frontend built `VITE_SYNTHETIC_ASSESSMENT=true`; on since 2026-11-05 ([environments.md](ops/environments.md)) | Structured JSON intake, evaluation reads (`GET /evaluations`), independent review of the patient link and each finding, then `POST /reports/:id/structured-assessment` against synthetic knowledge, shown as synthetic and not approved for clinical use ([architecture](architecture.md#the-synthetic-assessment-synthetic-staging-only-spec-032-s3)) | File download (this is not the local-storage build), the lab-PDF pipeline, clinician decisions. The server requires the PostgreSQL store, S3 file storage, the ledger verifier and the synthetic knowledge, and refuses it beside `LAB_REPORT_PIPELINE=enabled` |
+| **Server with `LAB_REPORT_PIPELINE=enabled`** | Default is `disabled`; enabling needs PostgreSQL, knowledge, fixtures and the private reader engine | Synthetic, non-production integration: lab-PDF declaration, recorded-text runner, reviewed fixture boundaries | Production (refused with `NODE_ENV=production`), the memory store, a public checkout without the engine (stops at start). Off in staging. No production PDF extraction or prescribing approval follows |
+
+What no mode does: approve anything for clinical use, or accept real patient data. Changing the supported journey, promoting a development route or enabling clinical processing is its own approved intention.
+
+## Baseline of 2026-10-14 (history, superseded where it conflicts with the section above)
+
+Source baseline: main `4400efae920f4cefa918e9b3c8862b3e5e6af9e9`, after merged PRs [#100](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/100) and [#101](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/101). This is a source/build matrix, not hosted acceptance or clinical approval. One row was added later and is dated; the rest of this section is the 2026-10-14 baseline. **Known to be out of date:** the first row says `/reports` is not mounted in a normal build (it has been mounted in every build since 2026-10-27, see [local-storage-browser.md](ops/local-storage-browser.md#reports-and-downloads)); the F07 and Phase A rows describe local branches of that date, and main now declares GET-only reports CORS (`infrastructure/terraform/reports-cors.json`). The history is kept as written below.
 
 | Build / runtime | Upload | Find / download | Review and interpretation |
 | --- | --- | --- | --- |
@@ -13,7 +34,7 @@ Source baseline: main `4400efae920f4cefa918e9b3c8862b3e5e6af9e9`, after merged P
 
 The browser test build uses the same protected product routes at mobile and desktop widths. A flag that exposes a choice does not establish that the selected API/runtime accepts it. Verify upload → find → download as one journey for the intended build before release.
 
-## Merged versus local versus hosted
+## Merged versus local versus hosted (as of the 2026-10-14 baseline)
 
 | State | Evidence / limit |
 | --- | --- |
@@ -24,7 +45,7 @@ The browser test build uses the same protected product routes at mobile and desk
 | Phase A local only | `fix/local-launcher-cors-parity` at `24f9f52` disables the two launcher global fallbacks; `fix/patient-setup-guidance` at `093ddc6` corrects the clinician handoff. This documentation branch does not include either runtime fix. Older launcher's shared GET integration waits for F07 on main |
 | Hosted / real-data acceptance | Not established by this source review. Actual AWS/Cognito/S3/CDN/worker/alarm/recovery evidence, agreements, custody and clinical-release gates remain separate. No deployment was performed |
 
-## Sources of truth
+## Sources of truth (as of the 2026-10-14 baseline)
 
 - Frontend routes/roles/choices: [routes](../apps/frontend/src/app/routes.tsx), [roles](../apps/frontend/src/auth/roles.ts), [upload page](../apps/frontend/src/pages/UploadReportPage.tsx), [build flag](../apps/frontend/src/lib/storageMode.ts).
 - Server restrictions: [configuration](../apps/backend/src/config/env.ts), [intake](../apps/backend/src/reports/intake/intake.service.ts), [patients](../apps/backend/src/patients/patients.controller.ts), [file downloads](../apps/backend/src/reports/reports.controller.ts).

@@ -52,6 +52,11 @@ const short = (digest: string): string => clean(digest).slice(0, 19);
 
 const errorName = (e: unknown): string => clean(e instanceof Error ? e.name : 'Error', 60);
 
+/** What a failed publish throws: the AWS error's class only. Its message names the role and the topic by ARN, and Lambda logs what is thrown. */
+export class PublishError extends Error {
+  override name = 'PublishError';
+}
+
 /** Runs one read; a failure is recorded by the read's name and the error's class only (never its message, which can carry an ARN). */
 async function attempt<T>(name: string, problems: string[], read: () => Promise<T>): Promise<T | undefined> {
   try {
@@ -133,7 +138,7 @@ export async function run(sources: Sources, now: Date = new Date()): Promise<Res
   } catch (e) {
     // The email is the whole point: if it cannot be sent, the invocation fails (the Errors alarm) and the run is not counted complete.
     console.error(`staging-freshness-ran outcome=incomplete findings=${findings.length} problems=${problems.length + 1}`);
-    throw e;
+    throw new PublishError(`publish failed: ${errorName(e)}`);
   }
   console.log(`staging-freshness-ran outcome=${outcome} findings=${findings.length} problems=${problems.length}`);
   return result;

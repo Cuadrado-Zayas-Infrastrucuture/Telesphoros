@@ -17,7 +17,9 @@ synthetic staging environment runs in AWS and there is no production; what is ap
     └──► sidecars/report-reader (Python subprocess) ── the imported, test-only reader engine (optional: not in the public repository)
 ```
 
-The product [capability matrix](product-capabilities.md) distinguishes normal builds, local-storage opt-in, development routes and server pipeline gates. Main still declares PUT-only reports CORS; the GET-only download repair is local F07, so this architecture does not claim hosted browser downloads are accepted.
+A separate worker process (`apps/worker`, with the shared primitives in `packages/jobs`) runs the queued jobs against the same PostgreSQL; see "Jobs and operational acceptance" below.
+
+The [current supported modes](product-capabilities.md#current-supported-modes-2026-11-07) distinguish normal builds, local-storage opt-in, development routes, synthetic staging and server pipeline gates. Main declares GET-only reports CORS (`infrastructure/terraform/reports-cors.json`). File download is offered only by the local-storage build, so the hosted staging build offers none and this architecture does not claim hosted browser downloads are accepted.
 
 ## Identity, tenancy and roles
 - **Authentication:** Cognito access tokens in production; an HMAC verifier for development and tests only (refused in production). A
@@ -44,7 +46,7 @@ version**; the database then refuses any change to that file's identity, and lat
 
 ## Jobs and operational acceptance
 
-M2.3 is merged: the PostgreSQL queue, transactional outbox, stored-file verification, hourly upload sweep, scheduler and separate worker process exist. Worker Terraform, login provisioning, deployment contracts and alarms are written; they have not been accepted in a hosted environment. Scheduling code is not evidence that a worker is provisioned or that alarms are delivered. See [jobs](ops/jobs.md).
+M2.3 is merged: the PostgreSQL queue, transactional outbox, stored-file verification, hourly upload sweep, scheduler and separate worker process exist. The worker runs in synthetic staging (one task: the upload sweep, stored-file checks and expired-capability removal); the three capability-sweep alarms were each fired once on purpose, and no other worker alarm has been, so alarm delivery is only partly exercised. Nothing here runs in production, which does not exist. What runs, and what was read when: [environments.md](ops/environments.md). Scheduling code alone is not evidence that a worker is provisioned or that alarms are delivered. See [jobs](ops/jobs.md).
 
 ## Knowledge and engines
 - `knowledge/cpic` is loaded at start under production rules (nothing synthetic or unreviewed). It is empty until clinical sign-off, so in
