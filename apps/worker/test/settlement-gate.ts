@@ -2,7 +2,7 @@ import { Client } from 'pg';
 import { disposeFixtures, onceFixtureCleanup } from '../../backend/test/helpers/fixture-cleanup';
 import type { Fixture } from './support';
 
-/** TEST ONLY: hold terminal updates in this disposable database after verification commits. */
+/** TEST ONLY: hold terminal updates for file verification and synthetic slow jobs in this disposable database. */
 export async function holdSettlements(f: Fixture) {
   const client = new Client({ connectionString: f.db.adminUrl });
   let locked = false;
@@ -38,7 +38,7 @@ export async function holdSettlements(f: Fixture) {
       END $$`);
     createdFunction = true;
     await client.query(`CREATE TRIGGER worker_test_hold_settlement BEFORE UPDATE OF state ON public.jobs
-      FOR EACH ROW WHEN (OLD.type = 'files.verify-stored' AND NEW.state IN ('succeeded', 'dead', 'cancelled'))
+      FOR EACH ROW WHEN (OLD.type IN ('files.verify-stored', 'test.slow') AND NEW.state IN ('succeeded', 'dead', 'cancelled'))
       EXECUTE FUNCTION public.worker_test_hold_settlement()`);
     createdTrigger = true;
     await client.query('SELECT pg_advisory_lock($1, $2)', [166, 1]);
