@@ -1,15 +1,29 @@
 import { join } from 'node:path';
 import { contentSha256 } from './content-hash';
 import { runKnowledgeCli } from './cli';
-import { cleanupTempDirs, copyOf, readJson, REAL_KNOWLEDGE_DIR, SYNTHETIC_DIR, tempDir, writeJson } from '../../../test/helpers/knowledge';
+import {
+  cleanupTempDirs,
+  copyOf,
+  readJson,
+  REAL_KNOWLEDGE_DIR,
+  reviewedCopyOf,
+  signerKeysJson,
+  SYNTHETIC_DIR,
+  tempDir,
+  TEST_SIGNERS,
+  writeJson,
+} from '../../../test/helpers/knowledge';
 import type { GuidelineFile } from '@telesphoros/cpic-schema';
+import { GetPublicKeyCommand, SignCommand } from '@aws-sdk/client-kms';
+import { generateKeyPairSync, sign as signRaw, type KeyObject } from 'node:crypto';
+import { checkSignatures, parseSignerKeys } from './signatures';
 import { rm, writeFile } from 'node:fs/promises';
 
 afterAll(cleanupTempDirs);
 
-async function run(args: string[], env: NodeJS.ProcessEnv = {}) {
+async function run(args: string[], env: NodeJS.ProcessEnv = {}, deps?: Parameters<typeof runKnowledgeCli>[3]) {
   const lines: string[] = [];
-  const code = await runKnowledgeCli(args, (line) => lines.push(line), env);
+  const code = await runKnowledgeCli(args, (line) => lines.push(line), env, deps);
   return { code, text: lines.join('\n') };
 }
 
@@ -130,5 +144,61 @@ describe('knowledge CLI: diff', () => {
     expect(result.code).toBe(1);
     expect(result.text).toContain('NEW: The knowledge directory cannot be read');
     expect((await run(['diff', SYNTHETIC_DIR])).code).toBe(2);
+  });
+});
+
+// Audit CLIN-01: production checks two signatures against KNOWLEDGE_SIGNER_KEYS, and `sign` makes one through KMS. KMS is a stub here that signs with a
+// key generated for the test: nothing calls AWS.
+describe('knowledge CLI: signatures', () => {
+  const stubKms = (signWith: KeyObject, publicKey: KeyObject, fail = false) => ({
+    send: async (command: unknown) => {
+      if (fail) throw new Error('AccessDeniedException: arn:aws:kms:us-east-1:111122223333:key/secret-detail');
+      if (command instanceof SignCommand) {
+        expect(command.input).toMatchObject({ MessageType: 'RAW', SigningAlgorithm: 'ECDSA_SHA_256', KeyId: 'arn:aws:kms:us-east-1:111122223333:key/k' });
+        return { Signature: signRaw('sha256', Buffer.from(command.input.Message!), { key: signWith, dsaEncoding: 'der' }) };
+      }
+      if (command instanceof GetPublicKeyCommand) return { PublicKey: publicKey.export({ type: 'spki', format: 'der' }) };
+      throw new Error('unexpected command');
+    },
+  });
+  const signArgs = (path: string) => ['sign', path, '--key-id', 'test-signer-a', '--kms-key', 'arn:aws:kms:us-east-1:111122223333:key/k'];
+
+  it('verify --production reads the signer keys from KNOWLEDGE_SIGNER_KEYS, and refuses the same files without them', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR);
+    expect((await run(['verify', '--dir', dir, '--production'], { KNOWLEDGE_SIGNER_KEYS: signerKeysJson() })).code).toBe(0);
+    const refused = await run(['verify', '--dir', dir, '--production']);
+    expect(refused.code).toBe(1);
+    expect(refused.text).toContain('no signer keys are configured');
+    expect(await run(['verify', '--dir', dir, '--production'], { KNOWLEDGE_SIGNER_KEYS: '{' })).toEqual({ code: 1, text: 'KNOWLEDGE_SIGNER_KEYS is not valid JSON.' });
+  });
+
+  it('sign prints a signature entry that the loader accepts for that file', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [TEST_SIGNERS[1]!] });
+    const path = join(dir, 'guidelines/drugx-genea.json');
+    const signer = TEST_SIGNERS[0]!;
+    const result = await run(signArgs(path), {}, { kms: () => stubKms(signer.privateKey, signer.publicKey) });
+    expect(result.code).toBe(0);
+    const entry = JSON.parse(result.text);
+    expect(entry).toMatchObject({ keyId: 'test-signer-a', algorithm: 'ecdsa-p256-sha256' });
+    const file = await readJson(path);
+    if (file.review.status === 'reviewed') file.review.signatures = [...(file.review.signatures ?? []), entry];
+    await writeJson(path, file);
+    expect(checkSignatures('f', file, contentSha256(file), parseSignerKeys(signerKeysJson()))).toEqual({ problems: [], signedBy: ['test-signer-a', 'test-signer-b'] });
+  });
+
+  it("refuses a KMS signature that does not verify against the key's own public key, and never repeats a KMS error", async () => {
+    const path = join(await reviewedCopyOf(SYNTHETIC_DIR), 'guidelines/drugx-genea.json');
+    const other = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const mismatch = await run(signArgs(path), {}, { kms: () => stubKms(TEST_SIGNERS[0]!.privateKey, other.publicKey) });
+    expect(mismatch).toEqual({ code: 1, text: "KMS returned a signature that does not verify against the key's own public key. Nothing to paste." });
+    const failed = await run(signArgs(path), {}, { kms: () => stubKms(TEST_SIGNERS[0]!.privateKey, TEST_SIGNERS[0]!.publicKey, true) });
+    expect(failed).toEqual({ code: 1, text: 'KMS could not sign (check the key ARN, its key spec ECC_NIST_P256, and your AWS credentials).' });
+  });
+
+  it('refuses to sign synthetic content, and asks for both flags', async () => {
+    const synthetic = join(SYNTHETIC_DIR, 'guidelines/drugx-genea.json');
+    const signer = TEST_SIGNERS[0]!;
+    expect(await run(signArgs(synthetic), {}, { kms: () => stubKms(signer.privateKey, signer.publicKey) })).toEqual({ code: 1, text: 'Synthetic content can never be signed.' });
+    expect((await run(['sign', synthetic, '--key-id', 'test-signer-a'])).code).toBe(2);
   });
 });

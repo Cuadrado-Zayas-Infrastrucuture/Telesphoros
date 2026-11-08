@@ -1,6 +1,7 @@
 import { Logger, Global, Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
 import { Database } from '../db/database';
+import { parseSignerKeys } from '../services/knowledge/signatures';
 import { loadKnowledge } from '../services/knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
 import { assertReaderEnginePresent } from '../services/report-reader/engine-presence';
@@ -37,7 +38,7 @@ const modeOf = (env: Env) => (env.NODE_ENV === 'production' ? 'production' : 'no
 
 export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> => {
   if (!enabled(env)) return undefined;
-  const set = await loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env) });
+  const set = await loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env), signerKeys: parseSignerKeys(env.KNOWLEDGE_SIGNER_KEYS) });
   // An empty set loads, and every drug then reports no guideline: under the production rules that is refused, as the synthetic factory does (audit CLIN-14).
   if (set.isEmpty && modeOf(env) === 'production') throw new Error('KNOWLEDGE_DIR holds no guideline: production needs at least one.');
   return set;

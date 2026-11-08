@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import type { Env } from '../config/env';
 import { KnowledgeLoadError } from '../services/knowledge/knowledge-loader';
+import { SignerKeysError } from '../services/knowledge/signatures';
 import { ReaderNotApprovedError } from '../services/report-reader/report-reader';
 import { cleanupTempDirs, reviewedCopyOf, tempDir } from '../../test/helpers/knowledge';
 import { labKnowledgeFactory, labReaderFactory, syntheticKnowledgeFactory } from './lab-reports.module';
@@ -24,6 +25,10 @@ describe('the lab-report pipeline applies production rules when NODE_ENV is prod
     const empty = await tempDir();
     await expect(labKnowledgeFactory({ ...envOf('production'), KNOWLEDGE_DIR: empty })).rejects.toThrow('KNOWLEDGE_DIR holds no guideline: production needs at least one.');
     await expect(labKnowledgeFactory({ ...envOf('development'), KNOWLEDGE_DIR: empty })).resolves.toBeDefined();
+  });
+
+  it('refuses to start with signer keys it cannot read (audit CLIN-01)', async () => {
+    await expect(labKnowledgeFactory({ ...envOf('production'), KNOWLEDGE_SIGNER_KEYS: '{' })).rejects.toBeInstanceOf(SignerKeysError);
   });
 
   it('builds neither when the pipeline is off', async () => {

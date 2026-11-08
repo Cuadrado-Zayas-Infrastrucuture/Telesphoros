@@ -4,7 +4,7 @@ import { CPIC_STRENGTHS, type DrugResult, type EvaluationResult, evaluationResul
 import { RECOMMENDATION_STRENGTHS } from '@telesphoros/shared-types';
 import { loadKnowledge } from '../knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../knowledge/knowledge-set';
-import { cleanupTempDirs, copyOf, readJson, reviewedCopyOf, SYNTHETIC_DIR, tempDir, writeJson } from '../../../test/helpers/knowledge';
+import { cleanupTempDirs, copyOf, readJson, reviewedCopyOf, SYNTHETIC_DIR, tempDir, TEST_SIGNER_KEYS, writeJson } from '../../../test/helpers/knowledge';
 import { EngineInputError, evaluate } from './recommendation-engine';
 
 let knowledge: KnowledgeSet;
@@ -288,6 +288,24 @@ describe('evaluate: standard identifiers on results (spec 033 K2-6)', () => {
   });
 });
 
+describe('evaluate: the signers of the cited file are named in the citation (audit CLIN-01)', () => {
+  const drugx = (set: KnowledgeSet) =>
+    evaluate(set, [canonical('GENEA', 'Synthetic Normal')], { drugs: ['drugx'] }).results.find((r) => (r.genes as readonly string[]).includes('GENEA'))!;
+
+  it('names the signers whose signatures the production load verified', async () => {
+    const signed = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
+    const result = drugx(signed);
+    expect(result.outcome).toBe('shown');
+    expect(result.outcome === 'shown' && result.citation.signedBy).toEqual(['test-signer-a', 'test-signer-b']);
+    expect(evaluationResultSchema.safeParse(evaluate(signed, [canonical('GENEA', 'Synthetic Normal')])).success).toBe(true);
+  });
+
+  it('adds nothing outside production, so every existing citation keeps its exact shape', () => {
+    const result = drugx(knowledge);
+    expect(result.outcome === 'shown' && 'signedBy' in result.citation).toBe(false);
+  });
+});
+
 describe('evaluate: a combination with no cell is held, never "no published recommendation" (audit DATA-01)', () => {
   // In the synthetic fixtures drugy-geneb has no cell for GENEB "Synthetic High", and the combined drugv-genea-genee, which replaces
   // drugv-genea, has none for Poor + Slow although drugv-genea has a verified Strong cell for Poor.
@@ -315,7 +333,7 @@ describe('evaluate: a combination with no cell is held, never "no published reco
   });
 
   it('a combination the signed file marks as not covered is held the same way: nothing published says what to do', async () => {
-    const signed = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production' });
+    const signed = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
     const drugv = signed.guidelinesForDrug('drugv').find((guideline) => guideline.id === 'drugv-genea-genee')!;
     expect(drugv.notCovered).toEqual([{ when: { GENEA: 'Synthetic Poor', GENEE: 'Synthetic Slow' }, note: expect.any(String) }]);
     expect(only(signed, [canonical('GENEA', 'Synthetic Poor'), canonical('GENEE', 'Synthetic Slow')], 'drugv')).toMatchObject(gap);
