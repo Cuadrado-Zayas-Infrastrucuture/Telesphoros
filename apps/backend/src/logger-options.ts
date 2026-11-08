@@ -107,9 +107,16 @@ function errorSummary(error: Error): { type: string; code?: string | number } {
   return { type: error.name, ...(typeof code === 'string' || typeof code === 'number' ? { code } : {}) };
 }
 
-/** The stack's frame lines only: its first line is the message. */
-function frames(stack: string | undefined): string[] {
-  return (stack ?? '')
+/**
+ * The stack's frame lines only. The stack opens with `Name: message`, and the message can span lines and imitate a frame (`x\n at <a value>`), so that header is
+ * cut first. When the stack does not open with this error's message (it was changed after the stack was captured), the header's end is unknown: no frames are kept.
+ */
+function frames({ stack = '', message }: Error): string[] {
+  const name = /^[^\n:]*(?:: )?/.exec(stack)?.[0] ?? '';
+  const end = name.length + message.length;
+  if (!stack.startsWith(message, name.length) || (end < stack.length && stack[end] !== '\n')) return [];
+  return stack
+    .slice(end)
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.startsWith('at '))
@@ -121,7 +128,7 @@ export function projectLogArguments(args: unknown[]): unknown[] {
   const [first, ...rest] = args;
   if (first instanceof Error) {
     // pino would put error.message in the line's text: give it the class instead.
-    return [{ err: { ...errorSummary(first), frames: frames(first.stack) } }, ...(typeof rest[0] === 'string' ? rest : [first.name])];
+    return [{ err: { ...errorSummary(first), frames: frames(first) } }, ...(typeof rest[0] === 'string' ? rest : [first.name])];
   }
   if (typeof first !== 'object' || first === null) return args;
   const projected: Record<string, unknown> = {};
@@ -133,7 +140,7 @@ export function projectLogArguments(args: unknown[]): unknown[] {
       continue;
     }
     if (value instanceof Error) {
-      projected[key] = key === 'err' ? { ...errorSummary(value), frames: frames(value.stack) } : errorSummary(value);
+      projected[key] = key === 'err' ? { ...errorSummary(value), frames: frames(value) } : errorSummary(value);
       if (key === 'err') lostText = value.name;
     } else {
       projected[key] = value;

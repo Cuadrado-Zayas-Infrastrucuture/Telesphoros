@@ -6,7 +6,8 @@ import { mapException } from './error-mapping';
 
 /**
  * Last line of defence: every error, expected or not, leaves the API in the same envelope and
- * never with a stack trace. Logs contain fixed diagnostic fields and the request id, never the thrown value.
+ * never with a stack trace. Logs contain fixed diagnostic fields and the request id, never the thrown value's text: a 500 also logs the error's class, code and
+ * stack frames (logger-options.ts reduces it to those), so the line says what failed and where.
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -32,6 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           tenantId,
           status: mapped.status,
           code: mapped.code,
+          ...(exception instanceof Error ? { err: exception } : {}),
         },
         'Request failed',
       );

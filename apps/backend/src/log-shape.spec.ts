@@ -101,6 +101,36 @@ describe('log line projection (no field nobody listed, no error message)', () =>
     expect(entries.find((entry) => entry.event === 'probe-error')).toMatchObject({ error: { type: 'Error', code: 'ECONNREFUSED' } });
   });
 
+  it('does not take a line of the message that looks like a stack frame for a frame', async () => {
+    const error = new Error('first line\n    at SYN-PATIENT-NAME (forged.js:1:1)');
+    const { entries, raw } = await capture((log) => log.error({ event: 'probe-frames', err: error }));
+    expect(raw).not.toContain('SYN-PATIENT-NAME');
+    const { frames } = entries.find((entry) => entry.event === 'probe-frames')?.err as { frames: string[] };
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.every((frame) => frame.startsWith('at '))).toBe(true);
+  });
+
+  it('keeps no frames when the message was changed after the stack was captured, since the stack can no longer be split safely', async () => {
+    const error = new Error('original\n    at SYN-PATIENT-NAME (forged.js:1:1)');
+    expect(error.stack).toContain('SYN-PATIENT-NAME'); // read first: under source maps the stack is built on first read, and must hold the old message here
+    error.message = 'changed';
+    const { entries, raw } = await capture((log) => log.error({ event: 'probe-changed', err: error }));
+    expect(raw).not.toContain('SYN-PATIENT-NAME');
+    expect((entries.find((entry) => entry.event === 'probe-changed')?.err as { frames: string[] }).frames).toEqual([]);
+  });
+
+  it('keeps frames for the header forms a stack really has: no message, a class name, and a Node error code', async () => {
+    const stackOf = async (error: Error, event: string) => {
+      const { entries } = await capture((log) => log.error({ event, err: error }));
+      return (entries.find((entry) => entry.event === event)?.err as { frames: string[] }).frames;
+    };
+    expect((await stackOf(new Error(''), 'probe-empty')).length).toBeGreaterThan(0);
+    expect((await stackOf(new TypeError('syn value'), 'probe-type')).length).toBeGreaterThan(0);
+    const coded = new Error('syn value');
+    coded.stack = `Error [ERR_SYN]: syn value\n    at syn (file.js:1:1)`;
+    expect(await stackOf(coded, 'probe-coded')).toEqual(['at syn (file.js:1:1)']);
+  });
+
   it('keeps the fields pino-http writes for a real request', async () => {
     lines.length = 0;
     const moduleRef = await Test.createTestingModule({ imports: [LoggerModule.forRoot({ pinoHttp: [pinoHttpOptions({ LOG_LEVEL: 'info' }), stream] })] }).compile();
