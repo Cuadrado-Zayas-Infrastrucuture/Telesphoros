@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UploadReportPage from '@/pages/UploadReportPage';
 import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { cancelOwnedUpload } from '@/lib/ownedStorageApi';
+import { onReportsChanged } from '@/lib/workspaceEvents';
 import { bindRecovery, endRecoverySession, readRecovery, rememberUpload, startRecoverySession, type RecoverySession } from '@/lib/uploadRecovery';
 
 const patientId = '11111111-1111-4111-8111-111111111111';
@@ -70,6 +71,61 @@ describe('UploadReportPage', () => {
     cancelMock.mockReset();
     submitMock.mockReset();
     patientApi.mockReset().mockImplementation(async () => pageResponse());
+  });
+
+  describe('tells the report lists on the same screen when the reports changed', () => {
+    const changed = vi.fn();
+    let stop: () => void;
+    beforeEach(() => {
+      changed.mockReset();
+      stop = onReportsChanged(changed);
+    });
+    afterEach(() => stop());
+
+    async function submit(user: ReturnType<typeof userEvent.setup>) {
+      render(<UploadReportPage />);
+      await fillValidForm(user);
+      await user.click(screen.getByRole('button', { name: 'Upload report' }));
+    }
+
+    it('after a finished upload', async () => {
+      submitMock.mockResolvedValue({ reference: 'syn-report' });
+      await submit(userEvent.setup());
+      await screen.findByText(/syn-report/);
+      expect(changed).toHaveBeenCalledTimes(1);
+    });
+
+    it('after a failed upload, which can leave a registered report without its file', async () => {
+      submitMock.mockImplementation(async () => {
+        throw new SubmitError('The server could not accept this report.');
+      });
+      await submit(userEvent.setup());
+      await screen.findByRole('alert');
+      await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    });
+
+    it('once, when an upload in flight is cancelled', async () => {
+      submitMock.mockImplementation(
+        (_values, _api, _progress, signal) => new Promise((_resolve, reject) => signal!.addEventListener('abort', () => reject(new SubmitError('Stopped.')))),
+      );
+      cancelMock.mockResolvedValue(undefined as never);
+      const user = userEvent.setup();
+      await submit(user);
+      await user.click(await screen.findByRole('button', { name: 'Cancel upload' }));
+      expect(await screen.findByText('Upload cancelled. Start a new upload when ready.')).toBeInTheDocument();
+      await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(1));
+      expect(changed).toHaveBeenCalledTimes(1);
+    });
+
+    it('after an interrupted upload is cancelled', async () => {
+      interruptedUpload();
+      cancelMock.mockResolvedValue(undefined as never);
+      const user = userEvent.setup();
+      render(<UploadReportPage />);
+      await user.click(await screen.findByRole('button', { name: 'Cancel the interrupted upload' }));
+      await screen.findByText('The interrupted upload was cancelled. You can start a new one.');
+      expect(changed).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('shows a field-level error for every empty field and does not submit', async () => {
