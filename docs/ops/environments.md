@@ -32,10 +32,11 @@ of `main` `859e964a` stopped halfway: its MIGRATE step applied migrations 0072 a
 because the freshness policy named the two services by resource and so was read only at apply (#318). The old `661512c9` API refused
 readiness on the new schema, so the load balancer kept replacing its task: the staging API was down from about 00:16 to 02:29 UTC. The
 release resumed from `main` `2a66207b` (#318, #319): its MIGRATE step found nothing pending, its IMAGE apply put the API on task
-definition revision 12 and the worker on 7, both on the new image, and the frontend build was unchanged, so it was not republished. No CI
-job holds cloud credentials or applies anything.
+definition revision 12 and the worker on 7, both on the new image, and the frontend build was unchanged, so it was not republished. Later that
+day an `INFRA` apply from `main` `d4ea5572` changed only the freshness Lambda's code, so its daily check counts only the files an apply
+reads (#333). No CI job holds cloud credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `2a66207b` (the 2026-11-08 `IMAGE` apply): anything merged after it that an apply reads (`infrastructure/terraform/` and `infrastructure/lambda/`, less tests,
+The last apply read the backend clone at, and so applied from `main` `d4ea5572` (the 2026-11-08 `INFRA` apply): anything merged after it that an apply reads (`infrastructure/terraform/` and `infrastructure/lambda/`, less tests,
 docs and examples: [terraform-inputs.json](../../scripts/staging/terraform-inputs.json)) is not applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
