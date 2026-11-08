@@ -255,6 +255,10 @@ export async function listReports(api: ApiFetch, page: number, signal?: AbortSig
  * Removes a report whose file never arrived (a failed or abandoned upload). It reads the report again first and refuses one whose file is stored: removing
  * a stored report is not this action. A report that is already gone counts as removed.
  */
+/** What a refused removal says: `refusal()` speaks about uploads and entries, and a removal has neither. */
+const removalRefused = (status: number) =>
+  new SubmitError(status === 403 ? 'You do not have permission to remove this report.' : 'Too many requests. Wait a moment, then retry.', status);
+
 export async function removeUnfinishedReport(api: ApiFetch, id: string) {
   const path = `/reports/${z.uuid().parse(id)}`;
   let current: z.infer<typeof reportDtoSchema>;
@@ -262,6 +266,7 @@ export async function removeUnfinishedReport(api: ApiFetch, id: string) {
     current = reportDtoSchema.parse(await request(api, path));
   } catch (error) {
     if (error instanceof SubmitError && error.status === 404) return;
+    if (error instanceof SubmitError && (error.status === 403 || error.status === 429)) throw removalRefused(error.status);
     throw error;
   }
   if (current.fileUploaded) throw new SubmitError('This report has its file stored, so it is kept. Open it in Reports.');
@@ -274,7 +279,7 @@ export async function removeUnfinishedReport(api: ApiFetch, id: string) {
     cache: 'no-store',
   });
   if (response.ok || response.status === 404) return;
-  if ([403, 429].includes(response.status)) throw refusal(response.status);
+  if ([403, 429].includes(response.status)) throw removalRefused(response.status);
   throw new SubmitError('The report could not be removed. Please retry.', response.status);
 }
 

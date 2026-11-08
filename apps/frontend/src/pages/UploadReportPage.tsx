@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
 import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from '@/lib/ownedStorageApi';
+import { announceReportsChanged } from '@/lib/workspaceEvents';
 import { clearRecovery, readRecovery } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef, useState } from 'react';
@@ -154,6 +155,7 @@ export default function UploadReportPage() {
     } finally {
       transfer.current = null;
       if (progress.current.cancelRequested) await cancelUpload();
+      else announceReportsChanged();
       setCanStartOver(uploadSettled(progress.current));
       setInterrupted(readRecovery(recoverySession));
     }
@@ -170,6 +172,7 @@ export default function UploadReportPage() {
     } finally {
       setCancelling(false);
       setCanStartOver(uploadSettled(progress.current));
+      announceReportsChanged();
     }
   }
 
@@ -195,6 +198,7 @@ export default function UploadReportPage() {
         setServerError(error instanceof SubmitError ? error.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.');
     } finally {
       setCancelling(false);
+      announceReportsChanged();
     }
   }
 
