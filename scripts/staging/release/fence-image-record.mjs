@@ -2,8 +2,8 @@
 //   node fence-image-record.mjs RECORD IMAGE                      a SIGNATURE record covering IMAGE (FENCE-OPEN)
 //   node fence-image-record.mjs RECORD IMAGE --allow-break-glass  a signature record, or a break-glass record with a written reason (ASSESSMENT-ON)
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { validReason } from '../verify-image.mjs';
+import { isMain } from '../is-main.mjs';
 
 const STAGING_IMAGE = /^([0-9]{12})\.dkr\.ecr\.us-east-2\.amazonaws\.com\/telesphoros-staging-api@sha256:[0-9a-f]{64}$/;
 export function coversFenceImage(record, image) {
@@ -25,7 +25,7 @@ export function coversAssessmentImage(record, image) {
     validReason(record.reason) && typeof record.recordedAt === 'string' && Number.isFinite(Date.parse(record.recordedAt)) &&
     Array.isArray(record.images) && record.images.length > 0 && record.images.every((value) => value === image));
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   const allowBreakGlass = process.argv[4] === '--allow-break-glass';
   let ok = false;
   try {
