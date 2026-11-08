@@ -32,10 +32,14 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 4. The image, unsigned under break-glass ([image-push.md](image-push.md)): write the reason, one line, to
    `~/telesphoros-private/releases/COMMIT/break-glass-reason.txt`, then `image.sh BUILD COMMIT`. It needs CI's image job green on COMMIT,
    builds and rehearses in `<clone>-release-<commit8>`, waits for ECR's scan, and writes `verified-image.json`, then `new_image.txt` last.
-5. `plan.sh MIGRATE COMMIT`, read it, `apply.sh MIGRATE COMMIT SHA256`. Then `migrate.sh MIGRATE COMMIT`, only while nobody uses staging:
-   it checks the pending migrations, the idle window and takes an RDS snapshot before `migrate-up`, and writes `migrate-status.txt`
-   saying `pending: (none)`. With nothing to migrate it records that and takes no snapshot.
-6. `plan.sh IMAGE COMMIT`, read it, `apply.sh IMAGE COMMIT SHA256`. When its log ends `== apply exit status: 0`, `current.tfvars` is this release's.
+5. `plan.sh MIGRATE COMMIT`, read it, `apply.sh MIGRATE COMMIT SHA256`. Then `plan.sh IMAGE COMMIT` and read it **before migrating**: it needs
+   only the MIGRATE apply, and `migrate.sh` refuses to start without this release's IMAGE plan, recorded (so it passed the release check) and
+   still matching the stack. Then `migrate.sh MIGRATE COMMIT`, only while nobody uses staging: it checks the pending migrations, the idle
+   window and takes an RDS snapshot before `migrate-up`, and writes `migrate-status.txt` saying `pending: (none)`. With nothing to migrate it
+   records that and takes no snapshot. **From `migrate-up` until the IMAGE apply, staging is down**: the running API answers 503 on
+   `/api/v1/ready` to a schema it does not know, and that is the load balancer's health check (two hours on 2026-11-08, when the IMAGE plan
+   was refused after migrating).
+6. `apply.sh IMAGE COMMIT SHA256` with the IMAGE plan you read, right after `migrate.sh`. When its log ends `== apply exit status: 0`, `current.tfvars` is this release's.
    Then `verify.sh IMAGE COMMIT` (read-only). A hold right after the apply means old tasks are still stopping: run it again in five minutes.
 6a. Only when this release turns the synthetic assessment on: `plan.sh ASSESSMENT-ON COMMIT OPERATION_ID`, read it, `apply.sh ASSESSMENT-ON COMMIT SHA256 OPERATION_ID`
    ([synthetic-assessment-switch.md](synthetic-assessment-switch.md)). It refuses to plan until this release's IMAGE apply finished, migrations are complete and

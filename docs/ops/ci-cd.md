@@ -3,6 +3,8 @@
 What runs on every pull request, what `main` requires before a merge, and the exact steps to turn that protection on.
 Synthetic data only: no CI job has cloud credentials, and nothing is deployed from CI (see [deployment.md](deployment.md)).
 
+**Reading order.** This page is long because it keeps dated acceptance records. The parts that describe CI as it is now: [the jobs](#the-jobs-githubworkflowsciyml), [what each required check does now](#required-checks-what-each-does-now) (which checks run on your pull request), [branch protection](#branch-protection-githubrulesetsmainjson), [other automation](#other-automation) and [running the same checks locally](#running-the-same-checks-locally). The sections headed with a pull request number and a date (`#162`, `#160`, `#151`, "Merged acceptance and superseded drafts") are history: each speaks for its own date and is not edited. The command-by-command test matrix, with what each skips, is in [database.md](../database.md#verification-matrix).
+
 ## The jobs (`.github/workflows/ci.yml`)
 
 Runs on every pull request and on every push to `main`. A newer push to the same pull request cancels the older run;
@@ -19,7 +21,7 @@ A first job, `changes`, decides how much of the rest a run must do (next section
 | `secret-scan` | yes | gitleaks over the **full git history** (rules and the one named allowlist entry in `.gitleaks.toml`) |
 | `image` | yes | Build/scan and synthetic TLS/provisioning/migration/two-task containment rehearsal; proves the scanned image is the OCI archive's image; rehearses the release (`release-rehearsal.sh`: local registry, throwaway key, no public network); no registry push or AWS proof |
 | `release-image` | no (runs after merge) | INF-03. On a push to `main` only, after `image`: pushes that job's archive to ECR **without a rebuild**, checks ECR kept its digest, signs the digest with the KMS image-signing key (no transparency log), verifies it. **Skipped until the founder sets the repository variables** below |
-| `terraform-lint` | no (advisory) | tflint with the AWS ruleset. Promote it once it has run clean on `main` (below) |
+| `terraform-lint` | yes | tflint with the AWS ruleset. Same skip condition as `terraform` |
 
 A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform is applied by hand, to synthetic staging only ([environments.md](environments.md)).
 
@@ -50,7 +52,7 @@ skip or hang a required check.
 2. `M` is a merge commit with exactly two parents `B` and `P` (a squash or rebase merge records no head, so it runs everything);
 3. `tree(M)` equals `tree(P)`, and `P` contains `B` (`git merge-base --is-ancestor B P`);
 4. a completed run of `ci.yml` in this repository (not a fork) has event `pull_request`, `head_sha` `P` and conclusion success;
-5. that run's latest attempt shows each of the six required checks as a job that completed with conclusion **success**. A skipped job
+5. that run's latest attempt shows each of the seven required checks as a job that completed with conclusion **success**. A skipped job
    does not count: a draft or documentation-only run reports every check as skipped, which proves nothing about code.
 
 When the proof holds, the push run still runs `secret-scan`, and `image` only while the release variables are set. The step
@@ -111,7 +113,7 @@ closed, and a public repository gets it on the Free plan. Until then: mark ready
 requests: memory and PostgreSQL + S3 do, and between them they exercise the database specs, the PostgreSQL store and the S3 protocol; what
 only the standalone profile adds is that exact pairing. A `schedule` run (07:41 UTC, 03:41 in Puerto Rico) and a manual `workflow_dispatch`
 run execute the whole workflow with all three profiles, so `main` is still proved in full every day it changes. A scheduled run is skipped when an
-earlier scheduled run already passed all six required checks and `service-postgres` at the same commit of `main`; a manual run is never skipped.
+earlier scheduled run already passed all seven required checks and `service-postgres` at the same commit of `main`; a manual run is never skipped.
 The nightly shares the concurrency group of pushes to `main` (`cancel-in-progress` is false for it), and GitHub keeps one running and one
 queued run per group, so a queued nightly can be replaced by a queued push run or the reverse; the early hour makes that unlikely. Its cost is
 a knob: the cron line in `ci.yml`.
@@ -365,6 +367,9 @@ as a line with the date, the digest and the reason, and release the same commit 
 | 2026-10-31 | `sha256:e1ea8d63e95f65d92bc7be12ad4e99598380121ba3e52ebf89a1218ba9e3fa33` (commit `299efbb3`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with the expired-capability sweep (spec 026 PR A, #214, migration 0065). The push run's image job was green on the same commit. ECR's scan of the linux/amd64 image: 0 critical, 8 high, none with a Debian bookworm fix (one new since the last release: glibc CVE-2026-84243, unfixed in every suite). Replaces the image above on synthetic staging. Not yet released through CI. |
 | 2026-11-05 | `sha256:128206aa0c6fef7bdbed7349c8ebf228041498348dc204a3a029844093373d2c` (commit `767bd0b5`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with medication capture (writes closed), follow-ups, structured revisions, finding reviews and evaluations from a structured source (migrations 0066 to 0070) and the synthetic assessment switch (spec 032 S3, #285, #286). The push run's image job was green on the same commit. ECR's scan of the linux/amd64 image: 0 critical, 1 high (glibc CVE-2026-84243, still unfixed in every Debian suite). Replaces the image above on synthetic staging. Not yet released through CI. |
 | 2026-11-06 | `sha256:7f3ee46a91e8564e91281d7295e5437bc8ca539259b34cfd9688783a233bfa77` (commit `661512c9`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with a writable `/tmp` for upload staging (#289) and migration 0071 (spec 033 slice 1, #287). The push run's image job was green on the same commit (one backend test in the same run timed out; the backend is identical to `29194ae2`, green twice). ECR's scan of the linux/amd64 image: 0 critical, 1 high (the same glibc CVE, unfixed, read again 2026-11-06). Replaces the image above on synthetic staging. Not yet released through CI. |
+| 2026-11-08 | `sha256:5d9f72a7982716cdc17933f5c7dfb169937de0f84f99b4017dfccc659e3a7780` (commit `859e964a`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with the audit verified identity (#299, migration 0072), the agentic worker binding (#302, migration 0073) and the compressed-body refusal (#310). The push run's image job was green on the same commit. ECR's scan of the linux/amd64 image: 0 critical, 1 high (the same glibc CVE, unfixed, read again 2026-11-08). Ran only as the migration task: the release stopped at its IMAGE plan (#318). Not yet released through CI. |
+| 2026-11-08 | `sha256:28eb01f9866de4b7793a341bbd287c41a7e5e2be0c973c46e6dcd96865a735ae` (commit `2a66207b`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Finishes the release above with the freshness-policy fix (#318). The push run's image job was green on the same commit. ECR's scan of the linux/amd64 image: 0 critical, 1 high (the same glibc CVE). Replaces the `661512c9` image on synthetic staging. Not yet released through CI. |
+| 2026-11-08 | `sha256:99bd603c5a20409d6f6127f0a0a751432fc6b82443c769122601878530692efb` (commit `e45ea389`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Publishes the frontend with non-current results marked (#325) and Tall Man names in results (#334); no backend or worker code changed since `2a66207b`. The push run skipped the image job by tree reuse; it was green on the pull-request head with the same tree (#336). ECR's scan of the linux/amd64 image: 0 critical, 1 high (the same glibc CVE). Replaces the `2a66207b` image on synthetic staging. Not yet released through CI. |
 
 An image pushed and signed by a person through the release role on synthetic staging (decision D6, [image-push.md](image-push.md#synthetic-staging-without-github-oidc-a-person-runs-the-release-step-d6))
 is not break-glass and gets no row here: it is CI's scanned archive and its record says `signature`.
@@ -382,11 +387,11 @@ is not break-glass and gets no row here: it is CI's scanned archive and its reco
 Renaming a job in `ci.yml` silently stops requiring it, which is why `pnpm test:ci-config` fails if the job names and the
 ruleset's required checks disagree.
 
-### Promoting `terraform-lint`
+### A check that cannot go red
 
-When the advisory job has been green on `main` for a few merges: remove `continue-on-error: true` from it, drop it from
-`ADVISORY` in `.github/ci/guard.test.mjs`, and add `{ "context": "terraform-lint", "integration_id": 15368 }` to the ruleset
-file (then re-import or edit the ruleset in the UI).
+`.github/ci/can-go-red.test.mjs` (part of `pnpm test:ci-config`) fails when `continue-on-error` is set, when a test script that skips without
+a database runs only in jobs that have none, when no workflow reaches a package `test*` script, or when a CI test names a path that does not
+exist. An exception goes in the list at the top of that file with its reason; an entry that stops matching fails too.
 
 ## Other automation
 

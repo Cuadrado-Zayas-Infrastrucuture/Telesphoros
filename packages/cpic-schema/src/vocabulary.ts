@@ -33,6 +33,8 @@ export const REASON_CODES = [
   'allele-not-in-definitions',
   'no-phenotype-mapping',
   'no-gene-definition',
+  // held: the guideline file has no cell for this combination (audit DATA-01)
+  'knowledge-gap',
   // abstained
   'association-abstained',
   // not held, not shown
@@ -54,6 +56,7 @@ export const REASON_OUTCOME: Readonly<Record<ReasonCode, Outcome>> = {
   'allele-not-in-definitions': 'held',
   'no-phenotype-mapping': 'held',
   'no-gene-definition': 'held',
+  'knowledge-gap': 'held',
   'association-abstained': 'abstained',
   'no-published-recommendation': 'no-published-recommendation',
   'no-guideline-for-drug': 'no-guideline',
@@ -89,6 +92,8 @@ export const REASON_MESSAGES: Readonly<Record<ReasonCode, string>> = {
   'allele-not-in-definitions': 'An allele in the report is not in the allele definitions used by this system.',
   'no-phenotype-mapping': 'The guideline tables define no phenotype for this combination of alleles.',
   'no-gene-definition': 'This system has no definitions for this gene.',
+  // Wording approved by the founder as pharmacist (audit T3, 2026-11-07).
+  'knowledge-gap': 'The guideline file has no entry for this combination of results. A pharmacist must review it before any recommendation is given.',
   'association-abstained': 'The report lists values with no key tying them to genes, so none were assigned.',
   'no-published-recommendation': 'The guideline publishes no recommendation for this case.',
   'no-guideline-for-drug': 'No loaded guideline covers this drug.',
@@ -107,6 +112,7 @@ export const REVIEWER_ACTIONS: Readonly<Record<ReasonCode, string | null>> = {
   'allele-not-in-definitions': 'Obtain the phenotype from the lab, or add the allele through the reviewed definition process.',
   'no-phenotype-mapping': 'Obtain the phenotype from the lab.',
   'no-gene-definition': 'Obtain the phenotype from the lab; the gene needs a reviewed definition.',
+  'knowledge-gap': 'Add the missing cell, or sign it as not covered, through the reviewed knowledge process.',
   'association-abstained': 'Request a corrected or differently laid out report.',
   'no-published-recommendation': null,
   'no-guideline-for-drug': null,

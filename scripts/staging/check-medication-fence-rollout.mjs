@@ -1,6 +1,6 @@
 // Offline observation check only. No AWS calls, writes, migration, deployment or request-drain claim.
 import { readFileSync, statSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 const canonical = (value) => JSON.stringify(value);
 const unique = (values) => new Set(values).size === values.length;
@@ -88,7 +88,7 @@ export function assess(snapshot, now = Date.now()) {
   return { status: reasons.size ? 'hold' : 'observed-disabled', runningTasks, reasons: [...reasons].sort() };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   let result;
   try {
     if (process.argv.length !== 3 || statSync(process.argv[2]).size > 2 * 1024 * 1024) throw new Error();

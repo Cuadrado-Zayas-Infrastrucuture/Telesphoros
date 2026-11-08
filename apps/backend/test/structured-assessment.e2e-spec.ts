@@ -119,10 +119,10 @@ const KNOWLEDGE_DIR = resolve(REPO, 'data/fixtures/knowledge/synthetic-structure
         q: { outcome: 'no-published-recommendation', strength: 'No recommendation', text: 'Q poor: no recommendation.', reason: 'no-published-recommendation' },
       },
       {
-        name: 'Intermediate and Medium: no cell exists, so nothing is shown and nothing is borrowed from a nearby row',
+        name: 'Intermediate and Medium: no cell exists, so it is held as a knowledge gap and nothing is borrowed from a nearby row',
         a: '*1/*3',
         b: '*1/*3',
-        z: { outcome: 'no-published-recommendation', strength: null, text: null, reason: 'no-published-recommendation' },
+        z: { outcome: 'held', strength: null, text: null, reason: 'knowledge-gap' },
         q: { outcome: 'shown', strength: 'Moderate', text: 'Q intermediate.', reason: null },
       },
       {

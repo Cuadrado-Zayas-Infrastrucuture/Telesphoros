@@ -54,7 +54,10 @@ for S in telesphoros-staging-api telesphoros-staging-worker; do
   echo "   $SVC"
   read -r _ NDEP ROLL RUN DES <<<"$SVC"
   [ "$NDEP" = 1 ] && [ "$ROLL" = COMPLETED ] && [ "$RUN" = "$DES" ] && [ "$RUN" -gt 0 ] || fail "$S is not steady"
-  for TASK in $(aws ecs list-tasks --cluster "$CL" --service-name "$S" --desired-status RUNNING --query 'taskArns[]' --output text </dev/null); do
+  # A failed or empty listing would skip the image check below, so each is a failure, never "no task to check".
+  TASKS=$(aws ecs list-tasks --cluster "$CL" --service-name "$S" --desired-status RUNNING --query 'taskArns[]' --output text </dev/null) || { fail "cannot list the running tasks of $S"; continue; }
+  [ -n "$TASKS" ] || fail "no running task listed for $S"
+  for TASK in $TASKS; do
     TD=$(aws ecs describe-tasks --cluster "$CL" --tasks "$TASK" --query 'tasks[0].taskDefinitionArn' --output text </dev/null)
     IMG=$(aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition.containerDefinitions[0].image' --output text </dev/null)
     if [ "$IMG" = "$NEW" ]; then echo "   task ${TASK##*/}: ${TD##*/} on the expected image"; else fail "task ${TASK##*/}: ${TD##*/} runs ${IMG##*@}, not ${NEW##*@}"; fi

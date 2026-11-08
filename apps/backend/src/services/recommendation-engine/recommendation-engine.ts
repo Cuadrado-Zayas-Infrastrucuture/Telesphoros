@@ -157,19 +157,8 @@ function evaluateGuideline(knowledge: KnowledgeSet, guideline: GuidelineFile, st
 
   const phenotypes = new Map(states.map((state) => [state.gene, state.phenotype]));
   const row = guideline.recommendations.find((candidate) => genes.every((gene) => candidate.when[gene] === phenotypes.get(gene)));
-  if (!row) {
-    return {
-      outcome: 'no-published-recommendation',
-      drug,
-      genes,
-      geneStates,
-      reasonCode: 'no-published-recommendation',
-      citation: null,
-      strength: null,
-      recommendationText: null,
-      implication: null,
-    };
-  }
+  // No cell for this combination is a gap in the knowledge, not a published "No recommendation": a person must look (audit DATA-01).
+  if (!row) return { outcome: 'held', drug, genes, geneStates, reasonCode: 'knowledge-gap', citation: null };
 
   const citation = citationFor(guideline, row);
   const ids = identifiersFor(knowledge, guideline, row);

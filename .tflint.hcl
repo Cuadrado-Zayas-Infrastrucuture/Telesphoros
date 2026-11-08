@@ -1,4 +1,4 @@
-# tflint configuration for infrastructure/terraform (advisory job "terraform-lint" in .github/workflows/ci.yml).
+# tflint configuration for infrastructure/terraform (job "terraform-lint" in .github/workflows/ci.yml).
 config {
   call_module_type = "local"
 }

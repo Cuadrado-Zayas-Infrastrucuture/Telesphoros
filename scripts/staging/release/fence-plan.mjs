@@ -73,7 +73,7 @@ export function flagProblems(mode, plan, oldImage, newImage) {
     need(variable('deployment_profile') === 'synthetic' && variable('environment') === 'staging' && variable('region') === 'us-east-2', `${w} target must be synthetic us-east-2 staging`);
     need(variable('api_image') === oldImage && variable('api_migrate_image') === oldImage, `${w} plan must keep both image variables unchanged`);
     need(variable(spec.family.variable) === spec.on, `${w} variable must match the requested direction`);
-    need(plan.resource_drift === undefined || Array.isArray(plan.resource_drift) && plan.resource_drift.every((d) => canonical(d.change?.actions) === '["no-op"]' || harmlessDrift(d)), `${w} plan has drift outside the reviewed harmless list`);
+    need(plan.resource_drift === undefined || Array.isArray(plan.resource_drift) && plan.resource_drift.every((d) => canonical(d.change?.actions) === '["no-op"]' || harmlessDrift(d, plan)), `${w} plan has drift outside the reviewed harmless list`);
     need(plan.output_changes === undefined || plan.output_changes !== null && typeof plan.output_changes === 'object' && Object.values(plan.output_changes).every((v) => canonical(v.actions) === '["no-op"]'), `${w} plan must not change outputs`);
     const changes = plan.resource_changes.filter((r) => !['["no-op"]', '["read"]'].includes(canonical(r.change?.actions)));
     const task = changes.find((r) => r.address === 'aws_ecs_task_definition.api[0]');

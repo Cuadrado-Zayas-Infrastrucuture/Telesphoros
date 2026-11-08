@@ -21,7 +21,7 @@ export interface Sources {
   cloudfrontPaths(): Promise<string[]>;
   /** The HTTP status of the API's readiness route. */
   ready(): Promise<number>;
-  /** Files under infrastructure/terraform/ that changed between the commit and main. `truncated` when GitHub cut its answer short. */
+  /** Terraform inputs (`isTerraformInput`) that changed between the commit and main. `truncated` when GitHub cut its answer short. */
   terraformFilesSince(commit: string): Promise<{ files: string[]; truncated: boolean }>;
   /** When the first application change the image does not contain merged, if there is one. */
   applicationChangeSince(commit: string): Promise<{ since: string | undefined }>;
@@ -40,6 +40,17 @@ export interface Result {
   problems: string[];
 }
 
+/**
+ * What an apply reads: the two folders, less tests, docs and examples (a test change merged after the applied commit waits for no apply).
+ * The same list as scripts/staging/terraform-inputs.json, which staging-status.sh reads; handler.test.ts fails when the two differ.
+ */
+export const TERRAFORM_INPUTS = {
+  paths: ['infrastructure/terraform', 'infrastructure/lambda'],
+  notInputs: ['.test.mjs', '.test.ts', '.tftest.hcl', '.md', '.example'],
+};
+export const isTerraformInput = (file: string): boolean =>
+  TERRAFORM_INPUTS.paths.some((p) => file.startsWith(`${p}/`)) && !TERRAFORM_INPUTS.notInputs.some((s) => file.endsWith(s));
+
 /** A change in the image's source this many days old and still not released is a finding (spec 027, D4). */
 export const IMAGE_BEHIND_DAYS = 7;
 const DAY_MS = 86_400_000;
@@ -51,6 +62,11 @@ const clean = (value: unknown, max = 200): string => String(value).replace(/[^\x
 const short = (digest: string): string => clean(digest).slice(0, 19);
 
 const errorName = (e: unknown): string => clean(e instanceof Error ? e.name : 'Error', 60);
+
+/** What a failed publish throws: the AWS error's class only. Its message names the role and the topic by ARN, and Lambda logs what is thrown. */
+export class PublishError extends Error {
+  override name = 'PublishError';
+}
 
 /** Runs one read; a failure is recorded by the read's name and the error's class only (never its message, which can carry an ARN). */
 async function attempt<T>(name: string, problems: string[], read: () => Promise<T>): Promise<T | undefined> {
@@ -96,7 +112,7 @@ export async function run(sources: Sources, now: Date = new Date()): Promise<Res
     if (tf?.truncated) problems.push('terraform-since-applied: truncated');
     else if (tf && tf.files.length > 0) {
       const listed = tf.files.slice(0, MAX_FILES_LISTED).map((f) => clean(f)).join(', ');
-      findings.push(differs('terraform-unapplied', 'nothing merged after the applied commit', `${tf.files.length} file(s) under infrastructure/terraform/ changed: ${listed}`));
+      findings.push(differs('terraform-unapplied', 'nothing merged after the applied commit', `${tf.files.length} Terraform input file(s) changed: ${listed}`));
     }
 
     const behind = await attempt('image-behind-main', problems, () => sources.applicationChangeSince(facts.image.commit));
@@ -133,7 +149,7 @@ export async function run(sources: Sources, now: Date = new Date()): Promise<Res
   } catch (e) {
     // The email is the whole point: if it cannot be sent, the invocation fails (the Errors alarm) and the run is not counted complete.
     console.error(`staging-freshness-ran outcome=incomplete findings=${findings.length} problems=${problems.length + 1}`);
-    throw e;
+    throw new PublishError(`publish failed: ${errorName(e)}`);
   }
   console.log(`staging-freshness-ran outcome=${outcome} findings=${findings.length} problems=${problems.length}`);
   return result;

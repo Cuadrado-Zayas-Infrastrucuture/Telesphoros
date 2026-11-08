@@ -86,7 +86,7 @@ test('application recovery requires three artifacts at the expected checkout', (
 });
 
 /** Jobs that deliberately are NOT required checks. Anything else in ci.yml must be required. */
-const ADVISORY = new Set(['terraform-lint']);
+const ADVISORY = new Set([]);
 /** Jobs that run only after a merge to main (so a pull request cannot wait on them), yet must fail visibly: not required, never continue-on-error. */
 const AFTER_MERGE = new Set(['release-image']);
 /** Helper jobs that decide what the others do. Not required and not advisory: a failure here makes every gate run (scope.test.mjs). */
@@ -325,7 +325,7 @@ test('CodeQL results gate a merge, with the thresholds named, and the checks abo
   for (const change of [{ tool: 'Other' }, { alerts_threshold: 'none' }, { alerts_threshold: undefined }, { security_alerts_threshold: 'all' }, { security_alerts_threshold: 'none' }, { security_alerts_threshold: undefined }]) {
     assert.notDeepEqual(named(ruleset.rules, { ...base, ...change }), [], `a weakened rule must be reported: ${JSON.stringify(change)}`);
   }
-  assert.deepEqual(ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks.length, 6, 'the code_scanning rule is not a seventh status check');
+  assert.deepEqual(ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks.length, 7, 'the code_scanning rule is not an eighth status check');
 });
 
 test('required checks come from GitHub Actions only (so another app cannot report them)', () => {
