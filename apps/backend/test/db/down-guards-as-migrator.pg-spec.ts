@@ -1106,3 +1106,40 @@ describe('evaluation result identifiers down guard as the non-superuser migrator
     }
   });
 });
+
+describe('knowledge-gap reason down guard as the non-superuser migrator', () => {
+  it('sees a knowledge-gap result behind FORCE RLS and reverses only a migration with none', async () => {
+    const f = await fixture();
+    const above = revertAbove('knowledge_gap_reason');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Deliberate owner-only fixture, as above: foreign keys and triggers are off, the table's own checks still apply.
+      const insert = (reason: string, outcome: string) =>
+        withAdmin(f.admin, async (c) => {
+          await c.query('SET session_replication_role=replica');
+          await c.query(
+            `INSERT INTO evaluation_results (tenant_id,evaluation_id,ordinal,drug,genes,outcome,reason_code,gene_evidence)
+             VALUES ($1,$2,0,'drugz',ARRAY['GENEA','GENEB'],$3,$4,'[]'::jsonb)`,
+            [tenant, randomUUID(), outcome, reason],
+          );
+        });
+      await insert('knowledge-gap', 'held');
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM evaluation_results')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to revert: stored results carry knowledge-gap/);
+      expect(
+        (await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname IN ('evaluation_results','evaluation_gene_states') ORDER BY relname")).rows,
+      ).toEqual([{ forced: true }, { forced: true }]);
+      // A citation-less no-published-recommendation, the form stored before 0074, does not block the down.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query("DELETE FROM evaluation_results WHERE reason_code = 'knowledge-gap'");
+      });
+      await insert('no-published-recommendation', 'no-published-recommendation');
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0074']);
+      await expect(insert('knowledge-gap', 'held')).rejects.toThrow(/evaluation_results_reason|evaluation_results_shape/);
+      expect(await migrateUp(f.migrator)).toEqual(['0074', ...above.reverted.slice().reverse()]);
+    } finally {
+      await f.drop();
+    }
+  });
+});

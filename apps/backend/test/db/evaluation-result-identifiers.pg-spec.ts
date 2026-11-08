@@ -121,11 +121,11 @@ describe('evaluation results: standard identifiers (spec 033)', () => {
         cell_origin: 'unknown',
       },
     ]);
-    // GENEA intermediate + GENEB high has no drugz cell at all
+    // GENEA intermediate + GENEB high has no drugz cell at all: held as a knowledge gap (audit DATA-01), with nothing to identify
     const none = await storeIdentified(t, 'Synthetic Intermediate', 'Synthetic High');
     expect((await storedIdentifiers(t, none.record.id))[1]).toEqual({
       drug: 'drugz',
-      outcome: 'no-published-recommendation',
+      outcome: 'held',
       drug_rxcui: null,
       gene_hgnc_ids: null,
       pharmvar_versions: null,
