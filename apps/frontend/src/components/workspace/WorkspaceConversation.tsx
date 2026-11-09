@@ -38,7 +38,10 @@ const CONFIRMATION = 'I confirm this file contains synthetic data only';
 export function WorkspaceConversation({ active = true }: { active?: boolean }) {
   const { roles, apiFetch, recoverySession, preferredName } = useAuth();
   const canAttach = roles.some((role) => WRITER_ROLES.includes(role));
-  const { patients, loading: patientsLoading, error: patientsError, hasMore: morePatients, loadMore: loadPatients } = useWorkspacePatients(canAttach);
+  // The conversation stays mounted on patient routes. Its attachment roster starts only when a file needs a patient.
+  // Once started, keep its owner alive across navigation, attachment Undo and upload/recovery work.
+  const [rosterNeeded, setRosterNeeded] = useState(false);
+  const { patients, loading: patientsLoading, error: patientsError, hasMore: morePatients, loadMore: loadPatients } = useWorkspacePatients(canAttach && rosterNeeded);
   const [file, setFile] = useState<File | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const attachment = useRemovedAttachment();
@@ -81,6 +84,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
 
   function choose(next: File | undefined) {
     if (!next) return;
+    setRosterNeeded(true);
     attachment.discard();
     setFile(next);
     setUploadError(null);
