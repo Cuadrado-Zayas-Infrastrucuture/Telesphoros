@@ -89,6 +89,89 @@ const ACTOR = 'SYN-clinician';
     const result = await withAdmin(db.adminUrl, (c) => c.query(`SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='patient_medications'`));
     expect(result.rows).toEqual([{ forced: true }]);
   });
+  it('orders current entries using only their latest fields, with stable entry-id ties and patient/tenant isolation', async () => {
+    const { tenant, input } = await world();
+    const firstId = '11111111-1111-4111-8111-111111111111';
+    const secondId = '22222222-2222-4222-8222-222222222222';
+    const stoppedId = '33333333-3333-4333-8333-333333333333';
+    for (const entryId of [secondId, firstId, stoppedId]) {
+      await repository.insertVersion(tenant, ACTOR, {
+        ...input,
+        id: randomUUID(),
+        entryId,
+        name: 'SYN-same',
+        input: { ...input.input, requestId: randomUUID() },
+      });
+    }
+    await repository.insertVersion(tenant, ACTOR, {
+      ...input,
+      id: randomUUID(),
+      entryId: stoppedId,
+      name: 'SYN-before',
+      input: { ...input.input, requestId: randomUUID(), entryId: stoppedId, expectedVersion: 1, status: 'stopped' },
+    });
+    const otherPatient = await seedLabReport(db.adminUrl, tenant);
+    const otherEntry = randomUUID();
+    await repository.insertVersion(tenant, ACTOR, { ...input, id: randomUUID(), entryId: otherEntry, patientId: otherPatient.patientId });
+    const otherTenant = await world();
+    await repository.insertVersion(otherTenant.tenant, ACTOR, { ...otherTenant.input, entryId: firstId });
+    const current = await repository.read(tenant, input.patientId, {});
+    expect(current.map(({ entryId, name, version, current, status }) => ({ entryId, name, version, current, status }))).toEqual([
+      { entryId: firstId, name: 'SYN-same', version: 1, current: true, status: 'active' },
+      { entryId: secondId, name: 'SYN-same', version: 1, current: true, status: 'active' },
+      { entryId: stoppedId, name: 'SYN-before', version: 2, current: true, status: 'stopped' },
+    ]);
+    expect(current.every((row) => row.patientId === input.patientId)).toBe(true);
+    expect(current.some((row) => 'creationRequestHash' in row)).toBe(false);
+    expect(await repository.read(tenant, input.patientId, { entryId: otherEntry })).toEqual([]);
+    expect(await repository.read(otherTenant.tenant, input.patientId, {})).toEqual([]);
+  });
+  it('sees a committed correction immediately in both current read forms while retaining historical current flags', async () => {
+    const { tenant, input } = await world();
+    await repository.insertVersion(tenant, ACTOR, input);
+    expect(await repository.read(tenant, input.patientId, { entryId: input.entryId, version: 1 })).toEqual([expect.objectContaining({ version: 1, current: true })]);
+    await repository.insertVersion(tenant, ACTOR, {
+      ...input,
+      id: randomUUID(),
+      name: 'SYN-corrected',
+      input: { ...input.input, requestId: randomUUID(), entryId: input.entryId, expectedVersion: 1, status: 'stopped', stopMonth: '2026-02' },
+    });
+    const ledgerCount = () => withAdmin(db.adminUrl, async (c) => (await c.query('SELECT count(*)::int AS n FROM ledger_events WHERE tenant_id=$1', [tenant])).rows[0].n);
+    const before = await ledgerCount();
+    for (const query of [{}, { entryId: input.entryId }, { entryId: input.entryId, version: 2 }]) {
+      expect(await repository.read(tenant, input.patientId, query)).toEqual([
+        expect.objectContaining({ entryId: input.entryId, name: 'SYN-corrected', version: 2, current: true, status: 'stopped', stopMonth: '2026-02' }),
+      ]);
+    }
+    expect(await repository.read(tenant, input.patientId, { entryId: input.entryId, version: 1 })).toEqual([
+      expect.objectContaining({ name: 'syn-ingredient', version: 1, current: false, status: 'active', stopMonth: null }),
+    ]);
+    expect(await repository.read(tenant, input.patientId, { entryId: input.entryId, version: 3 })).toEqual([]);
+    expect(await ledgerCount()).toBe(before);
+  });
+  it('returns one coherent committed version while a correction races with current reads', async () => {
+    const { tenant, input } = await world();
+    await repository.insertVersion(tenant, ACTOR, input);
+    const correction = repository.insertVersion(tenant, ACTOR, {
+      ...input,
+      id: randomUUID(),
+      name: 'SYN-new-version',
+      input: { ...input.input, requestId: randomUUID(), entryId: input.entryId, expectedVersion: 1, status: 'stopped', stopMonth: '2026-02' },
+    });
+    const reads = await Promise.all(Array.from({ length: 12 }, () => repository.read(tenant, input.patientId, {})));
+    await correction;
+    for (const rows of reads) {
+      expect(rows).toHaveLength(1);
+      const row = rows[0]!;
+      expect([1, 2]).toContain(row.version);
+      expect(row).toMatchObject(
+        row.version === 1
+          ? { name: 'syn-ingredient', current: true, status: 'active', stopMonth: null }
+          : { name: 'SYN-new-version', current: true, status: 'stopped', stopMonth: '2026-02' },
+      );
+    }
+    expect(await repository.read(tenant, input.patientId, {})).toEqual([expect.objectContaining({ version: 2, current: true, name: 'SYN-new-version' })]);
+  });
   it('recognizes medication facts but keeps analytic release held (D9, E3 and D07)', async () => {
     const { tenant, input } = await world();
     await repository.insertVersion(tenant, ACTOR, input);
