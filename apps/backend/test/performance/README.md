@@ -7,6 +7,12 @@ with 20 medication entries each and 1, 5 or 50 versions per entry, plus a foreig
 tenant control. Demographics histories are measured for context; they are not
 changed by the medication query optimization.
 
+Set `PATIENT_READ_BACKGROUND_PATIENTS=50` to add 50 patients in each of the two
+tenants, each with 20 entries and five versions per entry. This adds 10,000
+medication rows, for 11,121 total, so the measured patients no longer dominate
+the table. The default is zero; integers from zero to 100 per tenant are allowed.
+Background writes use the same real repositories and ledger constraints.
+
 With the repository's pinned Node/pnpm and PostgreSQL client tools, start the
 disposable local database as documented in `docs/STATUS.md`, then run from the
 repository root:

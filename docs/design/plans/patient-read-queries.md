@@ -10,8 +10,9 @@ history payloads; retain only a measured minimal read-query improvement.
 Preserve API DTOs, ordering, historical versions, current flags, tenant parameters,
 RLS, live authorization, transactional consistency, ledger/audit guarantees and
 clinical freshness. No schema/index/migration, cache, dependency, CI, clinical,
-cloud or deployment change. No push or PR. Confirm the frontend branch remote
-without pushing it.
+cloud or deployment change. Do not push the database branch or open a PR.
+Frontend publication was separately authorized after verification of its remote;
+that branch is independent of this database slice.
 
 Verify independent result oracles, tenant/patient isolation, history and latest
 reads after a committed correction, concurrent reads/writes, refusals and audit

@@ -13,6 +13,7 @@ import { seedLabReport } from '../helpers/ledger-fixtures';
 // Explicit opt-in through --testRegex; no timing threshold and no changes to default test selection.
 const tenant = 'syn-patient-read-benchmark';
 const actor = 'syn-clinician';
+const backgroundPatientsPerTenant = Number(process.env.PATIENT_READ_BACKGROUND_PATIENTS ?? 0);
 const cases: { history: number; patient: string; entries: string[] }[] = [];
 let pg: EphemeralDatabase;
 let db: Database;
@@ -22,6 +23,9 @@ const evidence: Record<string, unknown>[] = [];
 
 beforeAll(async () => {
   if (!process.env.PATIENT_READ_OUTPUT) throw new Error('Set PATIENT_READ_OUTPUT for the opt-in synthetic benchmark.');
+  if (!Number.isSafeInteger(backgroundPatientsPerTenant) || backgroundPatientsPerTenant < 0 || backgroundPatientsPerTenant > 100) {
+    throw new Error('PATIENT_READ_BACKGROUND_PATIENTS must be an integer from 0 to 100 per tenant.');
+  }
   pg = await createEphemeralDatabase();
   db = new Database({ url: pg.appUrl, ssl: 'disable' });
   const ledger = new PostgresLedgerRecordsRepository(db);
@@ -77,6 +81,34 @@ beforeAll(async () => {
     requestHash: 'a'.repeat(64),
     input: { requestId: randomUUID(), rxcui: '991001', listVersion: 'a'.repeat(64), status: 'active', source: 'clinician-entered', startMonth: null, stopMonth: null },
   });
+  // Keep target histories selective among both same-tenant and foreign-tenant rows.
+  for (const backgroundTenant of [tenant, 'syn-patient-read-other']) {
+    for (let patientIndex = 0; patientIndex < backgroundPatientsPerTenant; patientIndex++) {
+      const { patientId } = await seedLabReport(pg.adminUrl, backgroundTenant);
+      for (let entryIndex = 0; entryIndex < 20; entryIndex++) {
+        const entryId = randomUUID();
+        for (let version = 1; version <= 5; version++) {
+          await medications.insertVersion(backgroundTenant, actor, {
+            id: randomUUID(),
+            entryId,
+            patientId,
+            name: `SYN-background-${entryIndex}`,
+            requestHash: 'a'.repeat(64),
+            input: {
+              requestId: randomUUID(),
+              rxcui: String(991001 + entryIndex),
+              listVersion: 'a'.repeat(64),
+              status: 'active',
+              source: 'clinician-entered',
+              startMonth: null,
+              stopMonth: null,
+              ...(version > 1 ? { entryId, expectedVersion: version - 1 } : {}),
+            },
+          });
+        }
+      }
+    }
+  }
   await withAdmin(pg.adminUrl, (client) => client.query('ANALYZE'));
 }, 120_000);
 
@@ -95,6 +127,7 @@ afterAll(async () => {
         JSON.stringify(
           {
             facts,
+            fixture: { backgroundPatientsPerTenant, backgroundTenants: 2, backgroundEntriesPerPatient: 20, backgroundVersionsPerEntry: 5 },
             node: process.version,
             role: 'restricted application; real migrations/RLS/ledger',
             cache: 'first measured read follows fixture writes and ANALYZE; then 25 warm reads; no server/OS cache eviction',
