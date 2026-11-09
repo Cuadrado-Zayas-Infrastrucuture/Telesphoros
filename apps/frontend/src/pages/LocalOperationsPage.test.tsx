@@ -170,7 +170,7 @@ const summary = {
   geneStates: [],
   corrections: [],
   current: true,
-  advisory: { activeDisputes: 0, patientLink: 'verified' },
+  advisory: { activeDisputes: 0, patientLink: 'verified', knowledge: { evaluatedWith: 'set', loadedNow: 'set', status: 'same' } },
   actionable: false,
   createdAt: 'now',
 };

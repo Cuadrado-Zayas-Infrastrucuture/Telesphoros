@@ -248,6 +248,7 @@ export class EvaluationsService {
           current: currentIds.get(record.reportId as string) === record.id,
           activeDisputes: disputes,
           patientLink: links.get(record.reportId as string) ?? 'unverified',
+          loadedKnowledgeSetId: this.loadedKnowledgeSetId(record),
         }),
       );
     }
@@ -257,7 +258,7 @@ export class EvaluationsService {
   async get(principal: Principal, id: string): Promise<EvaluationDto> {
     const view = await this.need(this.ledger).evaluationView(principal.tenantId, id);
     if (!view) throw AppException.notFound('Evaluation not found.');
-    return toEvaluationDto(view.record, contextOf(view));
+    return toEvaluationDto(view.record, contextOf(view, this.loadedKnowledgeSetId(view.record)));
   }
 
   // ---- helpers ---------------------------------------------------------------------------------------------------------------
@@ -400,11 +401,16 @@ export class EvaluationsService {
   }
 
   private async present(tenantId: string, record: Projected): Promise<EvaluationDto> {
-    return toEvaluationDto(record, contextOf(await this.need(this.ledger).viewOfEvaluation(tenantId, record)));
+    return toEvaluationDto(record, contextOf(await this.need(this.ledger).viewOfEvaluation(tenantId, record), this.loadedKnowledgeSetId(record)));
+  }
+
+  /** A structured evaluation is made against the synthetic knowledge and a PDF evaluation against the pipeline's, so each is compared with its own. */
+  private loadedKnowledgeSetId(record: Projected): string | null {
+    return (record.structuredRevisionId === undefined ? this.knowledge : this.syntheticKnowledge)?.id ?? null;
   }
 }
 
 /** The state is derived from these same corrections (mapper), so what is shown can never disagree with the history shown beside it. */
-function contextOf(view: EvaluationView): EvaluationContext {
-  return { ...view.context, current: view.current, activeDisputes: view.activeDisputes, patientLink: view.patientLink };
+function contextOf(view: EvaluationView, loadedKnowledgeSetId: string | null): EvaluationContext {
+  return { ...view.context, current: view.current, activeDisputes: view.activeDisputes, patientLink: view.patientLink, loadedKnowledgeSetId };
 }

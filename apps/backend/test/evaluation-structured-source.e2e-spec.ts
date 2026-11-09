@@ -134,7 +134,7 @@ const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
     const view = await repo.evaluationView(lab.tenant, stored.record.id);
     expect(view).toBeDefined();
     const dto = evaluationDtoSchema.parse(
-      toEvaluationDto(view!.record, { ...view!.context, current: view!.current, activeDisputes: view!.activeDisputes, patientLink: view!.patientLink }),
+      toEvaluationDto(view!.record, { ...view!.context, current: view!.current, activeDisputes: view!.activeDisputes, patientLink: view!.patientLink, loadedKnowledgeSetId: null }),
     );
     expect(dto).toMatchObject({ id: stored.record.id, captureId: null, acceptance: null, reportId: s.reportId, patientId: s.patientId });
     expect(await verifier.verify(lab.tenant, { mode: 'full' })).toMatchObject({ status: 'ok', failures: [] });

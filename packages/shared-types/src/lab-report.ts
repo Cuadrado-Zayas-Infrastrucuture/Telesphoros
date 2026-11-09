@@ -203,6 +203,13 @@ export const evaluationDtoSchema = z.strictObject({
      * holds now, which includes every evaluation made before the link existed); `rejected` (the report is quarantined: it must not be relied on).
      */
     patientLink: z.enum(['verified', 'unverified', 'rejected']),
+    /**
+     * Whether the guidelines this evaluation used are still the ones loaded for its kind of evaluation, worked out when it is read (audit CLIN-02). `evaluatedWith` is the base
+     * set, so a dispute overlay does not count as a change; `loadedNow` is null when that kind of evaluation is switched off, and the status is then `unknown`. The set id covers
+     * every file and says nothing of order: `changed` means only that the two differ. The API always sends this. It is optional because the frontend is published separately
+     * and can run ahead of the API, and the frontend reads a missing value as `unknown`.
+     */
+    knowledge: z.strictObject({ evaluatedWith: z.string(), loadedNow: z.string().nullable(), status: z.enum(['same', 'changed', 'unknown']) }).optional(),
   }),
   actionable: z.literal(false),
   createdAt: timestamp,
