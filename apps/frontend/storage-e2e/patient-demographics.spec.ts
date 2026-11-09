@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs, signInWithPatient } from '../e2e/helpers';
 
 const label = () => `SYN-${crypto.randomUUID().slice(0, 8)}`;
 
 test.describe('Patient demographics: collected in Add patient, read and corrected on the patient page (spec 025 PD-c; needs the database, so it runs in the owned-storage suite)', () => {
   test('a clinician adds a patient with demographics, opens its page, corrects it; a reader reads it; a label alone shows Incomplete', async ({ page, browser }) => {
     const given = `Zzyzx${crypto.randomUUID().slice(0, 6)}`;
-    await signInAs(page, 'alice', '/workspace');
+    // The counter is shown only for a nonempty roster; create this test's own fixture.
+    await signInWithPatient(page);
     await openPatients(page);
     const section = page.getByRole('region', { name: 'Patient records' });
     // The Patients page's line "N of M complete" (T304) comes from the counts route; this suite shares one database, so the test reads where it starts and checks the change.

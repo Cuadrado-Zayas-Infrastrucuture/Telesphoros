@@ -56,6 +56,26 @@ export class PostgresPatientMedicationsRepository extends PatientMedicationsRepo
   }
   read(tenant: string, patient: string, query: PatientMedicationsQuery): Promise<PatientMedicationDto[]> {
     return this.db.withTenant(tenant, async (client) => {
+      if (query.version === undefined) {
+        // Current reads need one row per entry, not a window value on every historical row.
+        // Keep selection and presentation ordering in one statement/snapshot, under the same tenant binding and RLS.
+        const { rows } = await client.query<Row>(
+          `WITH latest AS (
+             SELECT entry_id, max(version) AS version FROM patient_medications
+              WHERE tenant_id = $1 AND patient_id = $2 AND ($3::uuid IS NULL OR entry_id = $3)
+              GROUP BY entry_id
+           )
+           SELECT ${columns
+             .split(', ')
+             .map((column) => `m.${column}`)
+             .join(', ')}
+             FROM latest l JOIN patient_medications m ON m.entry_id = l.entry_id AND m.version = l.version
+            WHERE m.tenant_id = $1 AND m.patient_id = $2
+            ORDER BY (m.status = 'stopped'), m.drug_name, m.entry_id::text`,
+          [tenant, patient, query.entryId ?? null],
+        );
+        return rows.map((row) => medicationDto(stored(row), true));
+      }
       const { rows } = await client.query<Row & { current: boolean }>(
         `WITH versions AS (SELECT ${columns}, max(version) OVER (PARTITION BY entry_id) AS latest
           FROM patient_medications WHERE tenant_id = $1 AND patient_id = $2 AND ($3::uuid IS NULL OR entry_id = $3))
