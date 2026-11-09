@@ -84,7 +84,7 @@ const KNOWLEDGE_DIR = resolve(REPO, 'data/fixtures/knowledge/synthetic-structure
     const view = await app.get(LedgerRecordsRepository).evaluationView(lab.tenant, id);
     expect(view).toBeDefined();
     return evaluationDtoSchema.parse(
-      toEvaluationDto(view!.record, { ...view!.context, current: view!.current, activeDisputes: view!.activeDisputes, patientLink: view!.patientLink }),
+      toEvaluationDto(view!.record, { ...view!.context, current: view!.current, activeDisputes: view!.activeDisputes, patientLink: view!.patientLink, loadedKnowledgeSetId: null }),
     );
   }
   const evaluations = (reportId: string) => lab.count('evaluations', 'report_id = $1', [reportId]);

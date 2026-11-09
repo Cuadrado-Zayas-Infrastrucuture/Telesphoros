@@ -44,7 +44,25 @@ export function evaluationStanding(evaluation: Evaluation): { notices: Notice[];
   }
   const fold = !evaluation.current || evaluation.state !== 'active' || evaluation.advisory.patientLink === 'rejected';
   if (fold && !notices.some((notice) => notice.tone === 'destructive')) notices.unshift({ tone: 'warning', message: 'Not the current result for this report.' });
+  // Only a result that still reads as current needs this: any other already says not to use it.
+  const knowledge = fold ? null : knowledgeNotice(evaluation.advisory.knowledge?.status);
+  if (knowledge) notices.push(knowledge);
   return { notices, fold };
+}
+
+/** Whether the guidelines this result used are still in use (audit CLIN-02). An API older than this screen sends nothing, and that reads as `unknown`. */
+function knowledgeNotice(status: NonNullable<Evaluation['advisory']['knowledge']>['status'] | undefined): Notice | null {
+  switch (status) {
+    case 'same':
+      return null;
+    case 'changed':
+      return { tone: 'warning', message: 'The guidelines have changed since this result was made. A pharmacist must check whether it still applies.' };
+    case 'unknown':
+    case undefined:
+      return { tone: 'warning', message: 'Could not confirm that this result used the guidelines in use now.' };
+    default:
+      return unreachable(status);
+  }
 }
 
 const isOutcome = (value: string): value is Outcome => (OUTCOMES as readonly string[]).includes(value);

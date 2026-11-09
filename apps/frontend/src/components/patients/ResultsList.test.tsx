@@ -42,7 +42,7 @@ const evaluation = {
   geneStates: [],
   corrections: [],
   current: true,
-  advisory: { activeDisputes: 0, patientLink: 'verified' },
+  advisory: { activeDisputes: 0, patientLink: 'verified', knowledge: { evaluatedWith: 'set', loadedNow: 'set', status: 'same' } },
   actionable: false,
   createdAt: '2026-11-04T00:00:00Z',
 };
@@ -102,6 +102,16 @@ it.each(notCurrent)('%s: a notice, and the wording only behind "Show the text an
   fireEvent.click(screen.getByText('Show the text anyway'));
   expect(screen.getByText('Z normal-low.')).toBeVisible();
   expect(screen.queryByText('Current evaluation')).not.toBeInTheDocument();
+});
+
+it('a current result made with other guidelines is a caution: the wording stays readable', async () => {
+  const changed = { ...evaluation, advisory: { ...evaluation.advisory, knowledge: { evaluatedWith: 'set', loadedNow: 'next', status: 'changed' } } };
+  expect(() => evaluationSummaryDtoSchema.parse(changed)).not.toThrow();
+  auth.apiFetch.mockImplementation(async () => page(changed));
+  show();
+  expect(await screen.findByText('The guidelines have changed since this result was made. A pharmacist must check whether it still applies.')).toBeVisible();
+  expect(screen.getByText('Z normal-low.')).toBeVisible();
+  expect(screen.queryByText('Show the text anyway')).not.toBeInTheDocument();
 });
 
 it('an unverified patient link is a caution, not a withdrawal: the wording stays readable', async () => {

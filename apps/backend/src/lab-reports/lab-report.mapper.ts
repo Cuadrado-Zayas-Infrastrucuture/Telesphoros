@@ -87,9 +87,22 @@ export interface EvaluationContext {
   activeDisputes: number;
   /** Whether the report's file is verified as the patient's, rejected (quarantined), or not decided. */
   patientLink: 'verified' | 'unverified' | 'rejected';
+  /** The id of the knowledge set this kind of evaluation is made against now; null when that kind is switched off. */
+  loadedKnowledgeSetId: string | null;
 }
 
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+
+/**
+ * Whether the guidelines an evaluation used are still the loaded ones. A dispute overlay stores an effective id derived from the base set and the cells it held, so the base set is
+ * the one compared (the same rule as 0051's completion check): a dispute is not a new release.
+ */
+function knowledgeAdvisory(record: Projected, binding: Record<string, unknown>, loadedNow: string | null) {
+  const overlay = binding.overlay as { baseKnowledgeSetId?: unknown } | undefined;
+  const evaluatedWith = text(overlay?.baseKnowledgeSetId) ?? (record.knowledgeSetId as string);
+  const status = loadedNow === null ? ('unknown' as const) : evaluatedWith === loadedNow ? ('same' as const) : ('changed' as const);
+  return { evaluatedWith, loadedNow, status };
+}
 
 export function toEvaluationDto(record: Projected, context: EvaluationContext): EvaluationDto {
   const holdCode = text(record.holdCode);
@@ -140,7 +153,7 @@ export function toEvaluationDto(record: Projected, context: EvaluationContext): 
     geneInputs: record.geneInputs,
     corrections: context.corrections.map(toCorrectionDto),
     current: context.current,
-    advisory: { activeDisputes: context.activeDisputes, patientLink: context.patientLink },
+    advisory: { activeDisputes: context.activeDisputes, patientLink: context.patientLink, knowledge: knowledgeAdvisory(record, binding, context.loadedKnowledgeSetId) },
     // Not approved for clinical use, so never "actionable" at this stage; also false whenever the state is not active or a dispute is open.
     actionable: false,
     createdAt: record.createdAt,

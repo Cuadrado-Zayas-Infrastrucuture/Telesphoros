@@ -45,7 +45,7 @@ import { bearer } from './helpers/tokens';
   describe('what a rejected link does to an evaluation that already exists', () => {
     it('shows the link state on the evaluation, and takes the evaluation out of "current" without touching its history', async () => {
       const s = await scenario();
-      expect(s.e.advisory).toEqual({ activeDisputes: 0, patientLink: 'verified' });
+      expect(s.e.advisory).toEqual({ activeDisputes: 0, patientLink: 'verified', knowledge: expect.objectContaining({ status: 'same' }) });
       expect(s.e).toMatchObject({ current: true, state: 'active' });
 
       await reject(s.rejecter, s.reportId).expect(201);

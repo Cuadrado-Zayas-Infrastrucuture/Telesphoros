@@ -125,6 +125,12 @@ cannot. After a correction the evaluation reads back unchanged except for `state
 newest evaluation of a report if it is active, and otherwise none: if the newest is retracted, an older still-active one is NOT promoted** (spec section 22;
 a reinstatement, or a fresh evaluation, makes one current again).
 
+**When the guidelines change.** Every evaluation response carries `advisory.knowledge` `{evaluatedWith, loadedNow, status}`, worked out when it is read and never stored. `evaluatedWith` is
+the base knowledge set (a dispute overlay is not a change) and `loadedNow` is the set loaded for that kind of evaluation: the pipeline's for a PDF, the synthetic one for a structured
+assessment. `status` is `same`, `changed`, or `unknown` when that kind of evaluation is switched off. A `changed` evaluation stays `current` and new decisions stay open (founder decision,
+audit CLIN-02); the screen says a pharmacist must check whether the result still applies. The set id covers every file and has no order, so changing one guideline marks every earlier
+result and a rollback also reads as `changed`. Knowledge loads at startup, so during a rolling deploy two API tasks can answer differently for a few minutes.
+
 **Disputes and the overlay.** A dispute names a cell of a guideline file by id, version, the file's **content hash** and a locator (table, row, optional
 column). While it is open or upheld, the **next** evaluation of any report in that tenant holds that cell (`cell-disputed`, its citation and **no
 wording**) and evaluates everything else normally. The overlay can only tighten: a cell that is not `verified` in the file is left as it is, so a
