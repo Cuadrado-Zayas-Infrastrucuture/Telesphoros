@@ -13,7 +13,7 @@ export function usesPublicLanding(hostname = location.hostname): boolean {
 
 /**
  * Staging sends a signed-out visitor to its own sign-in page, never to the live site: staging must not depend on production, and the
- * staging landing (staging.telesphoros.app) is behind Vercel's login, which invited testers cannot pass.
+ * staging landing (landing.staging.telesphoros.app) is behind Vercel's login, which invited testers cannot pass.
  */
 export function isStagingApp(hostname = location.hostname): boolean {
   return hostname === STAGING_APP_HOST;
