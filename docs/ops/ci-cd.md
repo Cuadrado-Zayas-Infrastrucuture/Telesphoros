@@ -261,11 +261,11 @@ Drafts [#146](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Rema
 
 - **Every GitHub Action is pinned to a full commit SHA**, with the version in a trailing comment. Tags can be moved; SHAs cannot.
   Dependabot opens the update PRs and changes both. `pnpm test:ci-config` fails on an unpinned action.
-- **Node is pinned to an exact release** (`NODE_VERSION` in `ci.yml`, currently 22.22.0), not a floating major. The report
-  adapter's unavailable-value matcher is pinned to Unicode 16.0 and refuses to load on a runtime with other Unicode data;
-  a newer Node 22 already reports 17.0. To move Node: run the matcher's conformance tests on the new release, then change
-  the pin in `unavailable-matcher.ts` and `docs/design/report-adapter-spec.md` in the same PR. `pnpm test:ci-config` fails
-  if `NODE_VERSION` becomes a floating major.
+- **Node is pinned to an exact release** (`NODE_VERSION` in every workflow, currently 22.22.0), not a floating major, so a new
+  runtime is a deliberate change. The report adapter's unavailable-value matcher checks the runtime's NFC at load and refuses to
+  load if it differs from the verified list where it could change a result; if a new Node trips that, review the change before
+  updating the list in `unavailable-matcher.ts`. `pnpm test:ci-config` fails if `NODE_VERSION` becomes a floating major or any
+  workflow names another Node.
 - **The one write permission: `id-token: write` on `release-image`** (INF-03, `specs/002-signed-image-release`). It lets that job prove to AWS, through GitHub's OIDC token, that it is this repository's `ci.yml` on `main` in the `image-release` environment, so no AWS secret is stored anywhere. Guards (`guard.test.mjs`, `supply-chain.test.mjs`, `release.test.mjs`) refuse any other write, and the trust policy (`signing.tf`) refuses any other caller. To turn the job on, after the AWS side is applied: create the **`image-release` environment** limited to `main` first (a job that names a missing environment creates an unprotected one), then set four **repository** variables from the Terraform outputs: `IMAGE_RELEASE_ROLE_ARN` (`image_release_role_arn`), `IMAGE_RELEASE_REGION`, `IMAGE_REPOSITORY_URL` (`api_repository_url`) and `IMAGE_SIGNING_KEY_ALIAS` (`image_signing_key_alias`). They must be repository variables, not environment ones: the job's `if:` reads the role variable before it enters the environment.
 - **Permissions default to `contents: read`.** Only the four service jobs add `actions: read`, to read the current run attempt’s start time from GitHub’s REST API. The token is scoped to the first-step bootstrap; it is never passed to the watchdog child. No other job requests a write (the one exception is `release-image`'s `id-token`, above); checks are reported by the runner itself.
 - **gitleaks is built from source** (`go install`, verified by the Go checksum database) rather than using the maintainers'

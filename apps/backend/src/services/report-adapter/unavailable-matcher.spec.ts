@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { ASCII_ONLY_FULL_FOLDS, comparisonCopy, isUnavailableValue, UNAVAILABLE_TOKENS } from './unavailable-matcher';
+import { ASCII_ONLY_FULL_FOLDS, comparisonCopy, isUnavailableValue, NFC_CHANGES_THAT_CAN_REACH_A_TOKEN, nfcIsAsVerified, UNAVAILABLE_TOKENS } from './unavailable-matcher';
 
 const chr = (code: number) => String.fromCharCode(code);
 
@@ -8,8 +8,62 @@ describe('the R06 unavailable-value matcher', () => {
     expect([...UNAVAILABLE_TOKENS]).toEqual(['not available', 'not reported', 'pending', 'no disponible', 'resultado no disponible', 'no reportado', 'pendiente']);
   });
 
-  it('runs only on the Unicode version it is pinned to', () => {
-    expect(process.versions.unicode).toBe('16.0');
+  describe('the check that lets it load', () => {
+    const real = (text: string) => text.normalize('NFC');
+    // U+0378 is unassigned, standing in for a character a later Unicode version adds.
+    // A private-use placeholder carries the change through the real NFC, so it applies wherever the character appears, as a real runtime's would.
+    const withChange = (from: string, to: string) => (text: string) => real(text.replaceAll(from, chr(0xe000))).replaceAll(chr(0xe000), to);
+
+    it('passes on this runtime', () => {
+      expect(nfcIsAsVerified()).toBe(true);
+    });
+
+    it.each([
+      ['a new character that normalizes to a letter', withChange(chr(0x378), 'a')],
+      ['a new character that normalizes to white space', withChange(chr(0x378), chr(0x2003))],
+      ['a new character that normalizes to a character the fold table lists', withChange(chr(0x378), chr(0xdf))],
+      ['a listed change that no longer happens', withChange(chr(0x212a), chr(0x212a))],
+      ['a character that can reach a token normalizing to one that cannot', withChange(chr(0xa0), chr(0xe9))],
+      ['two characters that can reach a token composing', withChange('no', chr(0xe9))],
+    ])('fails on %s', (_name, nfc) => {
+      expect(nfcIsAsVerified(nfc)).toBe(false);
+    });
+
+    it('stops the module from loading when it fails', () => {
+      const normalize = jest.spyOn(String.prototype, 'normalize').mockImplementation(function (this: string) {
+        return this.valueOf() === chr(0x378) ? 'a' : this.valueOf();
+      });
+      try {
+        jest.isolateModules(() => {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          expect(() => require('./unavailable-matcher')).toThrow('cannot load');
+        });
+      } finally {
+        normalize.mockRestore();
+      }
+    });
+
+    it('uses the same list an independent implementation derives across every code point', () => {
+      // Python's unicodedata is a second implementation of NFC, given the same characters that can reach a token.
+      const script = [
+        'import json, sys, unicodedata',
+        'reach = set(json.load(sys.stdin))',
+        'can = lambda c: ord(c) < 0x80 or c in reach',
+        'out = []',
+        'for cp in range(0x80, 0x110000):',
+        '    if 0xD800 <= cp <= 0xDFFF: continue',
+        '    c = chr(cp)',
+        '    n = unicodedata.normalize("NFC", c)',
+        '    if n != c and (can(c) or all(can(x) for x in n)):',
+        '        out.append(cp)',
+        'print(json.dumps(out))',
+      ].join('\n');
+      const whiteSpace = [0x85, 0xa0, 0x1680, ...Array.from({ length: 11 }, (_, i) => 0x2000 + i), 0x2028, 0x2029, 0x202f, 0x205f, 0x3000].map(chr);
+      const derived = JSON.parse(
+        execFileSync('python3', ['-I', '-c', script], { encoding: 'utf8', input: JSON.stringify([...whiteSpace, ...Object.keys(ASCII_ONLY_FULL_FOLDS)]) }),
+      ) as number[];
+      expect(derived).toEqual(NFC_CHANGES_THAT_CAN_REACH_A_TOKEN);
+    });
   });
 
   it.each([

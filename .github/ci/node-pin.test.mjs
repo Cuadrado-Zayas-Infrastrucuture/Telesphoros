@@ -1,10 +1,8 @@
 // Run with: node --test .github/ci/node-pin.test.mjs   (pnpm test:ci-config)
-// One Node version everywhere. The lab-report matcher refuses a runtime whose Unicode version differs from the one it was
-// built for (apps/backend/src/services/report-adapter/unavailable-matcher.ts), so a developer on another major sees dozens
-// of suites fail at import. .nvmrc is the source of truth; CI, the image, and the engines range must agree with it, and
+// One Node version everywhere, so a new runtime is one deliberate change and every environment tests what is deployed. .nvmrc is the source of truth; CI, the image, and the engines range must agree with it, and
 // .npmrc's engine-strict makes pnpm refuse to install on a Node outside that range.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -17,6 +15,8 @@ export function nodePinProblems({ nvmrc, workflows, dockerfile, packageJson, npm
   for (const [name, text] of Object.entries(workflows)) {
     const found = [...text.matchAll(/^ {2}NODE_VERSION: "([^"]*)"$/gm)].map((m) => m[1]);
     if (found.length !== 1 || found[0] !== pinned) problems.push(`${name}: NODE_VERSION must be "${pinned}" (found ${JSON.stringify(found)})`);
+    const literal = [...text.matchAll(/^\s*node-version:\s*(.*?)\s*$/gm)].map((m) => m[1]).filter((v) => v !== '${{ env.NODE_VERSION }}');
+    if (literal.length > 0) problems.push(`${name}: node-version must be \${{ env.NODE_VERSION }} (found ${JSON.stringify(literal)})`);
   }
   const images = [...dockerfile.matchAll(/^FROM node:([^-@\s]+)/gm)].map((m) => m[1]);
   if (images.length === 0 || images.some((v) => v !== pinned)) problems.push(`api.Dockerfile: every node image must be ${pinned} (found ${JSON.stringify(images)})`);
@@ -30,7 +30,11 @@ export function nodePinProblems({ nvmrc, workflows, dockerfile, packageJson, npm
 
 const current = () => ({
   nvmrc: read('../../.nvmrc'),
-  workflows: { 'ci.yml': read('../workflows/ci.yml'), 'e2e-storage.yml': read('../workflows/e2e-storage.yml'), 'rescan.yml': read('../workflows/rescan.yml') },
+  workflows: Object.fromEntries(
+    readdirSync(new URL('../workflows/', import.meta.url))
+      .filter((name) => name.endsWith('.yml'))
+      .map((name) => [name, read(`../workflows/${name}`)]),
+  ),
   dockerfile: read('../../infrastructure/docker/api.Dockerfile'),
   packageJson: read('../../package.json'),
   npmrc: read('../../.npmrc'),
@@ -47,6 +51,14 @@ test('the pin check reports each kind of drift', () => {
   const drift = [
     { ...base, workflows: { ...base.workflows, 'rescan.yml': base.workflows['rescan.yml'].replace(`NODE_VERSION: "${pinned}"`, `NODE_VERSION: "${other}"`) } },
     { ...base, workflows: { ...base.workflows, 'e2e-storage.yml': base.workflows['e2e-storage.yml'].replace(`NODE_VERSION: "${pinned}"`, `NODE_VERSION: "${other}"`) } },
+    { ...base, workflows: { ...base.workflows, 'staging-frontend.yml': base.workflows['staging-frontend.yml'].replace(`NODE_VERSION: "${pinned}"`, `NODE_VERSION: "${other}"`) } },
+    {
+      ...base,
+      workflows: {
+        ...base.workflows,
+        'staging-frontend.yml': base.workflows['staging-frontend.yml'].replace('node-version: ${{ env.NODE_VERSION }}', `node-version: '${pinned}'`),
+      },
+    },
     { ...base, dockerfile: base.dockerfile.replace(`node:${pinned}-`, `node:${other}-`) },
     { ...base, packageJson: base.packageJson.replace(/"node": "[^"]*"/, '"node": ">=22"') },
     { ...base, nvmrc: other },
