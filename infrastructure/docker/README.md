@@ -30,7 +30,7 @@ The founder must import the updated `.github/rulesets/main.json`; editing its fi
 
 ## Local verification, 2026-10-09
 
-The linux/amd64 image built under Docker 29.6.2 on macOS. The running image uses Node 22.22.0 and ICU 77.1; local orchestration uses Node 24.14.0. The synthetic rehearsal passed provisioning, wrong-hostname TLS refusal, pristine startup refusal, migrations, privilege verification, two API health/readiness/auth checks, cross-process contained-write rollback, the healthy-tenant control, and containment polling by both APIs.
+The linux/amd64 image built under Docker 29.6.2 on macOS. The running image uses Node 22.23.4 and ICU 78.3; local orchestration uses Node 24.14.0. The synthetic rehearsal passed provisioning, wrong-hostname TLS refusal, pristine startup refusal, migrations, privilege verification, two API health/readiness/auth checks, cross-process contained-write rollback, the healthy-tenant control, and containment polling by both APIs.
 
 All 43 Dockerfile/CI contract tests passed. Twenty-six mutations of actual Dockerfile, workflow or CA files each made the checks fail; the unmodified controls passed before and after restoration. Lint, type checking and 31 infrastructure guards passed. Trivy 0.69.3 reported zero fixed HIGH/CRITICAL findings with an empty exception list. This is a scan at that time, not a promise about later databases or unknown vulnerabilities. The existing database/S3/browser CI tiers remain required and are reported separately on the PR.
 
