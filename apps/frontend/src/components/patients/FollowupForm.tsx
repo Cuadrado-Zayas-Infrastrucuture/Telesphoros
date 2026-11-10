@@ -9,6 +9,7 @@ import { readMedications } from '@/lib/patientMedications';
 import { announceFollowupsChanged, readFollowupAssignees, recordFollowup } from '@/lib/patientFollowups';
 import { SubmitError } from '@/lib/api';
 import type { DecisionLink } from '@/lib/clinicianDecisions';
+import { clinicianLabel } from '@/lib/clinicianLabel';
 const selectClass = 'min-h-control w-full rounded-md border border-border bg-background px-3 py-2 text-base';
 function localDate(offset = 0) {
   const date = new Date();
@@ -232,7 +233,7 @@ export function FollowupForm({
                       <select className={selectClass} value={assignee || context.actor} required onChange={(event) => setAssignee(event.target.value)}>
                         {context.assignees.map((person) => (
                           <option key={person} value={person}>
-                            {person === context.actor ? 'Me' : person}
+                            {clinicianLabel(person, context.actor)}
                           </option>
                         ))}
                         {assignee && !context.assignees.includes(assignee) && <option value={assignee}>Unavailable clinician — choose a replacement</option>}

@@ -9,6 +9,7 @@ import { FollowupForm } from './FollowupForm';
 
 import { FollowupValues } from './FollowupValues';
 import { FollowupHistory } from './FollowupHistory';
+import { clinicianLabel } from '@/lib/clinicianLabel';
 
 export function FollowupsList({ patientId, initialSaved = false, onEditingChange }: { patientId: string; initialSaved?: boolean; onEditingChange?: (editing: boolean) => void }) {
   const { roles } = useAuth();
@@ -98,11 +99,11 @@ export function FollowupsList({ patientId, initialSaved = false, onEditingChange
                   </p>
                   {entry.next && (
                     <p className="text-xs text-muted-foreground">
-                      Responsible clinician: {entry.next.assignee === data.currentActor ? 'Me' : entry.next.assignee}
+                      Responsible clinician: {clinicianLabel(entry.next.assignee, data.currentActor)}
                       {entry.needsReassignment ? ' — reassignment needed' : ''}
                     </p>
                   )}
-                  <FollowupValues entry={entry} />
+                  <FollowupValues entry={entry} actor={data.currentActor} />
                   <div className="flex flex-wrap gap-2">
                     {canWrite && !editing && (
                       <>

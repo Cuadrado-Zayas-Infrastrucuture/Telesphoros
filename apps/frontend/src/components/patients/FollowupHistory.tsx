@@ -2,6 +2,7 @@ import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { Button } from '@/components/ui/Button';
 import { useFollowups } from '@/hooks/useFollowups';
 import { FollowupValues } from './FollowupValues';
+import { clinicianLabel } from '@/lib/clinicianLabel';
 
 export function FollowupHistory({ patientId, threadId }: { patientId: string; threadId: string }) {
   const { data, error, loading, reload, page, go } = useFollowups(patientId, threadId);
@@ -26,10 +27,10 @@ export function FollowupHistory({ patientId, threadId }: { patientId: string; th
                   <p className="text-sm font-medium">
                     Version {entry.version} · {entry.action}
                   </p>
-                  <FollowupValues entry={entry} />
+                  <FollowupValues entry={entry} actor={data.currentActor} />
                   {entry.next && (
                     <p className="text-sm">
-                      Next date: {entry.next.date} ({entry.next.timezone}) · {entry.next.assignee}
+                      Next date: {entry.next.date} ({entry.next.timezone}) · {clinicianLabel(entry.next.assignee, data.currentActor)}
                     </p>
                   )}
                 </li>

@@ -1,6 +1,8 @@
 import type { FollowupDto } from '@telesphoros/shared-types';
+import { clinicianLabel } from '@/lib/clinicianLabel';
 
-export function FollowupValues({ entry }: { entry: FollowupDto }) {
+/** `actor` is the signed-in clinician's id, when the caller knows it, so their own entries read "Me". */
+export function FollowupValues({ entry, actor }: { entry: FollowupDto; actor?: string }) {
   return (
     <div className="flex flex-col gap-1 text-sm">
       {entry.assessment && (
@@ -16,7 +18,7 @@ export function FollowupValues({ entry }: { entry: FollowupDto }) {
       )}
       <p className="whitespace-pre-wrap wrap-anywhere">{entry.noteRedacted ? 'Note redacted.' : entry.note}</p>
       <p className="text-xs text-muted-foreground">
-        Recorded {new Date(entry.createdAt).toLocaleString()} · {entry.createdBy}
+        Recorded {new Date(entry.createdAt).toLocaleString()} · {clinicianLabel(entry.createdBy, actor)}
       </p>
     </div>
   );
