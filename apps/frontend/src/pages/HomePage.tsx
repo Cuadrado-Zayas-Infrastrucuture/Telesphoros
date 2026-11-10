@@ -1,9 +1,12 @@
 import { ownedStorageMode } from '@/lib/storageMode';
 import { useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { ProductLanding } from '@/components/landing/ProductLanding';
+import { PublicLandingRedirect } from '@/components/landing/PublicLandingRedirect';
+import { isStagingApp, usesPublicLanding } from '@/lib/landing/public-site';
+import { signedInHome } from '@/lib/localWorkspace';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function HomePage() {
@@ -42,5 +45,9 @@ export default function HomePage() {
         </div>
       </div>
     );
+  if (usesPublicLanding()) {
+    if (status === 'signedIn') return <Navigate to={signedInHome(roles)} replace />;
+    return isStagingApp() ? <Navigate to="/signin" replace /> : <PublicLandingRedirect />;
+  }
   return <ProductLanding canUpload={canUpload} signedIn={status === 'signedIn'} />;
 }
