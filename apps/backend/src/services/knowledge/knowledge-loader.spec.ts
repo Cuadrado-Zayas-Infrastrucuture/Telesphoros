@@ -1,3 +1,4 @@
+import { createPublicKey } from 'node:crypto';
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { KnowledgeLoadError, loadKnowledge } from './knowledge-loader';
@@ -427,6 +428,25 @@ describe('loadKnowledge: two signers sign real content, under the production rul
     expect(only(await problemsOf(twice, 'production'))).toEqual([`${path}: "test-signer-a" signed more than once.`]);
     const stranger = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [a, UNLISTED_SIGNER] });
     expect(only(await problemsOf(stranger, 'production'))).toEqual([`${path}: "test-signer-x" is not a configured signer.`]);
+  });
+
+  it('refuses two key ids that hold one key, even in a trust list that was never parsed: one key is one signer', async () => {
+    // The trust list is built by hand, as a direct caller could, so the check cannot live in the parser alone.
+    const alias = { ...a, keyId: b.keyId };
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [a, alias] });
+    const sameObject: SignerKeys = new Map([
+      [a.keyId, a.publicKey],
+      [b.keyId, a.publicKey],
+    ]);
+    const sameKeyOtherObject: SignerKeys = new Map([
+      [a.keyId, a.publicKey],
+      [b.keyId, createPublicKey(a.privateKey)],
+    ]);
+    for (const keys of [sameObject, sameKeyOtherObject]) {
+      expect(only(await problemsOf(dir, 'production', keys))).toEqual([`${path}: "test-signer-a" and "test-signer-b" hold the same key, so they count as one signer.`]);
+    }
+    // Control: the same two signatures under two different keys fail for the ordinary reason, not this one.
+    expect(only(await problemsOf(dir, 'production'))).toEqual([`${path}: the signature by "test-signer-b" does not match this file's content.`]);
   });
 
   it("refuses a signature moved from another file: it signs that file's id", async () => {

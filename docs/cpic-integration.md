@@ -114,6 +114,9 @@ process runs, so write access to the files is not enough to sign them.
   refuses `synthetic` files, anything not `reviewed`, and any schema 1.2 file (it states no origin). A reviewed 1.3 file needs valid
   signatures from two distinct signers in `KNOWLEDGE_SIGNER_KEYS`; an unknown signer, the same signer twice, a signature over other
   content or another file's id, or no configured keys are each refused. All problems are listed together.
+  Two signers are two keys: a trust list in which two key ids hold the same key is refused when it is read, and two signatures made
+  with one key count as one signer whatever ids they carry. Keys are compared as keys, not as text, so another encoding of the same
+  key is still the same key.
 - The signers that verified are kept with the file, and every citation from it carries them (`citation.signedBy`), inside the ledger hash.
 - A test (`knowledge-loader.spec.ts`) loads the real `knowledge/cpic/` under the production rules, so
   committing unreviewed, edited or synthetic content there fails the build.
