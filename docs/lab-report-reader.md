@@ -86,7 +86,7 @@ Nothing calls it yet either; it is wired to an endpoint in the records slice.
 | The orchestrator: checks in the order of the specification, then the mapping        | `adapt-report.ts`                           |
 | One occurrence to engine input (spec section 5.2), and repeated genes (section 5.4) | `adapt-occurrence.ts`                       |
 | Packet integrity and disjoint evidence, recomputed and re-derived, never trusted    | `packet-checks.ts`                          |
-| The seven-token unavailable matcher (R06), pinned to Unicode 16.0                   | `unavailable-matcher.ts`                    |
+| The seven-token unavailable matcher (R06), which checks the runtime's NFC at load   | `unavailable-matcher.ts`                    |
 | The reader's canonical JSON, to recompute packet hashes                             | `canonical-json.ts`                         |
 | Report-level hold codes, fixed messages and reviewer actions                        | `hold-codes.ts`                             |
 | Append-only, asynchronous capture acceptance (in-memory until the records slice)    | `capture-acceptance.ts`                     |
@@ -209,9 +209,8 @@ A refusal by the issuer ends the job: `requester-not-authorized`, `tenant-inacti
 - D08 (monospaced two-column overflow) is held by design: Poppler's `-layout` capture turns 2, 3 and 4 character gaps into
   three spaces, so the evidence is gone from the stored text. Recovering it needs coordinates, which is the separate,
   unapproved experiment (5B-2b).
-- The adapter's unavailable-value matcher needs a runtime with **Unicode 16.0** data (`process.versions.unicode`), which
-  Node 22.22.0 has; it refuses to load otherwise. CI pins that exact Node release (docs/ops/ci-cd.md). Developers on another
-  Node release will see the adapter's tests fail to load, by design.
+- The adapter's unavailable-value matcher checks the runtime's NFC at load and refuses to load if anything that can reach one
+  of its tokens behaves differently from the verified list. CI pins an exact Node release (docs/ops/ci-cd.md).
 - Poppler 26.03.0 is a version pin (a constant the adapter checks against the capture record). The production image and the
   PDF-to-text runner arrive with hosting and the records slice.
 
