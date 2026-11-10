@@ -4,7 +4,7 @@ This opt-in mode connects the isolated OpenEMR viewer to the existing local Tele
 
 ## Explicit bindings
 
-Build the workspace with pinned Node 22.22.0. The synthetic backend must already have its PostgreSQL/S3 pipeline configured, a synthetic patient, an independently accepted capture and a stored evaluation. The existing [local review workflow](../../scripts/local-review/README.md) describes that setup. This connector does not upload, accept, evaluate or correct records.
+Build the workspace with pinned Node 22.23.4. The synthetic backend must already have its PostgreSQL/S3 pipeline configured, a synthetic patient, an independently accepted capture and a stored evaluation. The existing [local review workflow](../../scripts/local-review/README.md) describes that setup. This connector does not upload, accept, evaluate or correct records.
 
 Keep backend credentials in `packages/smart-pilot/openemr/.runtime/stored-reader.json`, with permissions **0600**. The standalone pilot refuses a less-private file. This ignored directory is excluded from the production Docker context. Never commit, print or paste a resolved token. The file shape below is illustrative; placeholders are not working credentials:
 

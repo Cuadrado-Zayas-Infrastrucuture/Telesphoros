@@ -20,7 +20,7 @@ Recovery file storage is read only. New uploads and text writes return a fixed 5
 
 ## Available verification commands
 
-Use pinned Node 22.22.0, pnpm 10.28.0 and PostgreSQL 16 tools. Set `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` to disposable loopback PostgreSQL/Moto services; missing services are skips, never acceptance. PostgreSQL uses SCRAM, and each worker gets a canonical private native-dependency cache with HOME/XDG/ambient provider credentials absent.
+Use pinned Node 22.23.4, pnpm 10.28.0 and PostgreSQL 16 tools. Set `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` to disposable loopback PostgreSQL/Moto services; missing services are skips, never acceptance. PostgreSQL uses SCRAM, and each worker gets a canonical private native-dependency cache with HOME/XDG/ambient provider credentials absent.
 
 ```bash
 pnpm --filter @telesphoros/backend test --runInBand --runTestsByPath test/recovery-object-storage.spec.ts

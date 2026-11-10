@@ -82,7 +82,7 @@ async function write(tenant,input) {
 }
 async function main() {
   assert.equal(process.getuid(),10001);
-  assert.equal(process.version,'v22.22.0');
+  assert.equal(process.version,'v22.23.4');
   for(const module of ['typescript','jest','@telesphoros/fake-idp']) assert.throws(()=>require.resolve(module,{paths:['/app']}));
   assert.equal(fs.existsSync('/app/src'),false);
   assert.throws(()=>fs.writeFileSync('/app/should-not-write','test'));

@@ -18,7 +18,7 @@ Verify the current code, callers and history before relying on a dated status pa
 
 ## Verification selection
 
-Run from the repository root unless noted. Read current `package.json` files and `ci.yml` first; this table is a starting point, not permission to skip required checks. Match the workflow's exact Node release (currently 22.22.0) and the root `packageManager` pin. The Node pin has a Unicode compatibility contract; a floating major is insufficient.
+Run from the repository root unless noted. Read current `package.json` files and `ci.yml` first; this table is a starting point, not permission to skip required checks. Match the workflow's exact Node release (currently 22.23.4) and the root `packageManager` pin. The Node pin has a Unicode compatibility contract; a floating major is insufficient.
 
 | Change | Relevant commands/evidence |
 |---|---|

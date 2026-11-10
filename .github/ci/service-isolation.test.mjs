@@ -32,7 +32,7 @@ function fixture(t, serviceNeeds = needs(), profileList = Object.keys(profiles))
     GITHUB_RUN_ATTEMPT: identity.attempt, SERVICE_HEAD_SHA: identity.headSha, GITHUB_SHA: identity.checkout, SERVICE_NEEDS: JSON.stringify(serviceNeeds) };
   delete env.TELESPHOROS_WORKSPACE_PREPARED;
   json(join(directory, 'service-budget.json'), budget);
-  const timing = { format: 1, phase: 'shared-library-build', libraries: ['shared-types', 'cpic-schema', 'fake-idp', 'jobs'], durationMs: 42, exitCode: 0, nodeVersion: '22.22.0' };
+  const timing = { format: 1, phase: 'shared-library-build', libraries: ['shared-types', 'cpic-schema', 'fake-idp', 'jobs'], durationMs: 42, exitCode: 0, nodeVersion: '22.23.4' };
   json(join(directory, 'service-test-prerequisites.json'), timing);
   const options = { env, cwd };
   const producer = async (profile, mutation = () => {}) => runProducer(profile, 'synthetic producer', { ...options, execute: async () => {

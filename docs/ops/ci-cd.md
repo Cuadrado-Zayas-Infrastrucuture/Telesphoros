@@ -261,7 +261,7 @@ Drafts [#146](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Rema
 
 - **Every GitHub Action is pinned to a full commit SHA**, with the version in a trailing comment. Tags can be moved; SHAs cannot.
   Dependabot opens the update PRs and changes both. `pnpm test:ci-config` fails on an unpinned action.
-- **Node is pinned to an exact release** (`NODE_VERSION` in every workflow, currently 22.22.0), not a floating major, so a new
+- **Node is pinned to an exact release** (`NODE_VERSION` in every workflow, currently 22.23.4), not a floating major, so a new
   runtime is a deliberate change. The report adapter's unavailable-value matcher checks the runtime's NFC at load and refuses to
   load if it differs from the verified list where it could change a result; if a new Node trips that, review the change before
   updating the list in `unavailable-matcher.ts`. `pnpm test:ci-config` fails if `NODE_VERSION` becomes a floating major or any
@@ -308,7 +308,7 @@ Successful shell completion rechecks the absolute deadline, then hands persisten
 
 The merged workflow replaces sequential backend profiles on one runner with three independent jobs. Each job installs the locked dependencies, starts its own PostgreSQL/Moto pair, verifies PostgreSQL 16 clients and OpenSSL, then runs the fresh shared-library producer introduced in #146 and preserved in #150. Only that successful producer exports the existing prepared marker to later steps; application hooks and consumer builds are unchanged.
 
-The **entire service path shares one deadline**, GitHub’s current run-attempt `run_started_at` plus 30 minutes. A first-step watchdog is armed **before checkout or any user action setup**. The workflow materializes the canonical `.github/ci/service-deadline.mjs` module verbatim from one YAML anchor; aliases reuse it for the other three jobs. The image’s preinstalled Node runs only this built-in clock/process supervisor. Application commands still use the unchanged exact Node 22.22.0 and pnpm pins. `node .github/ci/update-service-deadline.mjs` refreshes the embedded source after an edit; configuration guards reject drift, a missing/optional/late bootstrap or a bypassing command.
+The **entire service path shares one deadline**, GitHub’s current run-attempt `run_started_at` plus 30 minutes. A first-step watchdog is armed **before checkout or any user action setup**. The workflow materializes the canonical `.github/ci/service-deadline.mjs` module verbatim from one YAML anchor; aliases reuse it for the other three jobs. The image’s preinstalled Node runs only this built-in clock/process supervisor. Application commands still use the unchanged exact Node 22.23.4 and pnpm pins. `node .github/ci/update-service-deadline.mjs` refreshes the embedded source after an edit; configuration guards reject drift, a missing/optional/late bootstrap or a bypassing command.
 
 The bootstrap reads the trusted attempt start with the existing read-only token, binds repository/run/attempt/head/checkout, and starts a separate watchdog before returning `armed=true`. Post-setup initialization verifies the real Git checkout and the live watchdog; it never resets that clock. Every later budget/evidence check requires a current heartbeat, the same owner and process start identity, and matching clock/source hashes. There is no stale relative download timeout. The watchdog remains active through setup, installs, direct download/upload actions, tests and post-action work; both profile and gate acceptance still recheck the deadline.
 

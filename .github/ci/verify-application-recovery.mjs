@@ -26,7 +26,7 @@ export function verifyApplicationRecovery(value) {
   keys(value, ['format', 'synthetic', 'status', 'controls', 'runtime', 'sourceDatabase', 'measurements', 'applicationRecoveryComplete', 'clinicalUseApproved', 'nativeReplicationVerified']);
   if (value.format !== 1 || value.synthetic !== true || value.status !== 'passed' || value.applicationRecoveryComplete !== true || value.clinicalUseApproved !== false || value.nativeReplicationVerified !== false) refuse();
   keys(value.runtime, ['node', 'platform', 'architecture', 'gitHead', 'storage', 'freshProcess']);
-  if (value.runtime.node !== 'v22.22.0' || !/^[a-f0-9]{40}$/.test(value.runtime.gitHead) || !['linux', 'darwin'].includes(value.runtime.platform) || !['arm64', 'x64'].includes(value.runtime.architecture) || value.runtime.freshProcess !== true || value.runtime.storage !== 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM') refuse();
+  if (value.runtime.node !== 'v22.23.4' || !/^[a-f0-9]{40}$/.test(value.runtime.gitHead) || !['linux', 'darwin'].includes(value.runtime.platform) || !['arm64', 'x64'].includes(value.runtime.architecture) || value.runtime.freshProcess !== true || value.runtime.storage !== 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM') refuse();
   volume(value.sourceDatabase); if (!value.sourceDatabase.bytes) refuse();
   if (!Array.isArray(value.controls) || value.controls.length !== controls.length || JSON.stringify(value.controls.map(c => c.name).sort()) !== JSON.stringify([...controls].sort())) refuse();
   for (const control of value.controls) { keys(control, ['name', 'passed']); if (control.passed !== true) refuse(); }

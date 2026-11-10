@@ -89,7 +89,7 @@ function producerFixture(t) {
     GITHUB_RUN_ATTEMPT: identity.attempt, SERVICE_HEAD_SHA: identity.headSha, GITHUB_SHA: identity.checkout };
   const json = (file, value) => fs.writeFileSync(file, JSON.stringify(value) + '\n');
   json(join(directory, 'service-budget.json'), budget);
-  json(join(directory, 'service-test-prerequisites.json'), { format: 1, phase: 'shared-library-build', libraries: ['shared-types','cpic-schema','fake-idp','jobs'], durationMs: 42, exitCode: 0, nodeVersion: '22.22.0' });
+  json(join(directory, 'service-test-prerequisites.json'), { format: 1, phase: 'shared-library-build', libraries: ['shared-types','cpic-schema','fake-idp','jobs'], durationMs: 42, exitCode: 0, nodeVersion: '22.23.4' });
   const target = join(cwd, 'apps/backend/test-results'); fs.mkdirSync(target, { recursive: true });
   const files = metricFiles('memory').map(name => join(target, name));
   const produce = () => {

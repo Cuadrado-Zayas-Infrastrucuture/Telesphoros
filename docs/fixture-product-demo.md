@@ -4,7 +4,7 @@ This local walkthrough connects real report storage to clearly labeled fixed PGx
 
 ## Start
 
-Follow [Start here](start-here.md#1-prepare-the-tools) for Node 22.22.0, pnpm 10.28.0, PostgreSQL 16, Moto and the absolute `LOCAL_PG_BIN`/`MOTO_SERVER` paths. Use the same free loopback ports and owned lifecycle.
+Follow [Start here](start-here.md#1-prepare-the-tools) for Node 22.23.4, pnpm 10.28.0, PostgreSQL 16, Moto and the absolute `LOCAL_PG_BIN`/`MOTO_SERVER` paths. Use the same free loopback ports and owned lifecycle.
 
 Build the fixture-backed variant, then start the existing storage launcher:
 

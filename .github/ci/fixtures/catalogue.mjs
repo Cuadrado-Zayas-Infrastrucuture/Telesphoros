@@ -8,7 +8,7 @@ export function catalogueMetricControl() {
     seconds: { restoreAndInventory: 1, resolve: 1, copyAndVerify: 1, publish: 1, total: 4 }, concurrency: 1,
     independentBytesRecovered: false, applicationRecoveryComplete: false };
   return { format: 1, synthetic: true, status: 'passed', controls: Array.from({ length: 12 }, (_, i) => ({ name: 'control-' + i, passed: true })),
-    runtime: { node: 'v22.22.0', platform: 'linux', architecture: 'x64', gitHead: 'b'.repeat(40), storage: 'loopback PostgreSQL/Moto; metadata only' },
+    runtime: { node: 'v22.23.4', platform: 'linux', architecture: 'x64', gitHead: 'b'.repeat(40), storage: 'loopback PostgreSQL/Moto; metadata only' },
     sourceDatabase: volume(300), measurements: Array.from({ length: 3 }, () => structuredClone(metric)),
     independentBytesRecovered: false, applicationRecoveryComplete: false };
 }
