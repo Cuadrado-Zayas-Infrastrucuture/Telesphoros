@@ -2,14 +2,10 @@
  * The R06 matcher (docs/design/report-adapter-spec.md, section 5.5): does a reported result say "no result available"?
  *
  * It is a custom comparison with exactly seven tokens, not a claim of general Unicode equivalence, and it compares a
- * normalized COPY: the reported text is never changed. The Unicode version is pinned: a runtime whose data is not
- * Unicode 16.0 cannot silently change the results, so this module refuses to load on one. When Node's Unicode data moves,
- * re-run the conformance tests and change the pin deliberately.
+ * normalized COPY: the reported text is never changed. The white space and fold tables below are explicit, so the one thing
+ * it takes from the runtime's Unicode data is NFC. A runtime whose NFC could change a result refuses to load (see the end of
+ * this file): what is checked is the behaviour the matcher relies on, not a version number.
  */
-const REQUIRED_UNICODE_VERSION = '16.0';
-if (process.versions.unicode !== REQUIRED_UNICODE_VERSION) {
-  throw new Error(`The unavailable-value matcher is pinned to Unicode ${REQUIRED_UNICODE_VERSION}, but this runtime has ${process.versions.unicode}.`);
-}
 
 /** Already normalized, and exactly these. A new token needs a source example, a version change, conformance cases and review. */
 export const UNAVAILABLE_TOKENS: readonly string[] = ['not available', 'not reported', 'pending', 'no disponible', 'resultado no disponible', 'no reportado', 'pendiente'];
@@ -18,6 +14,7 @@ const TOKEN_SET: ReadonlySet<string> = new Set(UNAVAILABLE_TOKENS);
 /** The explicit Unicode 16.0.0 White_Space set (U+0009 to U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F, U+3000). */
 // eslint-disable-next-line no-control-regex -- the Unicode White_Space set deliberately includes U+0009 to U+000D
 const WHITE_SPACE_RUN = /[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g;
+const WHITE_SPACE = new RegExp(`^${WHITE_SPACE_RUN.source}$`);
 
 /**
  * Full case folding, restricted. JavaScript has no full fold, and every token is ASCII, so only the characters whose full
@@ -62,3 +59,30 @@ export function comparisonCopy(text: string): string {
 export function isUnavailableValue(text: string): boolean {
   return TOKEN_SET.has(comparisonCopy(text));
 }
+
+const canReachToken = (char: string) => char <= '\u007F' || WHITE_SPACE.test(char) || Object.hasOwn(ASCII_ONLY_FULL_FOLDS, char);
+
+/**
+ * Every code point that NFC changes and that can bear on a token: it can itself reach one, or all of what it normalizes to can. Any other change leaves a character
+ * that cannot be part of a token, so the value does not match with or without it. A test derives this list from a second implementation.
+ */
+export const NFC_CHANGES_THAT_CAN_REACH_A_TOKEN: readonly number[] = [0x037e, 0x1fef, 0x2000, 0x2001, 0x212a];
+
+/** Whether this NFC treats everything that can reach a token as the list above says, and composes no two such characters. Walks every code point (about 50 ms). */
+export function nfcIsAsVerified(nfc: (text: string) => string = (text) => text.normalize('NFC')): boolean {
+  const reachable: string[] = [];
+  const changes: number[] = [];
+  for (let code = 0; code <= 0x10ffff; code++) {
+    if (code >= 0xd800 && code <= 0xdfff) continue;
+    const char = String.fromCodePoint(code);
+    const reaches = canReachToken(char);
+    if (reaches) reachable.push(char);
+    const normal = nfc(char);
+    if (normal !== char && (reaches || [...normal].every(canReachToken))) changes.push(code);
+  }
+  if (changes.join() !== NFC_CHANGES_THAT_CAN_REACH_A_TOKEN.join()) return false;
+  return reachable.every((a) => reachable.every((b) => nfc(a + b) === nfc(a) + nfc(b)));
+}
+
+if (!nfcIsAsVerified())
+  throw new Error('The unavailable-value matcher cannot load: this runtime normalizes a character that can reach a token differently from the verified list.');

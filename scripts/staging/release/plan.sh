@@ -84,7 +84,9 @@ STATE=$(state_identity) || die "cannot read the state's serial and lineage"
   || { tail -30 "$OUT/$T-plan-run.txt"; die "plan failed"; }
 "$TERRAFORM" -chdir="$TFDIR" show -no-color "$PLAN" </dev/null > "$OUT/$T.txt"
 "$TERRAFORM" -chdir="$TFDIR" show -json "$PLAN" </dev/null > "$OUT/$T.plan.json"
-grep -E '^Plan: ' "$OUT/$T.txt" || die "no Plan: line"
+# A plan whose only change is an output prints `Changes to Outputs:` and no `Plan:` line (#348). Only INFRA may carry one: MIGRATE and IMAGE refuse any output change.
+PLAN_LINE='^Plan: '; [ "$MODE" = INFRA ] && PLAN_LINE='^(Plan: |Changes to Outputs:)'
+grep -E "$PLAN_LINE" "$OUT/$T.txt" || die "no Plan: line"
 node "$HERE/release-check.mjs" "$MODE" "$OUT/$T.plan.json" "$OLD" "$NEW" || die "release check refused the $MODE plan: read why above"
 PLANSHA=$(sha "$PLAN")
 printf '%s\n' "$STATE" | node "$HERE/plan-record.mjs" write "$PLAN.meta.json" "$MODE" "$COMMIT" "$VARSHA" "$PLANSHA" ${SOURCE_ARGS[@]+"${SOURCE_ARGS[@]}"} || die "could not write the plan record"

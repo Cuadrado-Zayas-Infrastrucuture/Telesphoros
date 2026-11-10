@@ -28,6 +28,7 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 2. `scripts/staging/release/claim.sh take NAME "reason"`. Every later step runs with `CLAIM_OWNER=NAME`. If `take` refuses,
    `claim.sh show` names the holder: ask them, and never plan from another session's pin or saved plan.
 3. INFRA, only if step 1 listed merged Terraform: `plan.sh INFRA COMMIT`, read the plan text line by line, then `apply.sh INFRA COMMIT SHA256`.
+   A plan whose only change is an output prints `Changes to Outputs:` and no `Plan:` line: INFRA accepts it, and it goes out first, because MIGRATE and IMAGE refuse any output change.
    When the release stops there (an INFRA apply alone), back the state up with `state-backup.sh BACKUP COMMIT INFRA`, then the Drive copy.
 4. The image, unsigned under break-glass ([image-push.md](image-push.md)): write the reason, one line, to
    `~/telesphoros-private/releases/COMMIT/break-glass-reason.txt`, then `image.sh BUILD COMMIT`. It needs CI's image job green on COMMIT,

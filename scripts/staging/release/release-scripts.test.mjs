@@ -4,7 +4,7 @@
 // repository is the backend clone. What this cannot prove: what real Terraform does with a stale saved plan (see release-rehearsal.mjs).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -37,7 +37,7 @@ stub('terraform', `case "$*" in
   version) echo "Terraform v1.16.5" ;;
   *"state pull"*) echo "{\\"version\\":4,\\"serial\\":$(cat "$STUB/serial"),\\"lineage\\":\\"l-1\\",\\"outputs\\":{\\"x\\":{\\"value\\":\\"SENTINEL\\"}}}" ;;
   *"show -json"*) cat "$STUB/plan.json" ;;
-  *"show -no-color"*) echo "Plan: 0 to add, 1 to change, 0 to destroy." ;;
+  *"show -no-color"*) if [ -f "$STUB/show.txt" ]; then cat "$STUB/show.txt"; else echo "Plan: 0 to add, 1 to change, 0 to destroy."; fi ;;
   *" plan "*) for a in "$@"; do case "$a" in -out=*) printf 'plan %s %s\\n' "$RANDOM$RANDOM" "$*" > "\${a#-out=}" ;; esac; done ;;
   *" apply "*) echo $(( $(cat "$STUB/serial") + 1 )) > "$STUB/serial"; if [ -n "\${STUB_MUTATE_TARGET:-}" ]; then printf "SYN_UNREVIEWED_TARGET\\n" > "$STUB_MUTATE_TARGET"; fi; exit "\${STUB_APPLY_EXIT:-0}" ;;
   *) echo "unexpected terraform $*" >&2; exit 99 ;;
@@ -149,6 +149,42 @@ test('a plan the release check refuses is not recorded, and IMAGE waits for the 
   assert.match(wrongShape.stderr, /release check refused the INFRA plan/);
   assert.ok(!existsSync(join(rel, 'x.tfplan.meta.json')));
   rmSync(join(rel, 'x.tfplan'), { force: true });
+});
+
+test('an output-only plan goes out as INFRA and only as INFRA; an empty plan still stops', () => {
+  const show = join(stubDir, 'show.txt');
+  const planJsonFile = join(stubDir, 'plan.json');
+  const forget = () => { for (const f of ['x.tfplan', 'x.tfplan.meta.json', 'x.tfplan.bundles', 'x-apply.txt']) rmSync(join(rel, f), { force: true }); };
+  const outputsOnly = { ...SHAPES.INFRA, resource_changes: [], output_changes: { new_output: { actions: ['create'] } } };
+  writeFileSync(show, '\nChanges to Outputs:\n  + new_output = {}\n');
+  writeFileSync(planJsonFile, JSON.stringify(outputsOnly));
+  const planned = run('plan.sh', ['INFRA', COMMIT], owner);
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+  const pin = planned.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  assert.ok(pin && existsSync(join(rel, 'x.tfplan.meta.json')), 'the output-only plan is recorded');
+  const applied = run('apply.sh', ['INFRA', COMMIT, pin], owner);
+  assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+  assert.match(waitFor(join(rel, 'x-apply.txt')), /== apply exit status: 0/);
+  writeFileSync(join(stubDir, 'serial'), '42');
+  forget();
+
+  writeFileSync(show, 'No changes. Your infrastructure matches the configuration.\n');
+  writeFileSync(planJsonFile, JSON.stringify({ ...SHAPES.INFRA, resource_changes: [] }));
+  const empty = run('plan.sh', ['INFRA', COMMIT], owner);
+  assert.equal(empty.status, 1);
+  assert.match(empty.stderr, /no Plan: line/);
+  assert.ok(!existsSync(join(rel, 'x.tfplan.meta.json')));
+  forget();
+
+  renameSync(join(rel, 'm.tfplan'), join(rel, 'm.tfplan.kept'));
+  writeFileSync(show, '\nChanges to Outputs:\n  + new_output = {}\n');
+  writeFileSync(planJsonFile, JSON.stringify({ ...SHAPES.MIGRATE, output_changes: { new_output: { actions: ['create'] } } }));
+  const notInfra = run('plan.sh', ['MIGRATE', COMMIT], owner);
+  assert.equal(notInfra.status, 1);
+  assert.match(notInfra.stderr, /no Plan: line/);
+  rmSync(join(rel, 'm.tfplan'), { force: true });
+  renameSync(join(rel, 'm.tfplan.kept'), join(rel, 'm.tfplan'));
+  rmSync(show);
 });
 
 test('apply refuses a different plan, then a plan another apply made stale; the reviewed plan applies', () => {

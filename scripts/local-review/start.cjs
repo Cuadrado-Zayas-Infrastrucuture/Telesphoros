@@ -7,10 +7,6 @@ const root = path.resolve(__dirname, '../..');
 const poppler = process.argv.includes('--poppler');
 function port(name,fallback){const value=process.env[name]||fallback;if(!/^[1-9][0-9]{3,4}$/.test(value)||Number(value)>65535)throw new Error('Invalid local port');return value;}
 const ports={web:port('LOCAL_REVIEW_WEB_PORT','4173'),idp:port('LOCAL_REVIEW_IDP_PORT','4010'),api:port('LOCAL_REVIEW_API_PORT','3010'),moto:port('LOCAL_REVIEW_MOTO_PORT','5555'),pg:port('LOCAL_REVIEW_PG_PORT','54359')};
-if (process.versions.unicode !== '16.0') {
-  console.error('Demo requires a Node runtime with Unicode 16.0; use the verified Node 22 command in scripts/local-review/README.md.');
-  process.exit(1);
-}
 const APP = `http://127.0.0.1:${ports.web}`;
 const IDP = `http://127.0.0.1:${ports.idp}`;
 // Pass only local runtime essentials; do not inherit AWS credentials or database settings.

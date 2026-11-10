@@ -165,9 +165,10 @@ substring matching, or translation.
 | `no result`, `sin resultado` | no match; non-canonical, so held |
 | `Indeterminate` | no match; a phenotype term (canonical when the gene's own list includes it) |
 
-Implementation requirements: the matcher is its own pure module with a frozen conformance table. Node must report Unicode
-16.0 (`process.versions.unicode`), and the module refuses to load otherwise, so a runtime that does not conform cannot
-silently change results. JavaScript has no full case fold, and all seven tokens are ASCII, so the fold may be restricted to
+Implementation requirements: the matcher is its own pure module with a frozen conformance table. Its white space and fold
+tables are explicit, so NFC is the only Unicode data it takes from the runtime. The module checks that NFC at load, across every
+code point, and refuses to load if anything that can reach a token behaves differently from the verified list, so a runtime that
+does not conform cannot silently change results (founder decision 2026-11-10; this replaced a pin to Unicode 16.0). JavaScript has no full case fold, and all seven tokens are ASCII, so the fold may be restricted to
 the characters whose full fold is ASCII-only: A to Z, and eleven others (U+00DF, U+017F, U+1E9E, U+212A, U+FB00 to U+FB06
 with U+FB05 and U+FB06 both folding to `st`). That table is derived independently from a second implementation across every
 code point, and a test fails if it does not agree. A non-ASCII token added later needs the full fold and a new review.
