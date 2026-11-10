@@ -77,8 +77,8 @@ export function problems(mode, plan, oldImage, newImage) {
     out.push(`${c.address}: unexpected ${c.change?.actions?.join(',')}${shape.open ? ' (an INFRA plan never moves a task definition or a service)' : ' (merged Terraform goes out first, as its own INFRA plan)'}`);
   }
   for (const addr of [...Object.keys(shape.replace), ...shape.update]) need(seen.has(addr), `${addr}: expected in this ${mode} plan, missing`);
-  if (shape.open) need(changes.length > 0, 'an INFRA plan with nothing to do: there is nothing to apply');
   const outputs = Object.entries(plan.output_changes ?? {}).filter(([, o]) => canonical(o.actions) !== canonical(['no-op']));
+  if (shape.open) need(changes.length > 0 || outputs.length > 0, 'an INFRA plan with nothing to do: there is nothing to apply');
   if (!shape.open) for (const [name] of outputs) out.push(`output ${name}: unexpected change`);
   return out;
 }
