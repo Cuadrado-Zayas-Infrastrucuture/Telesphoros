@@ -1,6 +1,6 @@
 # PostgreSQL fixture lifecycle regressions
 
-Run `pnpm --filter @telesphoros/backend test:fixture-lifecycle` on Node 22.22.0 with
+Run `pnpm --filter @telesphoros/backend test:fixture-lifecycle` on Node 22.23.4 with
 `TEST_DATABASE_URL` pointing at a disposable PostgreSQL 16 cluster. CI runs it in
 service-postgres under the existing shared deadline, after the unchanged API profile.
 No cloud services or real data are used.

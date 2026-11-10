@@ -4,7 +4,7 @@ Run the local storage demo first. It gives you sign-in, synthetic patients, repo
 
 ## 1. Prepare the tools
 
-Use Node **22.22.0**, pnpm **10.28.0**, PostgreSQL **16**, Python with `venv` and `pip`, and the `lsof` and `ps` commands. The commands below were checked on macOS with Python **3.14.6**; use its `python3.14` executable. Install these tools before starting. Keep production configuration out of this local-development shell.
+Use Node **22.23.4**, pnpm **10.28.0**, PostgreSQL **16**, Python with `venv` and `pip`, and the `lsof` and `ps` commands. The commands below were checked on macOS with Python **3.14.6**; use its `python3.14` executable. Install these tools before starting. Keep production configuration out of this local-development shell.
 
 ```sh
 git clone https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros.git
@@ -16,7 +16,7 @@ python3.14 -m venv .venv
 .venv/bin/python -m pip install -r .github/ci/requirements.in
 ```
 
-The first two version commands should report `v22.22.0` and `10.28.0`. Select the pinned Node version before installing dependencies. The repository's `packageManager` field pins pnpm.
+The first two version commands should report `v22.23.4` and `10.28.0`. Select the pinned Node version before installing dependencies. The repository's `packageManager` field pins pnpm.
 
 The local emulator input pins Moto **5.2.4** in [requirements.in](../.github/ci/requirements.in). CI uses the fully hashed [requirements.txt](../.github/ci/requirements.txt), generated for Python 3.12 on Linux; the local command above resolves dependencies for your Python environment.
 

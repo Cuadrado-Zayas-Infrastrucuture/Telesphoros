@@ -19,7 +19,7 @@ function versionFixture(requirements, installed) {
   const localRequire = require('node:module').createRequire(file);
   require('node:vm').runInNewContext(fs.readFileSync(file, 'utf8'), {
     module, __dirname, setTimeout,
-    process: { env: { LOCAL_PG_BIN: '/synthetic/pg', MOTO_SERVER: '/synthetic/moto/bin/moto_server' }, versions: { node: '22.22.0' } },
+    process: { env: { LOCAL_PG_BIN: '/synthetic/pg', MOTO_SERVER: '/synthetic/moto/bin/moto_server' }, versions: { node: '22.23.4' } },
     require: name => {
       if (name === './ownership.cjs') return ownership;
       if (name === './services.cjs') return {};

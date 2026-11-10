@@ -104,7 +104,7 @@ export function validateMetric(value, family, checkout) {
   else refuse();
   const controls = { 'evidence-catalogue': 12, 'independent-recovery': 30, 'application-recovery': 13 }[family];
   if (value.format !== 1 || value.synthetic !== true || value.status !== 'passed' || value.runtime.gitHead !== checkout
-    || value.runtime.node !== 'v22.22.0' || value.runtime.platform !== 'linux' || value.runtime.architecture !== 'x64'
+    || value.runtime.node !== 'v22.23.4' || value.runtime.platform !== 'linux' || value.runtime.architecture !== 'x64'
     || !Array.isArray(value.controls) || value.controls.length !== controls || new Set(value.controls.map(c => c.name)).size !== controls) refuse();
   for (const control of value.controls) {
     exactKeys(control, ['name', 'passed']);
@@ -113,7 +113,7 @@ export function validateMetric(value, family, checkout) {
 }
 function validateTiming(value) {
   exactKeys(value, ['format', 'phase', 'libraries', 'durationMs', 'exitCode', 'nodeVersion']);
-  if (value.format !== 1 || value.phase !== 'shared-library-build' || value.exitCode !== 0 || value.nodeVersion !== '22.22.0'
+  if (value.format !== 1 || value.phase !== 'shared-library-build' || value.exitCode !== 0 || value.nodeVersion !== '22.23.4'
     || JSON.stringify(value.libraries) !== JSON.stringify(['shared-types', 'cpic-schema', 'fake-idp', 'jobs'])
     || !Number.isSafeInteger(value.durationMs) || value.durationMs < 0) refuse();
 }
@@ -222,7 +222,7 @@ export function finish({ env = process.env, cwd = root, now = Date.now } = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    if (process.versions.node !== '22.22.0') refuse();
+    if (process.versions.node !== '22.23.4') refuse();
     const [mode, profile, ...extra] = process.argv.slice(2);
     if (mode === 'run' && Object.hasOwn(logs, profile) && !extra.length) process.exitCode = await runProducer(profile, readFileSync(0, 'utf8'));
     else if (!profile && !extra.length && mode === 'dependencies') validateNeeds(JSON.parse(process.env.SERVICE_NEEDS ?? 'null'));

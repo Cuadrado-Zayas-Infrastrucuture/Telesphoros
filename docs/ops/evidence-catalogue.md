@@ -20,7 +20,7 @@ See the [software bounds](../design/plans/f1-evidence-catalogue.md#software-boun
 
 ## Available verification commands
 
-Use pinned Node 22.22.0, pnpm 10.28.0, PostgreSQL **16** client tools and the existing Moto fixture. Set `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` to isolated helper-owned loopback services; synthetic fixtures only. Missing services skip the PG/producer controls, which is not acceptance. The specs are present in this slice:
+Use pinned Node 22.23.4, pnpm 10.28.0, PostgreSQL **16** client tools and the existing Moto fixture. Set `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` to isolated helper-owned loopback services; synthetic fixtures only. Missing services skip the PG/producer controls, which is not acceptance. The specs are present in this slice:
 
 ```bash
 pnpm --filter @telesphoros/backend test --runInBand --runTestsByPath test/evidence-catalogue.spec.ts test/s3-evidence-storage.spec.ts test/db/evidence-catalogue.pg-spec.ts

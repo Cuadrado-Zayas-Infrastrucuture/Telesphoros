@@ -1,6 +1,6 @@
 # Medication drug-list generator
 
-Run `node scripts/drug-list/build.mjs` from a checkout with Node 22.22.0. No package installation is needed. The script also uses the system `curl` when an HTTPS proxy is configured, because Node 22 fetch does not use that proxy automatically. Keep the runtime's proxy and CA configuration; never disable TLS verification.
+Run `node scripts/drug-list/build.mjs` from a checkout with Node 22.23.4. No package installation is needed. The script also uses the system `curl` when an HTTPS proxy is configured, because Node 22 fetch does not use that proxy automatically. Keep the runtime's proxy and CA configuration; never disable TLS verification.
 
 It retrieves the CPIC API drug table and current CPIC release metadata, verifies each numeric RxCUI at RxNav as IN or MIN, and writes `packages/shared-types/src/drug-list/bundled.json` atomically only after all requests succeed and the source releases remain unchanged. The metadata distinguishes an API snapshot from a pinned database export. The JSON retains canonical source properties, normalized names, FDA display forms, releases, citations, NLM attribution and a notice about currency. An exclusive `.build.lock` prevents simultaneous builds; ordinary failures remove the lock and leave the prior artifact intact.
 

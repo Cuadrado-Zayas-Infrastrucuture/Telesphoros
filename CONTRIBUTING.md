@@ -20,7 +20,7 @@ Reusable repository-scoped engineering skills and their evaluation commands are 
 
 ## Development setup
 
-Requirements: Node.js 22.22.0 (CI pins this exact release), pnpm 10.28.0, Python 3 for the reader tests, and the PostgreSQL 16 client tools and `openssl` for the backup tests.
+Requirements: Node.js 22.23.4 (CI pins this exact release), pnpm 10.28.0, Python 3 for the reader tests, and the PostgreSQL 16 client tools and `openssl` for the backup tests.
 
 ```bash
 pnpm install --frozen-lockfile

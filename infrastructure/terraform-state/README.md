@@ -32,7 +32,7 @@ retention locks must not prevent native Terraform lockfile removal.
 
 ## Local verification
 
-Use the repository's pinned Node 22.22.0/pnpm 10.28.0 and Terraform 1.16.5. The AWS
+Use the repository's pinned Node 22.23.4/pnpm 10.28.0 and Terraform 1.16.5. The AWS
 provider lock reuses the reviewed 6.68.0 release; do not upgrade it during bootstrap.
 
 ```sh
