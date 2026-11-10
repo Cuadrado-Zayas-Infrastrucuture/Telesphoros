@@ -50,7 +50,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, w
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
-import { bootstrap, budgetFromRun, budgetMs, hostedOwner, identityFromEnv, parseLinuxProcess, processKey, readProcess, readProcesses, reasons, remainingMs, requestBudget, signalIdentity, watchJob, validateWatchdog } from './service-deadline.mjs';
+import { bootstrap, budgetFromRun, budgetMs, hostedOwner, identityFromEnv, parseDarwinProcesses, parseLinuxProcess, processKey, readProcess, readProcesses, reasons, remainingMs, requestBudget, signalIdentity, watchJob, validateWatchdog } from './service-deadline.mjs';
 import { runScript } from './service-budget.mjs';
 const quote = v => "'" + v.replaceAll("'", "'\\''") + "'";
 const budget = deadlineMs => ({ format: 1, repository: 'owner/repo', runId: '100', attempt: '1', headSha: 'a'.repeat(40), checkout: 'b'.repeat(40), startedMs: deadlineMs - budgetMs, deadlineMs });
@@ -77,6 +77,19 @@ test('Linux process identities handle spaced comm fields and zombies without rea
   assert.deepEqual(parseLinuxProcess('42 (reader child (test)) ' + fields.join(' '), 1001), { pid: 42, ppid: 22, uid: 1001, start: '987654', command: 'reader child (test)' });
   fields[0] = 'Z'; assert.equal(parseLinuxProcess('42 (reader) ' + fields.join(' '), 1001), null);
   assert.throws(() => parseLinuxProcess('malformed', 1001));
+});
+test('macOS process identities accept a system process whose user id prints as negative, and still refuse a malformed line', () => {
+  // macOS prints the unprivileged "nobody" account as -2; such a process can be running on any workstation.
+  const launchd = '    1     0     0 Ss   Mon Nov  9 11:54:06 2026     /sbin/launchd';
+  const nobody = '88110     1    -2 Ss   Mon Nov  9 20:40:24 2026     /usr/libexec/dhcp6d';
+  const table = parseDarwinProcesses([launchd, nobody, '  900     1   501 Z    Mon Nov  9 12:00:00 2026     (node)'].join('\n') + '\n');
+  assert.deepEqual(table.get(88110), { pid: 88110, ppid: 1, uid: -2, start: 'Mon Nov  9 20:40:24 2026', command: 'dhcp6d' });
+  assert.deepEqual(table.get(1), { pid: 1, ppid: 0, uid: 0, start: 'Mon Nov  9 11:54:06 2026', command: 'launchd' });
+  assert.equal(table.has(900), false); // a zombie is not a live process
+  // Only the user id may be negative: a process id or parent id never is, and a non-numeric user id is still refused.
+  for (const line of [nobody.replace('88110', '-88110'), nobody.replace('     1    -2', '    -1    -2'), nobody.replace('-2', '-x'), nobody.replace('-2', '--2'), 'malformed']) {
+    assert.throws(() => parseDarwinProcesses(line), line);
+  }
 });
 test('the process adapter verifies the current native identity', () => {
   const records = readProcesses(); const self = records.get(process.pid);
