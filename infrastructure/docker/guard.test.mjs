@@ -8,7 +8,7 @@ const apiCompute=readFileSync(new URL('../terraform/api-compute.tf',import.meta.
 export function problems(source,compute=apiCompute){
   const lines=source.split('\n').filter(l=>!l.trim().startsWith('#')).join('\n');
   const rules=[
-    ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===3 && from.slice(0,2).every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1])) && from[2][1]==='scratch' && from[2][2]==='runtime';}],
+    ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===3 && from.slice(0,2).every(m=>/^node:22\.23\.4-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1])) && from[2][1]==='scratch' && from[2][2]==='runtime';}],
     ['OS fixes',()=>['libcap2=1:2.66-4+deb12u3+b1','libgnutls30=3.7.9-2+deb12u7','libpcre2-8-0=10.42-1+deb12u2','perl-base=5.36.0-7+deb12u4','libc6=2.36-9+deb12u14','libc-bin=2.36-9+deb12u14','dpkg=1.21.23'].every(pin=>lines.includes(pin))],
     ['minimal runtime',()=>lines.includes('RUN node /tmp/runtime-rootfs.cjs /runtime-rootfs') && lines.includes('COPY --from=runtime_files /runtime-rootfs/ /') && !/^COPY --from=runtime_files \/(?:usr|lib|etc)\//m.test(lines)],
     ['pnpm',()=>lines.includes('pnpm@10.28.0')],

@@ -12,7 +12,7 @@ Interrupted recovery leaves verified target stages for a fresh-process resume. L
 
 ## Commands available in this slice
 
-Use pinned Node 22.22.0 and pnpm 10.28.0, PostgreSQL 16 server/client tools and Moto. Set `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` to disposable helper-owned loopback fixtures; set `PGBIN` if PostgreSQL 16 server tools are not the default. Missing services mean skipped work, not acceptance.
+Use pinned Node 22.23.4 and pnpm 10.28.0, PostgreSQL 16 server/client tools and Moto. Set `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` to disposable helper-owned loopback fixtures; set `PGBIN` if PostgreSQL 16 server tools are not the default. Missing services mean skipped work, not acceptance.
 
 ```bash
 pnpm --filter @telesphoros/backend test --runInBand --runTestsByPath test/independent-recovery.spec.ts test/db/independent-recovery.pg-spec.ts

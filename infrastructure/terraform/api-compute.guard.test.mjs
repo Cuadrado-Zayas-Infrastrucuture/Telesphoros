@@ -3,7 +3,7 @@
 // copy of the text (empty when nothing is); the tests run it on the real file and on deliberately broken copies, so every rule has been seen to fail.
 //
 // One check goes beyond text: the task's environment (as Terraform would write it) is handed to the APPLICATION'S OWN `loadEnv`, with the two secrets
-// filled with placeholders, and must be accepted as a production configuration. That needs Node's built-in TypeScript support (22.18 or newer; CI pins 22.22).
+// filled with placeholders, and must be accepted as a production configuration. That needs Node's built-in TypeScript support (22.18 or newer; CI pins 22.23).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';

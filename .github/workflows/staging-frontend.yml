@@ -10,7 +10,7 @@ concurrency:
   group: staging-frontend
   cancel-in-progress: false
 env:
-  NODE_VERSION: "22.22.0"
+  NODE_VERSION: "22.23.4"
 # Two jobs, so third-party install and build code never runs where an AWS-assumable OIDC token can be requested: `build` installs, builds and
 # packs the bundle with no id-token permission; `publish` holds id-token, runs no package manager, and uploads only the archive whose digest
 # `build` reported. Infrastructure identifiers come from repository variables, never from this file (the repository is public; see PR #86).

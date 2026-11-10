@@ -31,11 +31,9 @@ concurrency:
 
 env:
   CI: "true"
-  # An EXACT release, never a floating major. The report adapter's unavailable-value matcher is pinned to Unicode 16.0
-  # and refuses to load on a runtime with other Unicode data, and a newer Node 22 already reports Unicode 17.0.
-  # Moving this is a deliberate change: re-run the matcher's conformance tests, then change the pin in
-  # apps/backend/src/services/report-adapter/unavailable-matcher.ts and docs/design/report-adapter-spec.md together.
-  NODE_VERSION: "22.22.0"
+  # An EXACT release, never a floating major, so a new runtime is one deliberate change. If a new Node changes NFC where it
+  # could change a result, the report adapter's unavailable-value matcher refuses to load: review that before updating its list.
+  NODE_VERSION: "22.23.4"
 
 jobs:
   # Decides what this run must do (.github/ci/scope.mjs; docs/ops/ci-cd.md "Skipping work: what is proved"). It is not a required check: when it fails,

@@ -76,7 +76,7 @@ export async function runScript(script, budget, { env = process.env, cwd = root,
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    if (process.versions.node !== '22.22.0' || process.argv.length !== 3) refuse();
+    if (process.versions.node !== '22.23.4' || process.argv.length !== 3) refuse();
     const command = process.argv[2];
     if (command === 'init') await initialize();
     else if (command === 'check') loadBudget();

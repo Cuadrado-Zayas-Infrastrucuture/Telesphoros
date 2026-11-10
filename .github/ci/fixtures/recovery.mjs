@@ -6,7 +6,7 @@ export function recoveryMetricControl() {
     seconds: { backupDownload: 1, catalogue: 1, restoreAndEvidence: 3, evidenceVerification: 2, total: 5 } };
   const measurements = Array.from({ length: 7 }, () => structuredClone(metric)); measurements.at(-1).volumes.writeAttempted = volume(0);
   return { format: 1, synthetic: true, status: 'passed', controls: Array.from({ length: 30 }, (_, i) => ({ name: 'control-' + i, passed: true })),
-    runtime: { node: 'v22.22.0', platform: 'linux', architecture: 'x64', gitHead: 'a'.repeat(40), storage: 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM', freshProcess: true }, sourceDatabase: volume(300), measurements, applicationRecoveryComplete: false, nativeReplicationVerified: false };
+    runtime: { node: 'v22.23.4', platform: 'linux', architecture: 'x64', gitHead: 'a'.repeat(40), storage: 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM', freshProcess: true }, sourceDatabase: volume(300), measurements, applicationRecoveryComplete: false, nativeReplicationVerified: false };
 }
 
 export function applicationMetricControl() {
