@@ -280,11 +280,11 @@ jobs:
             if (fields[0] === 'Z') return null;
             return { pid, ppid: Number(fields[1]), uid, start: fields[19], command: stat.slice(stat.indexOf('(') + 1, end) };
           }
-          function parseDarwinProcesses(output) {
+          export function parseDarwinProcesses(output) {
             const records = [];
             for (const line of output.trim().split('\n')) {
               if (!line.trim()) continue;
-              const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\w+\s+\w+\s+\d+\s+\d\d:\d\d:\d\d\s+\d{4})\s+(.+)$/);
+              const m = line.trim().match(/^(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+)\s+(\w+\s+\w+\s+\d+\s+\d\d:\d\d:\d\d\s+\d{4})\s+(.+)$/);
               if (!m) refuse();
               if (!m[4].startsWith('Z')) records.push({ pid: Number(m[1]), ppid: Number(m[2]), uid: Number(m[3]), start: m[5], command: basename(m[6]) });
             }
