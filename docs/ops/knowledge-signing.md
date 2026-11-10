@@ -22,6 +22,7 @@ This runbook creates one KMS key per signer and gives the API their public keys.
    }
    ```
    The plan refuses fewer than two signers, more than twenty, and one principal for two signers.
+   **Each id is that signer's handle**, the short name they sign reviews under, and it is the same everywhere: here, in `KNOWLEDGE_SIGNER_KEYS`, and as `--key-id` when they sign. A file whose signatures use any other id is refused before release.
 2. **Review the plan:** two keys, two aliases, and one environment change on the API task. Then apply, as for any change in [deployment.md](deployment.md).
 3. **Look up the key ARNs** with `terraform output knowledge_signer_key_arns`. Each signer uses only their own.
 4. **To sign a file**, each signer runs this with their own AWS credentials, from `apps/backend` after `pnpm build`:
@@ -31,8 +32,8 @@ This runbook creates one KMS key per signer and gives the API their public keys.
 
 ## Rotation and loss
 
-KMS cannot rotate an asymmetric key. To rotate a signer, or at once if a key may be misused:
+KMS cannot rotate an asymmetric key, and a signer keeps their id because it is their handle. To rotate a signer's key, or at once if a key may be misused:
 
-1. Add a new id with a new key.
-2. Re-sign the released files with it.
-3. Remove the old id. Removing it from `KNOWLEDGE_SIGNER_KEYS` makes every file signed only by that key fail to load, which is the intended effect.
+1. Plan and apply a replacement of that signer's key only (`-replace='aws_kms_key.knowledge_signer["<id>"]'`), as for any change in [deployment.md](deployment.md). The old key is scheduled for deletion, and the API gets the new public key under the same id.
+2. From then on, every file that signer signed fails to load until it is signed again, which is the intended effect.
+3. Re-sign those files with the new key (step 4) and release them.
