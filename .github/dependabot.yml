@@ -53,4 +53,8 @@ updates:
     schedule:
       interval: weekly
     # The Node runtime is pinned to an exact release on purpose: CI, the evidence checks, the Dockerfile guard and the docs all name
-    # it. A new Node opens a PR here, and that PR fails the Dockerfile guard until one planned change moves every pin: the red PR is the reminder.
+    # it. A new Node 22 release opens a PR here, and that PR fails the Dockerfile guard until one planned change moves every pin: the red PR is the
+    # reminder. A new major is a planned migration, not a bump, so majors are ignored (founder decision 2026-11-10, when Node 26 was proposed).
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
