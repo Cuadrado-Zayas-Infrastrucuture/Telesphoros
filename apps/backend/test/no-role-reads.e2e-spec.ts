@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { ModulesContainer } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { IS_PUBLIC_KEY, ROLES_KEY } from '../src/auth/decorators';
 import { createTestApp } from './helpers/app';
+import { routeTable } from './helpers/route-table';
 import { bearer, signToken } from './helpers/tokens';
 
 /**
@@ -22,39 +20,7 @@ afterAll(async () => {
 });
 
 const ALLOWED_WITHOUT_A_ROLE = new Set(['GET /api/v1/me', 'GET /api/v1/me/profile', 'GET /api/v1/me/recovery-scope', 'POST /api/v1/me/sign-out']);
-const HTTP = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ALL', 'OPTIONS', 'HEAD'];
-
-interface Route {
-  key: string;
-  isPublic: boolean;
-  roles: unknown;
-}
-
-function routes(): Route[] {
-  const found: Route[] = [];
-  for (const module of app.get(ModulesContainer).values()) {
-    for (const wrapper of module.controllers.values()) {
-      const controller = wrapper.metatype as (new (...a: never[]) => unknown) | null;
-      if (!controller) continue;
-      const base = Reflect.getMetadata(PATH_METADATA, controller) as string | string[] | undefined;
-      const prefix = String(Array.isArray(base) ? base[0] : (base ?? '')).replace(/^\/|\/$/g, '');
-      for (const name of Object.getOwnPropertyNames(controller.prototype)) {
-        const handler = (controller.prototype as Record<string, unknown>)[name];
-        if (typeof handler !== 'function') continue;
-        const method = Reflect.getMetadata(METHOD_METADATA, handler) as number | undefined;
-        if (method === undefined) continue;
-        const sub = String(Reflect.getMetadata(PATH_METADATA, handler) ?? '').replace(/^\/|\/$/g, '');
-        const verb = HTTP[method] ?? String(method);
-        found.push({
-          key: `${verb} /api/v1/${[prefix, sub].filter(Boolean).join('/')}`,
-          isPublic: Reflect.getMetadata(IS_PUBLIC_KEY, handler) === true || Reflect.getMetadata(IS_PUBLIC_KEY, controller) === true,
-          roles: Reflect.getMetadata(ROLES_KEY, handler) ?? Reflect.getMetadata(ROLES_KEY, controller),
-        });
-      }
-    }
-  }
-  return found;
-}
+const routes = () => routeTable(app);
 
 describe('no route is open to a person with no role, except /me', () => {
   it('every protected route declares the roles it needs', () => {
