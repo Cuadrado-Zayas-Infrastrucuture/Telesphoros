@@ -4,6 +4,7 @@ import { FollowupsList } from './FollowupsList';
 import { FollowupEntry } from './FollowupEntry';
 import { FollowupForm } from './FollowupForm';
 import type { DecisionLink } from '@/lib/clinicianDecisions';
+import { useFollowupRecording } from '@/hooks/useFollowupRecording';
 
 export function FollowupsSection({
   patientId,
@@ -22,6 +23,8 @@ export function FollowupsSection({
   const params = new URLSearchParams(location.search);
   const selected = params.getAll('followup');
   const heading = useRef<HTMLHeadingElement>(null);
+  // Paused recording: no form is offered, whichever link led here; the list explains why.
+  const paused = useFollowupRecording() === 'paused';
   useEffect(() => {
     if (decision) {
       heading.current?.scrollIntoView({ block: 'start' });
@@ -34,7 +37,7 @@ export function FollowupsSection({
     next.delete('followup');
     void navigate({ pathname: location.pathname, search: next.toString(), hash: '#followups' }, { replace: true });
   }
-  if (decision)
+  if (decision && !paused)
     return (
       <section id="followups" aria-label="Follow-up" className="flex flex-col gap-4 border-t border-border pt-6">
         <h2 ref={heading} tabIndex={-1} className="text-lg font-semibold">
@@ -56,7 +59,7 @@ export function FollowupsSection({
         />
       </section>
     );
-  return selected.length ? (
+  return selected.length && !paused ? (
     <FollowupEntry
       key={`${patientId}:${selected.join(':')}`}
       patientId={patientId}
@@ -65,6 +68,6 @@ export function FollowupsSection({
       onSaved={() => close(true)}
     />
   ) : (
-    <FollowupsList patientId={patientId} initialSaved={saved} onEditingChange={onEditingChange} />
+    <FollowupsList patientId={patientId} initialSaved={saved} onEditingChange={onEditingChange} paused={paused} />
   );
 }
