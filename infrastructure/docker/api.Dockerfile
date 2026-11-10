@@ -1,5 +1,5 @@
 # FD-4b: no credentials, deployment, Python, or synthetic reader in this image.
-FROM node:22.23.4-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS build
+FROM node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS build
 WORKDIR /workspace
 RUN npm install --global pnpm@10.28.0
 # Dependency fetch depends only on reviewed lock/workspace inputs. Source-only
@@ -20,7 +20,7 @@ RUN node infrastructure/docker/dependency-graph.cjs record && pnpm --filter @tel
 RUN rm -rf /output/src /output/test /output/scripts /output/*.mjs /output/jest.config.js /output/tsconfig*.json /output/README.md && find /output -name '*.map' -delete
 RUN mkdir /output/worker && cp apps/worker/dist/main.js /output/worker/main.js
 
-FROM node:22.23.4-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS runtime_files
+FROM node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS runtime_files
 WORKDIR /runtime-input
 # Fixed versions from the blocking scan; unavailable fixes fail the build. glibc and dpkg are below the gate (Debian rates them medium/low) but
 # the registry scan reports them high, and Debian has fixes (2026-10-30), so they are pinned too.
