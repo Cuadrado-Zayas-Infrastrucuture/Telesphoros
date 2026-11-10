@@ -337,11 +337,11 @@ test('dependabot watches every ecosystem the repository uses', () => {
   for (const eco of ['npm', 'github-actions', 'terraform', 'pip', 'docker-compose']) assert.match(dependabot, new RegExp(`package-ecosystem: ${eco}\\b`));
 });
 
-/** Dependabot must hold @nestjs/* majors (they move together) and jsdom majors (its own upgrade), and must not ignore the Node base image. */
+/** Dependabot must hold @nestjs/* majors (they move together), jsdom majors (its own upgrade) and Node base-image majors (a planned migration), and no more. */
 export function missingIgnores(config) {
   const block = (eco) => config.split(/^  - package-ecosystem: /m).find((b) => b.startsWith(`${eco}\n`)) ?? '';
   const majors = (name) => (entries) => entries.some((e) => e.name === name && e.next.trim() === 'update-types: ["version-update:semver-major"]');
-  const node = (entries) => !entries.some((e) => e.name === 'node'); // a new Node must open a PR: the red PR is the reminder to move every pin
+  const node = majors('node'); // a new Node 22 release must still open a PR: the red PR is the reminder to move every pin
   return [['npm', '@nestjs/*', majors('@nestjs/*')], ['npm', 'jsdom', majors('jsdom')], ['docker', 'node', node]].filter(([eco, , ok]) => !ok(ignoreEntries(block(eco)))).map(([eco, name]) => `${eco}: ${name}`);
 }
 /** The `- dependency-name:` entries of a block's `ignore:` list, each with the line that follows it. Read line by line: linear in the file, whatever it contains. */
@@ -359,13 +359,14 @@ function ignoreEntries(block) {
   }
   return entries;
 }
-test('dependabot ignores @nestjs/* and jsdom majors, and does not ignore the node base image', () => {
+test('dependabot ignores @nestjs/*, jsdom and node base-image majors, and only their majors', () => {
   assert.deepEqual(missingIgnores(dependabot), []);
   assert.deepEqual(missingIgnores(dependabot.replace('"@nestjs/*"', '"@nestjs/core"')), ['npm: @nestjs/*']); // controls: each fails when removed
   assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "jsdom"', 'dependency-name: "jsdomx"')), ['npm: jsdom']);
   assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "jsdom"\n        update-types: ["version-update:semver-major"]\n', 'dependency-name: "jsdom"\n')), ['npm: jsdom']); // without update-types the whole package would be frozen
-  const docker = '  - package-ecosystem: docker\n    directory: /infrastructure/docker\n';
-  assert.deepEqual(missingIgnores(dependabot.replace(docker, `${docker}    ignore:\n      - dependency-name: "node"\n`)), ['docker: node']); // control: ignoring node again fails
+  const nodeMajors = '    ignore:\n      - dependency-name: "node"\n        update-types: ["version-update:semver-major"]\n';
+  assert.deepEqual(missingIgnores(dependabot.replace(nodeMajors, '')), ['docker: node']); // control: Node majors no longer ignored
+  assert.deepEqual(missingIgnores(dependabot.replace(nodeMajors, '    ignore:\n      - dependency-name: "node"\n')), ['docker: node']); // control: every Node update ignored
 });
 
 // ---- CLAUDE.md is a pointer: it must stay short and may only name files that exist ----
