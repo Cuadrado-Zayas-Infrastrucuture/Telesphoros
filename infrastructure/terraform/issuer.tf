@@ -503,6 +503,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_unavailable" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.issuer_unavailable]
 }
 
@@ -532,6 +533,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_rate_limited" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.issuer_rate_limited]
 }
 
@@ -563,6 +565,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_worker_unauthenticated" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.issuer_worker_unauthenticated]
 }
 
@@ -580,6 +583,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_running_tasks" {
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     ClusterName = aws_ecs_cluster.api[0].name
     ServiceName = aws_ecs_service.issuer[0].name
@@ -600,6 +604,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_cpu_high" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     ClusterName = aws_ecs_cluster.api[0].name
     ServiceName = aws_ecs_service.issuer[0].name

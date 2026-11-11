@@ -17,6 +17,7 @@ resource "aws_cloudwatch_metric_alarm" "database_low_storage" {
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.main.identifier
   }
@@ -36,6 +37,7 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu_high" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.main.identifier
   }
@@ -57,6 +59,7 @@ resource "aws_cloudwatch_metric_alarm" "database_connections_high" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.main.identifier
   }

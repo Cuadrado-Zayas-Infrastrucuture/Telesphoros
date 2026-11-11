@@ -485,5 +485,6 @@ resource "aws_cloudwatch_metric_alarm" "audit" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.audit]
 }
