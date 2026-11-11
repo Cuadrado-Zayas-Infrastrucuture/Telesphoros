@@ -12,6 +12,7 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { when } from '@/lib/formatWhen';
 import { SubmitError } from '@/lib/api';
 import { getDemographics, getPatient, type DemographicsRead } from '@/lib/patientDemographics';
+import { PatientBanner } from '@/components/patients/PatientBanner';
 
 /**
  * Spec 025 T303 (PD-5): one patient's page. Its demographics as recorded now, every earlier version (readable, never overwritten), and for clinicians a
@@ -91,6 +92,8 @@ export default function PatientPage() {
         </Link>
         <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
         <p className="text-sm text-muted-foreground">Synthetic patient, added {when(patient.createdAt)}.</p>
+        {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}
+        {read.kind === 'found' && version === undefined && <PatientBanner value={read.value} />}
       </div>
       <DemographicsSection patientId={id} read={read} version={version} canWrite={canWrite} onViewVersion={view} onSaved={reload} />
       <MedicationsSection key={id} patientId={id} canWrite={roles.includes('clinician')} />
