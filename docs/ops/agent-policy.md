@@ -38,3 +38,28 @@ must list each refused command, and the stand-ins must still run for the control
 an ordinary `git push`, a rulesets `GET`, `cat` of a plain file, Read of `.env.example`).
 
 Last run 2026-10-30, Claude Code 2.1.310: 10 of 10 refused, by the permission system; 6 of 6 controls ran.
+
+## Code runs only in the sealed sandbox
+
+Founder decision, 2026-11-11: every Claude Code session on this repository runs code (tests, builds, type checks,
+linters, scripts) only inside a job of the local OpenSandbox pilot, the MCP server `opensandbox-pilot`, and never on
+the host. The pilot's own README, `~/opensandbox-pilot/README.md`, holds the details and the seal test that proves them.
+
+- **What a job is.** It has no network at all and runs as an unprivileged user. Only `/work` is writable, and `/tmp` is a
+  link into it. A job lives at most 15 minutes and is destroyed afterwards. Each job gets its own key, which the agent
+  never sees.
+- **How to use it.** Start with `job_start(runtime="telesphoros")`. That image has this repository's locked dependencies,
+  PostgreSQL 16 and moto installed; run `tele-services` inside the job to start the database and S3 emulator. Then use
+  `job_upload_repo` (tracked files only) and `job_exec`. Use `job_get_patch` to bring a change back for review before it
+  touches a host checkout. Always end with `job_end`, including after a failure.
+- **Proven in a job, 2026-11-11.** On a commit that CI last passed, these all ran green: `verify` (all steps except
+  `smart-pilot test:ig`), Tier 1, Postgres+S3 and the worker tests. One job holds one tier. Postgres+S3 needs about
+  14.5 of the 15 minutes.
+- **Not in a job.** Some steps need the network, Docker or AWS: the FHIR IG check, the browser tier, terraform and
+  tflint, gitleaks, image builds and staging releases. Those, and git and `gh`, stay on the host under the rest of
+  this policy. If anything else will not run in a job, stop and ask the founder. Do not fall back to the host.
+- **When the lockfile changes.** `job_upload_repo` then reports `lockfile: MISMATCH`, and the installed dependencies no
+  longer match. Rebuild the image (`~/opensandbox-pilot/images/telesphoros/build.sh <clone> <ref>`) before trusting a
+  result.
+
+This is an instruction, not yet an enforced control: the deny rules above do not cover it.
