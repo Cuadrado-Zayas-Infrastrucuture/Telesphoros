@@ -7,6 +7,7 @@ import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { FollowupResponseSummary } from './FollowupResponseSummary';
 import { useFollowups } from '@/hooks/useFollowups';
 import type { FollowupInboxFilters } from '@telesphoros/shared-types';
+import { clinicianLabel } from '@/lib/clinicianLabel';
 const allFilters: FollowupInboxFilters = { assignment: 'all', status: 'all' };
 export function FollowupInbox({ onNavigate }: { onNavigate: () => void }) {
   const [open, setOpen] = useState(false);
@@ -124,7 +125,11 @@ export function FollowupInbox({ onNavigate }: { onNavigate: () => void }) {
                           {entry.dueState === 'today' ? 'Due today' : entry.dueState === 'overdue' ? 'Overdue' : 'Upcoming'} · {entry.next?.date} ({entry.next?.timezone})
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {entry.needsReassignment ? 'Needs reassignment' : entry.next?.assignee === data.currentActor ? 'Assigned to me' : `Assigned to ${entry.next?.assignee}`}
+                          {entry.needsReassignment
+                            ? 'Needs reassignment'
+                            : entry.next?.assignee === data.currentActor
+                              ? 'Assigned to me'
+                              : `Assigned to ${clinicianLabel(entry.next?.assignee)}`}
                         </p>
                       </li>
                     ))}

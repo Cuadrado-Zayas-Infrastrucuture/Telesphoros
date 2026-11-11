@@ -5,6 +5,8 @@ import {
   followupQuerySchema,
   followupSummaryQuerySchema,
   idParamSchema,
+  FOLLOWUP_WRITES_PAUSED,
+  type FollowupAvailability,
   type FollowupInput,
   type FollowupInboxQuery,
   type FollowupQuery,
@@ -24,13 +26,19 @@ class FollowupsService {
     private readonly patients: PatientsRepository,
     @Inject(ENV) private readonly env: Env,
   ) {}
+  /** One rule for the write refusal and for what the availability read reports, so the two cannot disagree. */
+  recordingEnabled() {
+    return this.env.FOLLOWUP_WRITES === 'enabled' && this.env.NODE_ENV !== 'production';
+  }
   async patient(principal: Principal, id: string) {
     if (!(await this.patients.findById(principal.tenantId, id))) throw AppException.notFound('Patient not found.');
   }
   async record(principal: Principal, id: string, input: FollowupInput) {
     await this.patient(principal, id);
-    if (this.env.FOLLOWUP_WRITES !== 'enabled' || this.env.NODE_ENV === 'production')
-      throw AppException.unavailable('Follow-up recording is paused. Your entries can be retried later.');
+    if (!this.recordingEnabled()) {
+      const message = 'Follow-up recording is paused. Your entries can be retried later.';
+      throw AppException.unavailable(message, [{ field: 'request', reason: FOLLOWUP_WRITES_PAUSED, message }]);
+    }
     return this.records.record(principal.tenantId, principal.sub, id, input);
   }
 }
@@ -71,6 +79,12 @@ class FollowupsController {
   @Roles('clinician', 'reviewer')
   async assignees(@CurrentPrincipal() principal: Principal) {
     return { currentActor: principal.sub, items: await this.service.records.assignees(principal.tenantId) };
+  }
+  /** Lets the page say "not available here" before a clinician fills a form that cannot be saved. Tells nothing about any patient. */
+  @Get('availability')
+  @Roles('clinician', 'reviewer')
+  availability(): FollowupAvailability {
+    return { recording: this.service.recordingEnabled() ? 'enabled' : 'paused' };
   }
   @Get()
   @Roles('clinician', 'reviewer')

@@ -8,6 +8,7 @@ import { currentDecisionEntry, decisionLabels, readDecisionHistory, type Decisio
 import { readFollowupAssignees } from '@/lib/patientFollowups';
 import { DecisionForm } from './DecisionForm';
 import { DecisionNote } from './DecisionNote';
+import { clinicianLabel } from '@/lib/clinicianLabel';
 
 export function DecisionPanel({
   evaluation,
@@ -142,7 +143,7 @@ export function DecisionPanel({
                   {entry.detailCodes.length > 0 && <p>{entry.detailCodes.map((code) => CDR_CODE_LABELS[code]).join(' · ')}</p>}
                   {entry.reviewBy && <p>Review by {entry.reviewBy}</p>}
                   <p className="wrap-anywhere">
-                    Recorded {new Date(entry.createdAt).toLocaleString()} · {entry.createdBy === actor ? 'You' : entry.createdBy}
+                    Recorded {new Date(entry.createdAt).toLocaleString()} · {clinicianLabel(entry.createdBy, actor, 'You')}
                   </p>
                   {entry.note && <DecisionNote note={entry.note} />}
                 </li>
