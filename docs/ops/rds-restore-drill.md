@@ -32,7 +32,7 @@ All commands use `--region us-east-2`; `SRC=telesphoros-staging` and `DRILL=tele
    aws rds describe-db-instances --db-instance-identifier "$SRC" --query 'DBInstances[0].[LatestRestorableTime,EngineVersion,KmsKeyId,DBSubnetGroup.DBSubnetGroupName,join(`,`,VpcSecurityGroups[].VpcSecurityGroupId),DBParameterGroups[0].DBParameterGroupName,BackupRetentionPeriod]' --output text
    ```
 
-   Choose a restore time between the earliest point (now minus the retention: 1 day until the 7-day change is applied) and
+   Choose a restore time between the earliest point (now minus the retention: 1 day, the most AWS's free plan allows) and
    `LatestRestorableTime`. A time before the last migration is the more useful test, and must restore to that schema.
 2. Start the restore, private and small, into the same subnet group, security group and parameter group (values from step 1). Note the
    start time:

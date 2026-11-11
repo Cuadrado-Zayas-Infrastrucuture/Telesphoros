@@ -2,7 +2,8 @@
 
 Status: **approved by the founder on 2026-11-11 with the recommended decisions** ("go with your recommendations"): OB1 Slack through
 AWS Chatbot plus `ok_actions`; OB2 an unauthenticated canary first; OB3 our own client-error endpoint; OB5 7 days and the last 3
-snapshots; OB6 AWS Backup with restore testing, after a read-only check that the SCP allows it; B1 to B4 option (a) each, as recommended in
+snapshots (the 7 days were refused by AWS's free plan at apply, 2026-11-11: staging stays at 1 day, the 3 snapshots stand; see
+[the status note](../../status/2026-11-11-staging-backup-retention-free-plan.md)); OB6 AWS Backup with restore testing, after a read-only check that the SCP allows it; B1 to B4 option (a) each, as recommended in
 [backup-scheduling-decisions.md](backup-scheduling-decisions.md). Still open, because each needs a value only the founder has: the budget
 figure (OB4), the Slack workspace and channel (OB1), the two key custodians (B3) and the provider, after its answers to the seven
 questions (B1). Written the same day, when the founder asked for a review of observability and for options for automating backups,
@@ -128,7 +129,7 @@ These options do not exclude each other. **Recommendation:**
 | OB2 | A canary, and whether it signs in (A2) | Yes, unauthenticated first; a signed-in journey later with a synthetic test user |
 | OB3 | Frontend error reporting (A5) | (c), our own endpoint, logging an error class and route template only |
 | OB4 | A monthly budget figure (A6) | The founder's number |
-| OB5 | Staging backup retention, and how many pre-migration snapshots to keep | 7 days; the last 3 snapshots |
+| OB5 | Staging backup retention, and how many pre-migration snapshots to keep | 7 days (refused by the AWS free plan; staging stays at 1); the last 3 snapshots |
 | OB6 | AWS Backup with restore testing as the floor (Option 1) | Yes, after a read-only check that the SCP allows it |
 | B1 to B4 | Off-site copy, job host, key custodians, profile | As in the sheet; unchanged here |
 
