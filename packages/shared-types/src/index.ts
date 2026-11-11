@@ -10,6 +10,7 @@ export * from './patient';
 export * from './patient-demographics';
 export * from './recommendation';
 export * from './report';
+export * from './report-upload';
 export * from './roles';
 export * from './tenant';
 export * from './evaluation-request';

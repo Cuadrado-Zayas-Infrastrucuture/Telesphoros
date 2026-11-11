@@ -1,13 +1,9 @@
+import { uploadAttemptDtoSchema, type UploadAttemptDto } from '@telesphoros/shared-types';
 import { z } from 'zod';
 
-/** What the server tells the browser about an upload attempt. */
-export const attemptSchema = z.strictObject({
-  attemptId: z.uuid(),
-  revision: z.uuid(),
-  expiresAt: z.iso.datetime(),
-  state: z.enum(['declared', 'intaking', 'stored', 'unresolved', 'cancelling', 'cancelled', 'committed', 'cleanup', 'cleaned']),
-});
-export type Attempt = z.infer<typeof attemptSchema>;
+/** What the server tells the browser about an upload attempt: the API checks its responses against the same schema. */
+export const attemptSchema = uploadAttemptDtoSchema;
+export type Attempt = UploadAttemptDto;
 
 /** The original declaration of an attempt; replaying it (same request id) returns the attempt's durable state. */
 export const declarationSchema = z.strictObject({

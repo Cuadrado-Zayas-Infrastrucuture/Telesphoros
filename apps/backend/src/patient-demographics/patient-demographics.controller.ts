@@ -3,6 +3,7 @@ import {
   type IdParam,
   idParamSchema,
   type PatientDemographicsDto,
+  patientDemographicsDtoSchema,
   type PatientDemographicsInput,
   patientDemographicsInputSchema,
   type PatientDemographicsQuery,
@@ -24,22 +25,22 @@ export class PatientDemographicsController {
 
   @Get()
   @Roles(...CLINICAL_READ_ROLES)
-  get(
+  async get(
     @CurrentPrincipal() principal: Principal,
     @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
     @Query(new ZodValidationPipe(patientDemographicsQuerySchema)) { version }: PatientDemographicsQuery,
   ): Promise<PatientDemographicsDto> {
-    return this.service.read(principal, id, version);
+    return patientDemographicsDtoSchema.parse(await this.service.read(principal, id, version));
   }
 
   @Post()
   @Roles(...CAN_WRITE)
   @HttpCode(201)
-  record(
+  async record(
     @CurrentPrincipal() principal: Principal,
     @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
     @Body(new ZodValidationPipe(patientDemographicsInputSchema)) body: PatientDemographicsInput,
   ): Promise<PatientDemographicsDto> {
-    return this.service.record(principal, id, body);
+    return patientDemographicsDtoSchema.parse(await this.service.record(principal, id, body));
   }
 }
