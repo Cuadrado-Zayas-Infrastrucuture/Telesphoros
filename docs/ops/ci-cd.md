@@ -337,6 +337,7 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 | Block deletion | on | |
 | "Require branch to be up to date" | **on** (founder decision 2026-10-19, security audit INF-05) | The checks must have run against the `main` the PR merges into. `main` is now contested (several sessions merge the same day), so a PR that was green against an older `main` is not evidence. Cost: after another PR merges, update the branch and wait for CI again before merging |
 | Extra approval for unattributed changes | **off**, named explicitly in the file | A field the file leaves out takes GitHub's **default** when the file is applied through the API, not the live value: on 2026-10-20 that silently turned this on. With one maintainer and 0 approvals an extra required approval could block merges. `pnpm test:ci-config` fails if the field goes missing or turns on |
+| Merge methods, required reviewers, dismissal restriction | merge, squash and rebase allowed; no required reviewers; dismissal restriction **off**, all named explicitly in the file (2026-11-11) | The same reason: left out, an import through the API would reset them to GitHub's defaults |
 | Code-owner review | **off** | `.github/CODEOWNERS` still requests review automatically. A required code-owner approval cannot be given by the author, so enabling it now would block every PR |
 | Bypass | **none** (founder decision 2026-10-19, security audit INF-05) | A standing bypass let one account merge past failing checks. Break-glass is now an explicit, visible ruleset edit (below) |
 
