@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import './alarm-recovery.guard.test.mjs';
 import './backend.guard.test.mjs';
+import './budget.guard.test.mjs';
 import './cognito-branding.guard.test.mjs';
 import './api-compute.guard.test.mjs';
 import './api-autoscaling.guard.test.mjs';

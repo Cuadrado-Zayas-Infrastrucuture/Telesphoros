@@ -35,6 +35,8 @@ cognito_domain_prefix = "telesphoros-staging"
 ses_from_email = "no-reply@staging.telesphoros.app"
 # PLACEHOLDER: an inbox a person reads. SNS emails a confirmation link; until it is confirmed no audit alarm reaches anyone.
 alarm_email = "security@example.com"
+# The founder's monthly cost figure in US dollars (budget.tf). Left unset, no budget is created; alerts go to alarm_email.
+# monthly_budget_usd = 25
 
 # Left at their defaults on purpose: region = "us-east-2" (decision D1 will confirm it), db sizing (the profile forces db.t4g.micro, single-AZ, no deletion protection),
 # audit_lock_mode = "GOVERNANCE" (the profile refuses COMPLIANCE), api_desired_count = 1, worker_desired_count = 1.
