@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 
 const root = new URL('../../', import.meta.url).pathname;
+const repoRoot = root; // the helper below shadows `root` with its own layout
 const script = join(root, 'scripts/staging/publish-frontend.sh');
 const sandbox = mkdtempSync(join(tmpdir(), 'publish-frontend-'));
 after(() => rmSync(sandbox, { recursive: true, force: true }));
@@ -238,6 +239,9 @@ function scriptInLayout(frontendFiles) {
   mkdirSync(join(root, 'scripts/staging'), { recursive: true });
   mkdirSync(join(root, 'apps/frontend'), { recursive: true });
   copyFileSync(script, join(root, 'scripts/staging/publish-frontend.sh'));
+  // The script runs the bundle secret scan from the same layout.
+  mkdirSync(join(root, 'apps/frontend/scripts'), { recursive: true });
+  copyFileSync(join(repoRoot, 'apps/frontend/scripts/check-bundle-secrets.mjs'), join(root, 'apps/frontend/scripts/check-bundle-secrets.mjs'));
   for (const [name, text] of Object.entries(frontendFiles)) writeFileSync(join(root, 'apps/frontend', name), text);
   return join(root, 'scripts/staging/publish-frontend.sh');
 }
@@ -252,6 +256,18 @@ test('a local Vite env file next to the frontend is refused: Vite would read it 
   // Control: the two tracked examples are allowed, and the same layout otherwise publishes.
   const { status, out } = run({ scriptPath: scriptInLayout({ '.env.example': 'VITE_API_BASE_URL=\n', '.env.e2e': 'VITE_API_BASE_URL=http://127.0.0.1:3010\n' }) });
   assert.equal(status, 0, out);
+});
+
+// Nothing in the browser can be secret: a build holding credential-shaped text is refused before any upload. The key is assembled from pieces
+// so no credential-shaped string sits in this file (none is or was real).
+test('a build that holds credential-shaped text is refused, and nothing is uploaded', () => {
+  const key = 'AK' + 'IA' + 'Q'.repeat(16);
+  const { status, out, calls } = run({ dist: fixtureBuild({ extra: { 'assets/vendor-123abc.js': `const k="${key}";` } }), args: ['--yes'] });
+  assert.notEqual(status, 0);
+  assert.match(out, /credential-shaped text in assets\/vendor-123abc\.js: AWS access key id/);
+  assert.match(out, /nothing in the browser can be secret/);
+  assert.ok(!out.includes(key), 'the matched text is not printed');
+  assert.equal(calls, '', 'nothing was uploaded');
 });
 
 // The synthetic assessment UI (spec 032 S3): chosen by an option, never by the environment, and the bundle must agree with the choice.
