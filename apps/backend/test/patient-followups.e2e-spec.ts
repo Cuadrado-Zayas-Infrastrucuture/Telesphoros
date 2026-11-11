@@ -356,15 +356,21 @@ import { LedgerVerifier } from '../src/ledger/verifier';
     const paused = await createTestApp({ postgresUrl: db.appUrl });
     try {
       const requests = new LabPipeline(paused, db.adminUrl).api();
-      await requests
+      const refused = await requests
         .post(`/api/v1/patients/${patient}/followups`)
         .set(bearer(clinician.token))
         .send({ ...payload, requestId: randomUUID() })
         .expect(503);
+      expect(refused.body.error.details[0].reason).toBe('followup-writes-paused');
       await requests.get(`/api/v1/patients/${patient}/followups`).set(bearer(clinician.token)).expect(200);
+      // The availability read reports the same rule the write enforces, in both paused shapes.
+      const availability = () => requests.get('/api/v1/followups/availability').set(bearer(clinician.token)).expect(200);
+      expect((await availability()).body).toEqual({ recording: 'paused' });
       const env = paused.get<Env>(ENV);
       env.FOLLOWUP_WRITES = 'enabled';
+      expect((await availability()).body).toEqual({ recording: 'enabled' });
       env.NODE_ENV = 'production';
+      expect((await availability()).body).toEqual({ recording: 'paused' });
       await requests
         .post(`/api/v1/patients/${patient}/followups`)
         .set(bearer(clinician.token))

@@ -93,6 +93,11 @@ export const followupListSchema = z.strictObject({
 });
 export type FollowupList = z.infer<typeof followupListSchema>;
 export const followupAssigneesSchema = z.strictObject({ currentActor: z.string(), items: z.array(z.string()) });
+/** Whether follow-up recording is switched on in this environment. A paused environment still serves every read. */
+export const followupAvailabilitySchema = z.strictObject({ recording: z.enum(['enabled', 'paused']) });
+export type FollowupAvailability = z.infer<typeof followupAvailabilitySchema>;
+/** The `reason` a refused follow-up write carries when recording is paused (retrying will not help). */
+export const FOLLOWUP_WRITES_PAUSED = 'followup-writes-paused';
 export const followupSummaryQuerySchema = z.strictObject({});
 export const followupResponseSummarySchema = z
   .strictObject({

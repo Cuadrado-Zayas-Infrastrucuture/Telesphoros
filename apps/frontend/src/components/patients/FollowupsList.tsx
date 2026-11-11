@@ -5,12 +5,24 @@ import type { FollowupDto, FollowupInput } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { useFollowups } from '@/hooks/useFollowups';
+import { FOLLOWUPS_PAUSED_MESSAGE } from '@/lib/patientFollowups';
 import { FollowupForm } from './FollowupForm';
 
 import { FollowupValues } from './FollowupValues';
 import { FollowupHistory } from './FollowupHistory';
 
-export function FollowupsList({ patientId, initialSaved = false, onEditingChange }: { patientId: string; initialSaved?: boolean; onEditingChange?: (editing: boolean) => void }) {
+export function FollowupsList({
+  patientId,
+  initialSaved = false,
+  onEditingChange,
+  paused = false,
+}: {
+  patientId: string;
+  initialSaved?: boolean;
+  onEditingChange?: (editing: boolean) => void;
+  /** Recording is switched off in this environment: reads stay, every way into a form goes. */
+  paused?: boolean;
+}) {
   const { roles } = useAuth();
   const { hash } = useLocation();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -20,7 +32,8 @@ export function FollowupsList({ patientId, initialSaved = false, onEditingChange
       heading.current?.focus({ preventScroll: true });
     }
   }, [hash, patientId]);
-  const canWrite = roles.includes('clinician');
+  const clinician = roles.includes('clinician');
+  const canWrite = clinician && !paused;
   const { data, error, loading, reload, page, go } = useFollowups(patientId);
   const [editing, setEditing] = useState<{ action: FollowupInput['action']; entry?: FollowupDto } | null>(null);
   useEffect(() => {
@@ -45,6 +58,7 @@ export function FollowupsList({ patientId, initialSaved = false, onEditingChange
       </div>
       <p className="text-sm text-muted-foreground">Document response to a recorded treatment and choose when to follow up.</p>
       {saved && <p role="status">Follow-up saved.</p>}
+      {paused && clinician && <p className="text-sm">{FOLLOWUPS_PAUSED_MESSAGE}</p>}
       {editing ? (
         <FollowupForm
           key={`${editing.action}-${editing.entry?.id ?? 'new'}`}
