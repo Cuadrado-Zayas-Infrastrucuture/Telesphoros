@@ -4,8 +4,10 @@ import type { PatientDto } from '@telesphoros/shared-types';
 import { Button } from '@/components/ui/Button';
 import type { NativeSelectProps } from '@/components/ui/NativeSelect';
 import { NativeSelect } from '@/components/ui/NativeSelect';
+import { patientSummary } from '@/lib/patientSummary';
 
-type PatientChoice = Pick<PatientDto, 'id' | 'label'>;
+/** `sex` and `birthYear` are the coded fields list items carry; when present they confirm the choice under the select. */
+type PatientChoice = Pick<PatientDto, 'id' | 'label'> & Partial<Pick<PatientDto, 'sex' | 'birthYear'>>;
 
 export interface PatientPickerProps extends Omit<NativeSelectProps, 'children' | 'value' | 'defaultValue' | 'onChange'> {
   patients: readonly PatientChoice[] | null;
@@ -40,6 +42,10 @@ export function PatientPicker({
   const generatedId = useId();
   const selectId = id ?? generatedId;
   const stateId = `${selectId}-state`;
+  const chosenId = `${selectId}-chosen`;
+  // The option text stays the plain code (tests and tools find a patient by it); this line is the second check.
+  const chosen = value ? (patients?.find((patient) => patient.id === value) ?? (selectedPatient?.id === value ? selectedPatient : null)) : null;
+  const chosenSummary = chosen ? patientSummary(chosen) : '';
   const busy = loading || (patients === null && !error);
   const message = busy ? 'Loading patients…' : error || (patients?.length === 0 ? emptyMessage : null);
   return (
@@ -50,7 +56,7 @@ export function PatientPicker({
         value={value}
         disabled={disabled || busy}
         aria-busy={busy || undefined}
-        aria-describedby={[describedBy, message ? stateId : null].filter(Boolean).join(' ') || undefined}
+        aria-describedby={[describedBy, message ? stateId : null, chosenSummary ? chosenId : null].filter(Boolean).join(' ') || undefined}
         onChange={(event) => onValueChange(event.target.value)}
       >
         <option value="">Choose an existing patient…</option>
@@ -62,6 +68,11 @@ export function PatientPicker({
         ))}
         {newPatientOption && <option value={newPatientOption.value}>{newPatientOption.label}</option>}
       </NativeSelect>
+      {chosen && chosenSummary && (
+        <p id={chosenId} className="text-sm text-muted-foreground">
+          {chosen.label} · {chosenSummary}
+        </p>
+      )}
       {busy && (
         <div aria-hidden="true">
           <Skeleton className="h-4 w-2/3" />

@@ -9,6 +9,7 @@ import { useWorkspacePatients } from '@/hooks/useWorkspacePatients';
 import { Input } from '@/components/ui/Input';
 import { getCompleteness } from '@/lib/patientDemographics';
 import { onPatientAdded } from '@/lib/workspaceEvents';
+import { patientSummary } from '@/lib/patientSummary';
 
 /**
  * The Patients page's roster (specs/034, from the panel's former list, specs/024 D2a): the synthetic labels, newest first, each a link to the
@@ -93,6 +94,8 @@ export function PatientRoster() {
                 >
                   {patient.label}
                 </Link>
+                {/* Beside the link, not inside it: the link's name stays the code that tests and tools find a patient by. */}
+                {patientSummary(patient) && <span className="shrink-0 text-muted-foreground">{patientSummary(patient)}</span>}
                 <IncompleteWord patient={patient} className="shrink-0" />
               </li>
             ))}
