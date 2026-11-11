@@ -9,6 +9,7 @@ import {
   idParamSchema,
   type PatientLinkDecisionCreate,
   type PatientLinkDecisionDto,
+  patientLinkDecisionDtoSchema,
   patientLinkDecisionCreateSchema,
   type PatientLinkDto,
   type Paginated,
@@ -82,7 +83,7 @@ export class ReportPatientLinkController {
   ): Promise<PatientLinkDecisionDto> {
     const { decision, created } = await this.service.decide(principal, id, body);
     res.status(created ? 201 : 200);
-    return decision;
+    return patientLinkDecisionDtoSchema.parse(decision);
   }
 }
 

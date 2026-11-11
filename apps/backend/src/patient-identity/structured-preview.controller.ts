@@ -8,7 +8,15 @@ import {
   type StructuredSourceResolutionCreate,
 } from '@telesphoros/shared-types';
 import { Body, CanActivate, Controller, Get, Injectable, Param, Post, Res, UseGuards } from '@nestjs/common';
-import { idParamSchema, structuredPatientLinkSchema, type IdParam, type StructuredPatientLink } from '@telesphoros/shared-types';
+import {
+  idParamSchema,
+  patientLinkDecisionDtoSchema,
+  structuredPatientLinkSchema,
+  structuredPreviewSchema,
+  structuredRecordStateSchema,
+  type IdParam,
+  type StructuredPatientLink,
+} from '@telesphoros/shared-types';
 import type { Response } from 'express';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
@@ -37,15 +45,15 @@ export class StructuredPreviewController {
   @Get()
   @Roles('clinician', 'reviewer')
   @RateLimitClass('expensive')
-  get(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam) {
-    return this.service.get(principal, id);
+  async get(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam) {
+    return structuredPreviewSchema.parse(await this.service.get(principal, id));
   }
 
   @Get('record')
   @Roles('clinician', 'reviewer')
   @RateLimitClass('expensive')
-  record(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam) {
-    return this.records.get(principal, id);
+  async record(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam) {
+    return structuredRecordStateSchema.parse(await this.records.get(principal, id));
   }
   @Post('record')
   @Roles('clinician', 'reviewer')
@@ -58,7 +66,7 @@ export class StructuredPreviewController {
   ) {
     const result = await this.records.save(principal, id, body);
     res.status(result.created ? 201 : 200);
-    return result.state;
+    return structuredRecordStateSchema.parse(result.state);
   }
 
   @Post('review')
@@ -72,7 +80,7 @@ export class StructuredPreviewController {
   ) {
     const result = await this.records.review(principal, id, body);
     res.status(result.created ? 201 : 200);
-    return result.state;
+    return structuredRecordStateSchema.parse(result.state);
   }
   @Post('source-resolution')
   @Roles('reviewer')
@@ -85,7 +93,7 @@ export class StructuredPreviewController {
   ) {
     const result = await this.records.resolve(principal, id, body);
     res.status(result.created ? 201 : 200);
-    return result.state;
+    return structuredRecordStateSchema.parse(result.state);
   }
 
   @Post('patient-link')
@@ -99,6 +107,6 @@ export class StructuredPreviewController {
   ) {
     const result = await this.service.decide(principal, id, body);
     res.status(result.created ? 201 : 200);
-    return result.decision;
+    return patientLinkDecisionDtoSchema.parse(result.decision);
   }
 }

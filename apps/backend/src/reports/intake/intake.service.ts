@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { Inject, Injectable } from '@nestjs/common';
-import { REPORT_CONTENT_TYPES } from '@telesphoros/shared-types';
+import { REPORT_CONTENT_TYPES, uploadAttemptDtoSchema, uploadStateDtoSchema } from '@telesphoros/shared-types';
 import { asOrganizationWork } from '../../auth/authority-context';
 import type { Principal } from '../../auth/principal';
 import { AppException } from '../../common/app-exception';
@@ -18,7 +18,8 @@ import { intakeScope } from './scope';
 import { StagingDisposalError, IntakeRejectedError, stage, type StagedFile } from './stage';
 import { InvalidStructureError } from './structural-validator';
 const conflict = () => AppException.conflictBecause('upload-attempt-conflict', 'The upload attempt is stale, cancelled, incomplete or unavailable.');
-const publicAttempt = (a: UploadAttempt) => ({ attemptId: a.id, revision: a.revision, state: a.state, expiresAt: a.leaseUntil });
+// Explicit field list + strict schema: the attempt's storage key, tenant, principal and digests never reach a response.
+const publicAttempt = (a: UploadAttempt) => uploadAttemptDtoSchema.parse({ attemptId: a.id, revision: a.revision, state: a.state, expiresAt: a.leaseUntil });
 @Injectable()
 export class IntakeService {
   private readonly active = new Map<string, AbortController>();
@@ -47,7 +48,11 @@ export class IntakeService {
     this.allowed(p);
     const r = await this.reports.findById(p.tenantId, id);
     if (!r) throw AppException.notFound();
-    return { revision: r.uploadRevision, fileUploaded: !!r.uploadedAt, run: await this.reports.runStatus(p.tenantId, intakeScope(this.env, p.tenantId, id).runId) };
+    return uploadStateDtoSchema.parse({
+      revision: r.uploadRevision,
+      fileUploaded: !!r.uploadedAt,
+      run: await this.reports.runStatus(p.tenantId, intakeScope(this.env, p.tenantId, id).runId),
+    });
   }
   async declare(p: Principal, id: string, input: AttemptDeclaration) {
     this.allowed(p);
