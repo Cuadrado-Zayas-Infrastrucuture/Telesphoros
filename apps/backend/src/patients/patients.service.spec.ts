@@ -39,6 +39,42 @@ describe('PatientsService', () => {
       await service.create(alice, { label: 'SYN-1' });
       await expect(service.create(bob, { label: 'SYN-1' })).resolves.toBeDefined();
     });
+
+    // A concurrent repeat can look the request id up before the first request commits and the label up after it: the label it finds is
+    // its own. Found by scripts/readiness/local-load.cjs (about 1 run in 9, 2026-11-11). The first lookup is made to miss, as it would then.
+    describe('when a repeat of the same request reads the request id before the first one commits', () => {
+      const requestId = '6f1c2a9e-3b47-4d58-8e12-9a0b7c6d5e41';
+
+      function racing() {
+        const ctx = setup();
+        const findByRequest = jest.spyOn(ctx.patients, 'findByRequest');
+        const missOnce = () => findByRequest.mockResolvedValueOnce(undefined);
+        return { ...ctx, missOnce };
+      }
+
+      it('answers with the stored patient, not a label conflict', async () => {
+        const { service, patients, missOnce } = racing();
+        const first = await service.create(alice, { label: 'SYN-RACE-1', requestId });
+        missOnce();
+        await expect(service.create(alice, { label: 'SYN-RACE-1', requestId })).resolves.toEqual(first);
+        expect((await patients.list('alice', { offset: 0, limit: 10 })).items).toHaveLength(1);
+      });
+
+      it('still refuses the same request id with a different body (control)', async () => {
+        const { service, missOnce } = racing();
+        await service.create(alice, { label: 'SYN-RACE-2', requestId });
+        await service.create(alice, { label: 'SYN-RACE-2B' });
+        missOnce();
+        await expectAppException(service.create(alice, { label: 'SYN-RACE-2B', requestId }), 409, 'CONFLICT');
+      });
+
+      it('still refuses a label another request took (control)', async () => {
+        const { service, missOnce } = racing();
+        await service.create(alice, { label: 'SYN-RACE-3', requestId: randomUUID() });
+        missOnce();
+        await expectAppException(service.create(alice, { label: 'SYN-RACE-3', requestId }), 409, 'CONFLICT');
+      });
+    });
   });
 
   describe('get', () => {
