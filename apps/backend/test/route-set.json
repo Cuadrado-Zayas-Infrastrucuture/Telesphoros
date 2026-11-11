@@ -12,6 +12,7 @@
   { "route": "GET /api/v1/evaluations/:id", "access": ["clinician", "reader", "reviewer"], "gate": "pipeline-or-synthetic-assessment" },
   { "route": "GET /api/v1/followups", "access": ["clinician", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/followups/assignees", "access": ["clinician", "reviewer"], "gate": "always" },
+  { "route": "GET /api/v1/followups/availability", "access": ["clinician", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/followups/summary", "access": ["clinician", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/health", "access": "public", "gate": "always" },
   { "route": "GET /api/v1/ledger/verify", "access": ["admin"], "gate": "pipeline" },
