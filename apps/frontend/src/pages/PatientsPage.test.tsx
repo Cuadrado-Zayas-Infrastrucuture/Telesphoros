@@ -57,7 +57,7 @@ describe('the Patients page (specs/034 D2)', () => {
     const fetchImpl = api(['clinician']);
     open('/patients', ['clinician'], fetchImpl);
     expect(await screen.findByRole('heading', { level: 1, name: 'Patients' })).toBeVisible();
-    const list = (await roster()).getByRole('list', { name: 'Patients' });
+    const list = await (await roster()).findByRole('list', { name: 'Patients' });
     expect(await within(list).findByRole('link', { name: 'SYN-004' })).toHaveAttribute('href', `/patients/${PATIENT.id}`);
     expect(fetchImpl.mock.calls.some(([input]) => String(input).endsWith('/api/v1/patients?page=1&pageSize=20&order=desc'))).toBe(true);
   });
