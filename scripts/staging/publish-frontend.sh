@@ -90,6 +90,7 @@ maps_left="$(find "$stage" -type f -name '*.map' | head -n 1)"
 hidden="$(find "$stage" -name '.*' ! -path "$stage" | head -n 1)"
 [[ -z "$hidden" ]] || die "a hidden file is in the upload set: $hidden"
 [[ -f "$stage/index.html" ]] || die "index.html is missing from the upload set"
+node "$repo_root/apps/frontend/scripts/check-bundle-secrets.mjs" "$stage" >/dev/null || die "the upload set holds credential-shaped text (above): nothing in the browser can be secret"
 excluded="$(cd "$dist" && find . -type f -name '*.map' | wc -l | tr -d ' ')"
 # Check all four compiled public settings, including the sign-in client and logout domain.
 # Quoted string literals prevent a stale value with the expected value as a prefix from passing.

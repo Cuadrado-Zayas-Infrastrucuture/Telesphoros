@@ -20,3 +20,5 @@ VITE_COGNITO_DOMAIN=https://auth.invalid \
 # Publish no source maps and no build manifest, as the AWS frontend publish does.
 rm -rf dist/.vite
 find dist -name '*.map' -delete
+# Nothing in the browser can be secret: refuse a build that holds credential-shaped text.
+node scripts/check-bundle-secrets.mjs dist

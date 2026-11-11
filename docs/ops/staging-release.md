@@ -36,8 +36,9 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 5. `plan.sh MIGRATE COMMIT`, read it, `apply.sh MIGRATE COMMIT SHA256`. Then `plan.sh IMAGE COMMIT` and read it **before migrating**: it needs
    only the MIGRATE apply, and `migrate.sh` refuses to start without this release's IMAGE plan, recorded (so it passed the release check) and
    still matching the stack. Then `migrate.sh MIGRATE COMMIT`, only while nobody uses staging: it checks the pending migrations, the idle
-   window and takes an RDS snapshot before `migrate-up`, and writes `migrate-status.txt` saying `pending: (none)`. With nothing to migrate it
-   records that and takes no snapshot. **From `migrate-up` until the IMAGE apply, staging is down**: the running API answers 503 on
+   window and takes an RDS snapshot before `migrate-up`, and writes `migrate-status.txt` saying `pending: (none)`. Last, it keeps the newest 3
+   pre-migration snapshots and deletes older ones (`prune-snapshots.sh`; a failure there is a warning, not a stopped release; run it alone
+   without `--yes` to see what it would delete). With nothing to migrate it records that and takes no snapshot. **From `migrate-up` until the IMAGE apply, staging is down**: the running API answers 503 on
    `/api/v1/ready` to a schema it does not know, and that is the load balancer's health check (two hours on 2026-11-08, when the IMAGE plan
    was refused after migrating).
 6. `apply.sh IMAGE COMMIT SHA256` with the IMAGE plan you read, right after `migrate.sh`. When its log ends `== apply exit status: 0`, `current.tfvars` is this release's.

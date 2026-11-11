@@ -40,6 +40,8 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
     res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
+    // The same powerful features the web app's own policy denies (infrastructure/terraform/web.tf): JSON needs none of them.
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     next();
   });
   app.set('trust proxy', options.trustProxyHops && options.trustProxyHops > 0 ? options.trustProxyHops : false);
