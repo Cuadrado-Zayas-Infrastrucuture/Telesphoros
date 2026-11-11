@@ -1,8 +1,12 @@
 # Observability gaps and backup options
 
-Status: **proposed, not approved.** Written on 2026-11-11, when the founder asked for a review of observability and for options for
-automating backups, which are done by hand today. This document reviews and proposes only: no code, Terraform, image, workflow or AWS
-change, and nothing in AWS was read. Every claim below was read from `main` `5062c34` (file references given); what staging actually runs is
+Status: **approved by the founder on 2026-11-11 with the recommended decisions** ("go with your recommendations"): OB1 Slack through
+AWS Chatbot plus `ok_actions`; OB2 an unauthenticated canary first; OB3 our own client-error endpoint; OB5 7 days and the last 3
+snapshots; OB6 AWS Backup with restore testing, after a read-only check that the SCP allows it; B1 to B4 option (a) each, as recommended in
+[backup-scheduling-decisions.md](backup-scheduling-decisions.md). Still open, because each needs a value only the founder has: the budget
+figure (OB4), the Slack workspace and channel (OB1), the two key custodians (B3) and the provider, after its answers to the seven
+questions (B1). Written the same day, when the founder asked for a review of observability and for options for automating backups,
+which are done by hand today. Writing it changed no code, Terraform, image, workflow or AWS, and nothing in AWS was read. Every claim below was read from `main` `5062c34` (file references given); what staging actually runs is
 known only from [environments.md](../../ops/environments.md), last checked against AWS on 2026-11-08. **Before any slice here touches staging,
 the founder runs `scripts/staging/staging-status.sh` and its table is quoted in that slice's plan.**
 

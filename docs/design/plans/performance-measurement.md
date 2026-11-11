@@ -1,8 +1,9 @@
 # Measuring performance before changing anything
 
-Status: **proposed, not approved.** Written on 2026-11-11 after the founder asked to measure before deciding on any performance work (a
-language change, a framework adapter, query or index changes). This document is the plan; nothing in it has been built, and nothing in
-AWS was read or changed while writing it.
+Status: **approved by the founder on 2026-11-11 with the recommended decisions** ("go with your recommendations"): D1 yes, D2 as listed,
+D3 wait, D4 not now, D5 no; D6 (targets) stays the founder's, after the numbers. Written the same day after the founder asked to measure
+before deciding on any performance work (a language change, a framework adapter, query or index changes). Nothing in AWS was read or
+changed while writing it. Slice 0 is the founder's to run; slice 1 is the first build slice.
 
 ## Objective and completion boundary
 

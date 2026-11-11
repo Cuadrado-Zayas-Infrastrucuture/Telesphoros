@@ -1,6 +1,8 @@
 # Plan: scheduling the database backup (decision sheet)
 
-Status: **draft, awaiting founder decisions B1 to B4.** Snapshot 2026-10-19 against main `910defc`. **This is a plan only: no code, Terraform, image, workflow or AWS change, and nothing here is approved.** It authorizes no account access, spend, scheduler or real records.
+Status: **B1 to B4 decided by the founder on 2026-11-11: option (a) each, as recommended** (recorded in
+[observability-and-backups.md](observability-and-backups.md)). Still open: which provider, after its answers to the seven questions (B1), and
+the names of the two custodians (B3), which go in the founder's private location, not here. Snapshot 2026-10-19 against main `910defc`. **This is a plan only: no code, Terraform, image, workflow or AWS change, and nothing here is approved.** It authorizes no account access, spend, scheduler or real records.
 
 ## 1. Why this exists
 
