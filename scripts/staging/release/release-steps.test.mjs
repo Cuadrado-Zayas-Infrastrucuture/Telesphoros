@@ -45,6 +45,8 @@ stub('aws', `case "$*" in
   *describe-image-scan-findings*) printf 'HIGH\\tpkg\\tCVE-0000-0001\\n' ;;
   *filter-log-events*GET*) [ -n "\${STUB_NO_GETS:-}" ] && echo '[]' || echo '["{\\"req\\":{\\"method\\":\\"GET\\"},\\"route\\":\\"/api/v1/health\\",\\"res\\":{\\"statusCode\\":200}}"]' ;;
   *filter-log-events*) [ -n "\${STUB_WRITES:-}" ] && echo '["{\\"req\\":{\\"method\\":\\"POST\\"},\\"route\\":\\"/api/v1/x\\",\\"res\\":{\\"statusCode\\":201}}"]' || echo '[]' ;;
+  *"describe-db-snapshots --db-instance-identifier telesphoros-staging --snapshot-type manual "*) [ -n "\${STUB_LIST_FAIL:-}" ] && exit 254; cat "$STUB/manual_snaps" 2>/dev/null || true ;;
+  *delete-db-snapshot*) [ -n "\${STUB_DELETE_FAIL:-}" ] && exit 254; echo deleting ;;
   *describe-db-snapshots*) [ -e "$STUB/snap" ] && echo "available 2026-11-06T00:00:00Z" || { echo "DBSnapshotNotFound" >&2; exit 254; } ;;
   *create-db-snapshot*) touch "$STUB/snap"; echo creating ;;
   *"rds wait"*) ;;
@@ -213,6 +215,11 @@ const migrateReady = (pending) => {
   rmSync(join(stubDir, 'migrated'), { force: true });
   clearLogs();
 };
+// The manual snapshots the stand-in lists: [8-hex-letter, date, status?], as `--output text` prints them. Other names are listed too, so
+// prune-snapshots.sh is shown to leave them alone.
+const snapshots = (rows, extra = '') => writeFileSync(join(stubDir, 'manual_snaps'),
+  rows.map(([h, d, st = 'available']) => `telesphoros-staging-pre-${h.repeat(8).slice(0, 8)}\t${st}\t${d}T08:00:00.000Z`).join('\n') + '\n' + extra);
+const deleted = () => [...log('aws').matchAll(/delete-db-snapshot --db-snapshot-identifier (\S+)/g)].map((m) => m[1]);
 // This release's IMAGE plan as plan.sh leaves it once the release check passed: the plan, its var file and its record (the real plan-record.mjs).
 const STATE = { serial: 40, lineage: 'lineage-1' };
 const imagePlanned = () => {
@@ -288,8 +295,11 @@ test('migrate: pending must be exactly what this release carries, and staging id
 
 test('migrate: snapshot, migrate-up, then pending (none) recorded; a resumed run accepts what is left; nothing pending takes no snapshot', () => {
   migrateReady('0071');
+  snapshots([['a', '2026-10-31'], ['b', '2026-11-01'], ['c', '2026-11-05'], ['d', '2026-11-08']]);
   const r = run('migrate.sh', ['MIGRATE', COMMIT]);
   assert.equal(r.status, 0, out(r));
+  assert.match(r.stdout, /== 6\. migrate status after[\s\S]*== 7\. Keep the newest 3 pre-migration snapshots[\s\S]*Deleted 1 older[\s\S]*Done/);
+  assert.deepEqual(deleted(), ['telesphoros-staging-pre-aaaaaaaa'], 'only the oldest beyond three');
   assert.match(log('aws'), new RegExp(`create-db-snapshot --db-instance-identifier telesphoros-staging --db-snapshot-identifier telesphoros-staging-pre-${COMMIT.slice(0, 8)}`));
   assert.match(log('run-task'), /migrate-status --yes\nmigrate-up --yes\nmigrate-status --yes/);
   assert.equal(readFileSync(join(rel, 'migrate-status.txt'), 'utf8'), 'pending: (none)\n');
@@ -329,8 +339,64 @@ function noChangeExceptStatus() {
   assert.equal(readFileSync(join(rel, 'migrate-status.txt'), 'utf8'), 'pending: (none)\n');
 }
 
+test('prune-snapshots: keeps the newest 3 pre-migration snapshots, deletes only with --yes, and touches nothing else', () => {
+  const prune = (args, env) => { clearLogs(); return run('prune-snapshots.sh', args, env); };
+  assert.match(out(prune([])), /usage: prune-snapshots\.sh DB_IDENTIFIER/);
+  assert.match(out(prune(['telesphoros-staging', '--force'])), /usage/);
+  assert.match(out(prune(['Bad_Name'])), /usage/);
+  assert.equal(log('aws'), '', 'nothing is asked of AWS before the arguments are right');
+
+  // Out of order on purpose: the newest are chosen by time, not by listing order or name.
+  const other = 'telesphoros-staging-before-upgrade\tavailable\t2026-01-01T00:00:00.000Z\ntelesphoros-staging-pre-12345678-copy\tavailable\t2026-01-02T00:00:00.000Z\n';
+  snapshots([['e', '2026-11-10'], ['a', '2026-10-29'], ['c', '2026-11-05'], ['b', '2026-11-01'], ['d', '2026-11-08']], other);
+  const dry = prune(['telesphoros-staging']);
+  assert.equal(dry.status, 0, out(dry));
+  assert.match(dry.stdout, /keep telesphoros-staging-pre-eeeeeeee[\s\S]*keep telesphoros-staging-pre-dddddddd[\s\S]*keep telesphoros-staging-pre-cccccccc[\s\S]*delete telesphoros-staging-pre-bbbbbbbb[\s\S]*delete telesphoros-staging-pre-aaaaaaaa[\s\S]*Dry run: nothing deleted/);
+  assert.deepEqual(deleted(), [], 'a dry run deletes nothing');
+  assert.ok(!/before-upgrade|12345678-copy/.test(dry.stdout), 'other manual snapshots are not even listed');
+
+  const real = prune(['telesphoros-staging', '--yes']);
+  assert.equal(real.status, 0, out(real));
+  assert.deepEqual(deleted(), ['telesphoros-staging-pre-bbbbbbbb', 'telesphoros-staging-pre-aaaaaaaa']);
+  assert.match(real.stdout, /Deleted 2 older pre-migration snapshot\(s\); kept the newest 3/);
+
+  // Controls: three or fewer is left as it is; one still being created stops all deletion; a failed listing or delete stops with a reason.
+  snapshots([['a', '2026-10-29'], ['b', '2026-11-01'], ['c', '2026-11-05']]);
+  assert.match(prune(['telesphoros-staging', '--yes']).stdout, /Nothing to delete/);
+  assert.deepEqual(deleted(), []);
+  snapshots([['a', '2026-10-29'], ['b', '2026-11-01'], ['c', '2026-11-05'], ['d', '2026-11-08'], ['e', '2026-11-10', 'creating']]);
+  const busy = prune(['telesphoros-staging', '--yes']);
+  assert.equal(busy.status, 0, out(busy));
+  assert.match(busy.stdout, /not available: telesphoros-staging-pre-eeeeeeee \(creating\)[\s\S]*nothing deleted/);
+  assert.deepEqual(deleted(), [], 'nothing is deleted while a snapshot is being created');
+  assert.match(out(prune(['telesphoros-staging', '--yes'], { STUB_LIST_FAIL: '1' })), /STOP: cannot list the snapshots/);
+  snapshots([['a', '2026-10-29'], ['b', '2026-11-01'], ['c', '2026-11-05'], ['d', '2026-11-08']]);
+  const failed = prune(['telesphoros-staging', '--yes'], { STUB_DELETE_FAIL: '1' });
+  assert.equal(failed.status, 1);
+  assert.match(out(failed), /STOP: delete-db-snapshot telesphoros-staging-pre-aaaaaaaa failed/);
+  rmSync(join(stubDir, 'manual_snaps'), { force: true });
+});
+
+test('migrate: a failed prune is a warning after the migration, never a stopped release', () => {
+  rmSync(join(rel, 'migrate-status.txt'), { force: true });
+  rmSync(join(rel, 'migrate-up.started'), { force: true });
+  // The facts on origin/main back to before this release, so 0071 is pending again (the test above moved them past it).
+  git(clone, 'checkout', '-q', '--detach', 'refs/remotes/origin/main');
+  put(clone, 'docs/ops/staging-expected.json', JSON.stringify({ newestMigration: '0070' }));
+  git(clone, 'commit', '-q', '-am', 'facts before the release, again');
+  git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git(clone, 'checkout', '-q', 'main');
+  migrateReady('0071');
+  snapshots([['a', '2026-10-31'], ['b', '2026-11-01'], ['c', '2026-11-05'], ['d', '2026-11-08']]);
+  const r = run('migrate.sh', ['MIGRATE', COMMIT], { STUB_DELETE_FAIL: '1' });
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /WARNING: pruning old snapshots failed[\s\S]*Done/);
+  assert.equal(readFileSync(join(rel, 'migrate-status.txt'), 'utf8'), 'pending: (none)\n');
+  rmSync(join(stubDir, 'manual_snaps'), { force: true });
+});
+
 test('the steps name no release: no commit, account, path, host or migration number is written into them', () => {
-  for (const f of ['image.sh', 'migrate.sh', 'migration-pending.mjs', 'lib.sh', 'verify.sh', 'frontend.sh', 'state-backup.sh']) {
+  for (const f of ['image.sh', 'migrate.sh', 'prune-snapshots.sh', 'migration-pending.mjs', 'lib.sh', 'verify.sh', 'frontend.sh', 'state-backup.sh']) {
     const text = readFileSync(join(here, f), 'utf8');
     for (const [what, re] of [['a commit', /\b[0-9a-f]{40}\b/], ['an account', /\b[0-9]{12}\b/], ['a home path', /\/Users\//], ['a host', /telesphoros\.app/],
       ['a migration number', /\b00[0-9]{2}\b/], ['BSD-only stat (CI runs GNU stat)', /\bstat -f\b/]]) assert.ok(!re.test(text), `${f} names ${what}`);
