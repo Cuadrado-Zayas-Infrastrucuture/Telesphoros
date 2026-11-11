@@ -329,8 +329,8 @@ run "synthetic_shape" {
     error_message = "synthetic's audit trail is single-Region"
   }
   assert {
-    condition     = aws_db_instance.main.instance_class == "db.t4g.micro" && aws_db_instance.main.multi_az == false && aws_db_instance.main.backup_retention_period == 1
-    error_message = "synthetic's database is small, single-AZ, with one day of recovery"
+    condition     = aws_db_instance.main.instance_class == "db.t4g.micro" && aws_db_instance.main.multi_az == false && aws_db_instance.main.backup_retention_period == 7
+    error_message = "synthetic's database is small, single-AZ, with seven days of recovery (founder decision OB5, 2026-11-11)"
   }
   assert {
     condition     = aws_db_instance.main.deletion_protection == false && aws_db_instance.main.skip_final_snapshot == true && aws_db_instance.main.final_snapshot_identifier == null
