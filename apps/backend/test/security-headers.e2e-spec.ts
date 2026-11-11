@@ -9,6 +9,7 @@ const EXPECTED = {
   'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
   'x-frame-options': 'DENY',
   'referrer-policy': 'no-referrer',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 
 let app: NestExpressApplication;
@@ -20,7 +21,7 @@ afterAll(async () => {
 });
 
 describe('security headers on every API response', () => {
-  it('sets all five on a successful response', async () => {
+  it('sets all six on a successful response', async () => {
     const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
     for (const [name, value] of Object.entries(EXPECTED)) expect(res.headers[name]).toBe(value);
     expect(res.headers['x-powered-by']).toBeUndefined();
