@@ -2,6 +2,9 @@
 
 Date: 2026-11-11
 
+**Superseded for retention:** the 7 days were refused at apply by AWS's free plan; staging stays at 1 day. The snapshots and the drill below
+stand. See [2026-11-11-staging-backup-retention-free-plan.md](2026-11-11-staging-backup-retention-free-plan.md).
+
 The founder's decision OB5 (`docs/design/plans/observability-and-backups.md`, pull request #368, 2026-11-11), written and tested,
 **not applied**.
 
