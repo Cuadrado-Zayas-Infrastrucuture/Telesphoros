@@ -316,6 +316,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_job_dead" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_job_dead]
 }
 
@@ -345,6 +346,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_file_check_failed" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_file_check_failed]
 }
 
@@ -374,6 +376,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_queue_not_draining" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_queue_age]
 }
 
@@ -403,6 +406,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_heartbeat_stale" {
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_heartbeat]
 }
 
@@ -438,6 +442,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_dead_waiting" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_dead_waiting]
 }
 
@@ -471,6 +476,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_relay_failing" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_relay_failed]
 }
 
@@ -500,6 +506,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_schedule_failing" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]
 }
 
@@ -532,6 +539,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_failing" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_failed]
 }
 
@@ -560,6 +568,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_stale" {
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_ran]
 }
 
@@ -589,6 +598,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_behind" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_behind]
 }
 
@@ -619,6 +629,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_process_fault" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_process_fault]
 }
 
@@ -650,6 +661,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_outbox_stuck" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_outbox_age]
 }
 

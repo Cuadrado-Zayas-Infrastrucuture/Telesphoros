@@ -735,6 +735,7 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_compromised" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_compromised]
 }
 
@@ -765,6 +766,7 @@ resource "aws_cloudwatch_metric_alarm" "api_process_fault" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]
 }
 
@@ -781,6 +783,7 @@ resource "aws_cloudwatch_metric_alarm" "api_unhealthy_targets" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     TargetGroup  = aws_lb_target_group.api[0].arn_suffix
     LoadBalancer = aws_lb.api[0].arn_suffix
@@ -800,6 +803,7 @@ resource "aws_cloudwatch_metric_alarm" "api_target_5xx" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     TargetGroup  = aws_lb_target_group.api[0].arn_suffix
     LoadBalancer = aws_lb.api[0].arn_suffix
@@ -822,6 +826,7 @@ resource "aws_cloudwatch_metric_alarm" "api_elb_502" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     LoadBalancer = aws_lb.api[0].arn_suffix
   }
@@ -840,6 +845,7 @@ resource "aws_cloudwatch_metric_alarm" "api_elb_504" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     LoadBalancer = aws_lb.api[0].arn_suffix
   }
@@ -873,6 +879,7 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_verification_error" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_verification_error]
 }
 
@@ -902,6 +909,7 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_chain_over_size" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]
 }
 
@@ -936,6 +944,7 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]
 }
 
@@ -953,6 +962,7 @@ resource "aws_cloudwatch_metric_alarm" "api_running_tasks" {
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  ok_actions          = [aws_sns_topic.audit_alarms.arn]
   dimensions = {
     ClusterName = aws_ecs_cluster.api[0].name
     ServiceName = aws_ecs_service.api[0].name

@@ -67,6 +67,8 @@ export const EXPECTED_USES = {
   },
   // The freshness check is an addition under the synthetic profile: a read-only Lambda that can only email. It relaxes no protection.
   'freshness.tf': { 'freshness_count = local.synthetic && local.api_service_count == 1 && local.web_count == 1 ? 1 : 0': 1 },
+  // Read-only: the CPU-credit alarm exists only for a burstable class (observability plan A3, 2026-11-11).
+  'resource-alarms.tf': { 'count = startswith(local.db_instance_class, "db.t") ? 1 : 0': 1 },
   'iam.tf': { 'count = local.offsite_count': 2 },
   'issuer.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 1 },
   'kms.tf': { 'count = local.offsite_count': 2, 'deletion_window_in_days = local.kms_deletion_days': 3 },
