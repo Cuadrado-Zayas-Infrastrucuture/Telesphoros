@@ -55,17 +55,17 @@ export class PatientsService {
           .update(JSON.stringify([input.label]))
           .digest('hex')
       : undefined;
-    if (requestId) {
-      // A repeat of a create that succeeded must not meet the label it created.
-      const prior = await this.patients.findByRequest(principal.tenantId, principal.sub, requestId);
-      if (prior) {
-        if (prior.creationRequestHash !== requestHash) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different patient.');
-        const live = await this.patients.findById(principal.tenantId, prior.id);
-        if (!live) throw AppException.conflictBecause('request-id-reused', 'That request id was used for a patient that has since been deleted.');
-        return live;
-      }
+    // A repeat of a create that succeeded must not meet the label it created.
+    const replay = requestId ? await this.replayOf(principal, requestId, requestHash!) : undefined;
+    if (replay) return replay;
+    const clash = await this.patients.findByLabel(principal.tenantId, input.label);
+    if (clash) {
+      // A concurrent repeat can read the request id before the first request commits and the label after it, so the label it meets may be
+      // its own. Its row was committed before the label read saw it, so a second read of the request id sees it too.
+      const late = requestId ? await this.replayOf(principal, requestId, requestHash!) : undefined;
+      if (late) return late;
+      throw AppException.conflict('A patient with that label already exists.');
     }
-    await this.assertLabelFree(principal.tenantId, input.label);
     const now = new Date().toISOString();
     const record: PatientRecord = {
       id: randomUUID(),
@@ -115,6 +115,16 @@ export class PatientsService {
         throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
       throw error;
     }
+  }
+
+  /** The patient a request id already created, for a repeat of that request; a refusal when the id was used otherwise; undefined when unused. */
+  private async replayOf(principal: Principal, requestId: string, requestHash: string): Promise<PatientRecord | undefined> {
+    const prior = await this.patients.findByRequest(principal.tenantId, principal.sub, requestId);
+    if (!prior) return undefined;
+    if (prior.creationRequestHash !== requestHash) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different patient.');
+    const live = await this.patients.findById(principal.tenantId, prior.id);
+    if (!live) throw AppException.conflictBecause('request-id-reused', 'That request id was used for a patient that has since been deleted.');
+    return live;
   }
 
   private async assertLabelFree(tenantId: string, label: string, ignoreId?: string) {

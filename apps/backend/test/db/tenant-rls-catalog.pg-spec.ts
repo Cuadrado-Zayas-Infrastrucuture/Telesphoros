@@ -15,12 +15,15 @@ const NOT_FORCED: Readonly<Record<string, string>> = {
   ledger_incidents: '0011: as the other ledger tables; the application role has no policy and no grant',
   security_events: '0046: its writers are SECURITY DEFINER functions and a trigger owned by the migrator, which must keep writing',
   tenant_memberships: '0017: the owner is the migration login the operator command uses, which must read and write across organizations',
-  // The migrations of the four below state no reason. They are listed as they are today, not endorsed: each has no application policy
-  // or a tenant-bound one, and whether to force them is an open decision (gap GAP-07).
-  invitations: '0019: no reason stated; owned by the migration login like tenant_memberships',
-  security_audit_events: '0016: no reason stated; only the ledger verifier has a policy',
-  tenant_capabilities: '0028: no reason stated; no policy at all, so only the owner sees a row',
-  capability_issuance_log: '0028: no reason stated; no policy at all, so only the owner sees a row',
+  // Gap GAP-07, decided 2026-11-11: the four below stay unforced. Each was forced in a scratch migration and the suites that use it were run;
+  // the results are in docs/status/2026-11-11-rls-force-gap-07.md. FORCE binds only the owner, and every path to these tables runs as the owner
+  // by design, so an owner policy wide enough to keep them working would be `USING (true)`: the same as not forcing.
+  invitations:
+    '0019: the operator command (db invite, PgInvitationAdmin) runs as the migration login that owns it and reads and fulfils invitations across organizations, as for tenant_memberships',
+  security_audit_events: '0016: security_audit_record, SECURITY DEFINER as the owner, writes a row for any tenant and for refused requests that have none',
+  tenant_capabilities:
+    '0028: app_tenant() and the other SECURITY DEFINER lookups read it as the owner before any tenant is known, and the sweep removes expired rows across organizations',
+  capability_issuance_log: '0028: tenant_capability_issue, SECURITY DEFINER as the owner, logs every issuance and refusal, including for unknown organizations',
 };
 
 /** The roles a request or a job handler runs as. PUBLIC is every role, so a policy for it reaches them too. */

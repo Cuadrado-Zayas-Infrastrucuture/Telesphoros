@@ -4,7 +4,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { IS_PUBLIC_KEY, ROLES_KEY } from '../../src/auth/decorators';
 import { REQUIRES_PIPELINE, UNLOCKED_BY_SYNTHETIC_ASSESSMENT } from '../../src/lab-reports/pipeline-switch';
 
-const HTTP = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ALL', 'OPTIONS', 'HEAD'];
+// In the order of Nest's RequestMethod enum (DELETE is 3, PATCH is 4): the index is the metadata value.
+const HTTP = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL', 'OPTIONS', 'HEAD'];
 
 /** Which switch must be on for the route to answer. `always` is a route no switch closes. */
 export type RouteGate = 'always' | 'pipeline' | 'pipeline-or-synthetic-assessment' | 'synthetic-assessment';
