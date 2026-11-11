@@ -9,8 +9,8 @@
 # Order: gates -> migrate status, which must show exactly the migrations at COMMIT after
 # `newestMigration` in docs/ops/staging-expected.json on origin/main (migration-pending.mjs) -> the idle window (no write request to the API
 # in 30 minutes, with its GETs as the positive control) -> an RDS snapshot, waited for -> migrate-up -> migrate status, which must say
-# `pending: (none)` (saved as migrate-status.txt, which the IMAGE and assessment steps read). With nothing to migrate it records that and
-# takes no snapshot. A rerun after an interrupted migrate-up may find only the tail of the list pending.
+# `pending: (none)` (saved as migrate-status.txt, which the IMAGE and assessment steps read) -> prune-snapshots.sh, which keeps the newest 3
+# pre-migration snapshots. With nothing to migrate it records that and takes no snapshot. A rerun after an interrupted migrate-up may find only the tail of the list pending.
 set -euo pipefail
 umask 077
 # shellcheck source=scripts/staging/release/lib.sh
@@ -98,4 +98,8 @@ echo "== 6. migrate status after"
 scripts/staging/run-task.sh migrate-status --yes </dev/null > "$OUT/migrate-status-after.txt" 2>&1 || { cat "$OUT/migrate-status-after.txt"; die "migrate-status failed after migrating; tell Claude"; }
 node "$HERE/migration-pending.mjs" check "" "$OUT/migrate-status-after.txt" || die "migrations still pending: tell Claude"
 printf 'pending: (none)\n' > "$OUT/migrate-status.txt"
+
+echo "== 7. Keep the newest 3 pre-migration snapshots"
+# After the migration and its snapshot, never before: a failure here leaves an extra snapshot, not a stopped release.
+"$HERE/prune-snapshots.sh" "$DB" --yes </dev/null || echo "WARNING: pruning old snapshots failed (above); the release is not affected. Rerun prune-snapshots.sh $DB later."
 echo "Done $(date -u +%H:%M:%SZ). Staging is down until the IMAGE apply. Next, now: apply.sh IMAGE $COMMIT with the plan's sha256"

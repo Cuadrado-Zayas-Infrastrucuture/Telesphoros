@@ -34,11 +34,13 @@ locals {
   alb_subnet_ids  = local.synthetic_network ? aws_subnet.synthetic[*].id : var.public_subnet_ids
   tasks_public_ip = local.synthetic_network
 
-  # Small and destroyable (synthetic) versus protected (production).
+  # Small and destroyable (synthetic) versus protected (production). Synthetic keeps 7 days of automated backups (founder decision OB5,
+  # 2026-11-11): a mistake noticed after a day can still be undone without a pre-migration snapshot. Changing it between non-zero values
+  # causes no outage.
   db_instance_class       = local.synthetic ? "db.t4g.micro" : var.db_instance_class
   db_multi_az             = local.synthetic ? false : var.db_multi_az
   db_deletion_protection  = local.synthetic ? false : var.db_deletion_protection
-  db_backup_retention     = local.synthetic ? 1 : var.db_backup_retention_days
+  db_backup_retention     = local.synthetic ? 7 : var.db_backup_retention_days
   db_performance_insights = !local.synthetic
   kms_deletion_days       = local.synthetic ? 7 : 30
   secret_recovery_days    = local.synthetic ? 0 : 30
