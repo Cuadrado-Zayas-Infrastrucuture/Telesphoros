@@ -13,7 +13,7 @@ been inspected or changed by this implementation. Company source/project is stil
 | `www.cuadradozayasinfrastructure.com` | Redirect to company apex in Vercel | Prepare in the company project, not this repository |
 | `app.telesphoros.app` | Private frontend S3 origin through CloudFront | H1 Terraform, disabled by default |
 | `telesphoros.app`, `www.telesphoros.app` | 301 to `app.telesphoros.app`, retaining path/query | **`www.telesphoros.app` is live (founder, 2026-10-16) and is not this redirect:** the Vercel project `telesphoros-site` owns it (see [where things live](#where-things-live-2026-10-16)), so the `www` part of this row is superseded. Cloudflare holds one record for it, a DNS-only CNAME `www` to `6a3f732979222ba3.vercel-dns-016.com`, added by the founder and confirmed by Vercel (configured by CNAME, no conflicts) and in a browser. **The bare apex `telesphoros.app` is live and primary (founder, 2026-10-16, option B):** Cloudflare holds a DNS-only CNAME `@` to the same Vercel target (flattened), the apex is attached to the `telesphoros-site` project in Production, it loads over HTTPS, and `www.telesphoros.app` redirects to it with a 308 (confirmed in Vercel). This matches the served page, which already declares `https://telesphoros.app/` as its canonical, social-preview and structured-data URL, so the site needed no change. Vercel's own DNS zone for the domain exists but is inactive (the nameservers are Cloudflare's); its leftover records (a wildcard `*` and `app` A record) would go live if the nameservers were ever moved, so review them first. `app.telesphoros.app` has no active DNS yet. Mail: the zone has no MX, SPF or DMARC records, so the name can be spoofed; a null SPF (`v=spf1 -all`) and a DMARC reject policy are recommended only if no `@telesphoros.app` mailbox is used |
-| `staging.telesphoros.app` | Vercel project `telesphoros-site`, `staging` branch | The landing site's staging address; see [Staging first](#staging-first-for-the-landing-site) |
+| `landing.staging.telesphoros.app` | Vercel project `telesphoros-site`, `staging` branch | The landing site's staging address; see [Staging first](#staging-first-for-the-landing-site) |
 | `api.telesphoros.app` | AWS API host | F3a (edge: certificate, load balancer, firewall) written, disabled by default; compute is F3b; see [api-hosting.md](api-hosting.md). No DNS record until a healthy service exists |
 
 Cloudflare remains authoritative. Use DNS-only for CloudFront records to avoid chaining
@@ -40,9 +40,11 @@ Rules that follow:
 
 ## Staging first for the landing site
 
-Every build reaches staging before production (founder decision, 2026-11-10), so anything that breaks can be fixed or rolled back on staging without affecting the live site. Vercel builds the `staging` branch of `telesphoros-site` for `staging.telesphoros.app`, and only `main` builds for `telesphoros.app`.
+Every build reaches staging before production (founder decision, 2026-11-10), so anything that breaks can be fixed or rolled back on staging without affecting the live site. Vercel builds the `staging` branch of `telesphoros-site` for `landing.staging.telesphoros.app`, and only `main` builds for `telesphoros.app`.
 
-- **Change:** open the pull request into `staging`, then test at `staging.telesphoros.app`.
+- **Name:** never `staging.telesphoros.app` itself. That name carries staging's inbound-mail MX and SPF records, is the Terraform
+  `web_domain` (an alias on the staging app's CloudFront distribution) and the SES sending domain; a CNAME there would sit beside them.
+- **Change:** open the pull request into `staging`, then test at `landing.staging.telesphoros.app`.
 - **Roll back:** revert on `staging`. `main` and the live deployment are not involved.
 - **Promote:** merge `staging` into `main` once it has been tested.
 
