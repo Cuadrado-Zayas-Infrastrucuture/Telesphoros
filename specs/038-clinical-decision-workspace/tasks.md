@@ -75,6 +75,11 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
 - [ ] T307 Not done: no browser run, so the comparison table's overflow on a narrow screen and the focus ring of the measured region
   were not seen. The step-2 flow was not run against a real API: `decision-e2e` covers the manual "Schedule linked follow-up" path and
   was not run either.
+- [x] T308 Before the pull request, 2026-11-12: replayed on `main` as one commit after slice 2 merged (#385). On that commit, in sealed
+  jobs, the verify tier, the backend memory and PostgreSQL tiers, the worker tier and the secret scan passed. PostgreSQL and S3: shards
+  1 and 3 passed; in shard 2 one backend test this slice does not touch (`lab-reports-capture`, the race under load) fitted three of
+  the four batches it requires, twice, and passed on its own with four. The status note has the detail. This slice adds no link or
+  button; its new controls are the shared checkbox and input.
 
 ## Slice 4: home, accessibility, protocol
 
