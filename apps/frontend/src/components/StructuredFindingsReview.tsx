@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { StructuredRecordState } from '@telesphoros/shared-types';
 import { Button } from '@/components/ui/Button';
+import { SourceComparison } from './SourceComparison';
 
 const reviewLabels: Record<StructuredRecordState['review']['status'], string> = {
   'not-reviewable': 'Not open for findings review',
@@ -126,6 +127,8 @@ export function StructuredFindingsReview({
               : 'kept on hold until the laboratory clarifies.'}
         </p>
       )}
+      {/* Beside the choice, for whoever can see the conflict: the sources compared, with nothing preselected (specs/038 D16). */}
+      {resolving && <SourceComparison sources={conflict.revisionIds.flatMap((id) => named(id) ?? [])} thisReportId={thisReportId} />}
       {resolving && canReview && (
         <fieldset className="space-y-1" disabled={busy}>
           <legend className="font-semibold">Conflicting sources: choose one, or hold</legend>

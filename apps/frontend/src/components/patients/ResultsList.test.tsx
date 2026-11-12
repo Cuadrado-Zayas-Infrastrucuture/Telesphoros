@@ -237,6 +237,28 @@ it('opens the current result first even when an earlier, withdrawn one is listed
   expect(closed).toHaveClass('min-h-control');
 });
 
+// Specs/019 adopted (specs/038): the open result's summary is the region whose display is measured. Display only, and only where the
+// API records it: not in the synthetic staging, and not for a result whose wording is folded.
+it('measures the display of the open current result, named by its drug', async () => {
+  show();
+  expect(await screen.findByRole('region', { name: 'Recommendation summary for drugz' })).toContainElement(screen.getByText('Z normal-low.'));
+});
+
+it('measures nothing in the synthetic staging, where the API does not record it', async () => {
+  vi.stubEnv('VITE_SYNTHETIC_ASSESSMENT', 'true');
+  show();
+  expect(await screen.findByText('Z normal-low.')).toBeVisible();
+  expect(screen.queryByRole('region', { name: /^Recommendation summary/ })).not.toBeInTheDocument();
+});
+
+it('measures nothing for a result that is not current: its wording is folded, so it was not displayed', async () => {
+  auth.apiFetch.mockImplementation(async () => page(variant({ state: 'retracted', current: false })));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'drugz: not current, Recommendation' }));
+  expect(screen.getByText('This is the evidence as it was stored with this earlier result.')).toBeVisible();
+  expect(screen.queryByRole('region', { name: /^Recommendation summary/ })).not.toBeInTheDocument();
+});
+
 it('opens the result a link named, when it is on the page read', async () => {
   const two = { ...evaluation, results: [other(0, 'drugfirst', 'shown', null, 'First text.'), other(1, 'drugsecond', 'shown', null, 'Second text.')] };
   auth.apiFetch.mockImplementation(async () => page(two as never));

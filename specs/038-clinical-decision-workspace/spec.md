@@ -82,6 +82,29 @@ Findings F08 and F09 of the audit have no public contract and are not part of th
   this slice: it cannot be judged without a browser.
 - **D13, no owner is shown for a hold.** The API names no resolver, owner or due date for a hold, so the page shows none.
 
+## Decisions, slice 3 (`feat/clinical-workspace-3-decision-followup`)
+
+- **D14, a decision and its follow-up are two saves, shown as two steps (F10).** The form for a new decision offers "Then schedule a
+  linked follow-up (optional)". Nothing makes a follow-up required. The decision is saved first; only when the history read that follows
+  shows the decision the server stored does step 2 open, the existing follow-up form linked to that decision. Step 2 says the decision is
+  already saved. If its save fails, the form says so, keeps the draft, and a retry sends the follow-up alone as the same request; the
+  decision is never sent again. If it is cancelled, the page says the decision is saved and no reminder exists. If another follow-up form
+  is open when the decision is saved, step 2 waits for that form to close and never replaces it. Where follow-up recording is paused, the
+  option is not offered and the form says why. A decision whose reply was lost, or that was refused, opens no step 2.
+- **D15, what the dates mean (F10).** The review-by date records an intention and creates no reminder; the form says so, and offers that
+  date to step 2 as the follow-up's date. The follow-up form says its date is a calendar date in the reminder timezone it names.
+- **D16, conflicting sources side by side (F11).** Beside the source choice, a table compares the conflicting sources from what the saved
+  history carries: the laboratory's report id, which upload each is, revision and status, when it was saved, how many findings it holds
+  and which only it holds. Nothing is preselected and independent review is unchanged. **The history does not carry what each source
+  reports for a finding**, so the table says that cannot be compared here; see [dependencies.md](dependencies.md).
+- **D17, the filter says how far it reaches (F12).** The patient filter searches the pages this screen has loaded. It now says how many
+  that is and whether more remain. There is no server search to call; see [dependencies.md](dependencies.md).
+- **D18, render events in the result view (F13).** The open result's summary is the region specs/019 measures. It records display only:
+  not reading, agreement or a decision. A result that is not current is not measured, because its wording is folded. The capture is not
+  mounted in the synthetic staging, where the route is switched off, and the queue stops for the session when the API answers that the
+  route is switched off (503 `PIPELINE_DISABLED`) instead of retrying. The explicit "Reviewed" control of specs/019 is **not** adopted
+  here: where an acknowledgement sits beside a decision is a product decision.
+
 ## Out of scope
 
 Server-side patient search (no contract exists: `patientListQuerySchema` has `page`, `pageSize`, `includeMerged`, `order`); a unified

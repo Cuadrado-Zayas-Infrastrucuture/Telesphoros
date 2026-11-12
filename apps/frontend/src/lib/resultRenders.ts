@@ -41,6 +41,11 @@ export class RenderQueue {
     else this.leaving = false;
   };
   private listeners = 0;
+  /**
+   * The API answered that the route is switched off (503 `PIPELINE_DISABLED`): an environment that does not record renders. Nothing more is held
+   * or sent for this session, so a result view that mounts the capture everywhere does not send a refused request for every row (specs/038).
+   */
+  private unavailable = false;
 
   constructor(private readonly apiFetch: ApiFetch) {}
 
@@ -60,6 +65,7 @@ export class RenderQueue {
 
   /** `now` for an exposure (P4: sent promptly) and for anything recorded as the page hides; `batch` for durations. */
   enqueue(event: ResultRenderEvent, when: 'now' | 'batch'): void {
+    if (this.unavailable) return;
     this.held.push({ event, attempts: 0 });
     if (this.held.length > RENDER_BUFFER_MAX) this.held.splice(0, this.held.length - RENDER_BUFFER_MAX);
     if (when === 'now') {
@@ -102,6 +108,12 @@ export class RenderQueue {
       });
       // A refusal (400, 403, 404, 409) stores nothing and would be refused again: it is dropped. No answer worth trusting is retried.
       outcome = response.ok ? 'stored' : response.status >= 500 || response.status === 408 || response.status === 429 ? 'retry' : 'drop';
+      if (response.status === 503 && (await switchedOff(response))) {
+        // Not an outage: a setting. Retrying cannot help, and neither can the next row's events.
+        this.unavailable = true;
+        this.held = [];
+        outcome = 'drop';
+      }
     } catch {
       outcome = 'retry'; // no answer: the batch may or may not be stored, and a retry stores nothing twice (the server skips stored events)
     }
@@ -115,6 +127,16 @@ export class RenderQueue {
       if (outcome !== 'retry' && (this.urgent || this.held.length >= RENDER_BATCH_MAX)) void this.flush(keepalive);
       else this.schedule(RENDER_FLUSH_MS);
     }
+  }
+}
+
+/** Whether a 503 says the route is switched off, by the API's fixed error code. Any other body, or none, is an ordinary outage. */
+async function switchedOff(response: Response): Promise<boolean> {
+  try {
+    const body = (await response.json()) as { error?: { code?: unknown } } | null;
+    return body?.error?.code === 'PIPELINE_DISABLED';
+  } catch {
+    return false;
   }
 }
 

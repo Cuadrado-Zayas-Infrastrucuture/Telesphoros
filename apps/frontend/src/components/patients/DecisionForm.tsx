@@ -27,14 +27,21 @@ export function DecisionForm({
   onSaved,
   onStale,
   subject,
+  followup,
 }: {
   /** What the entry is about, in display words (the drug). The patient's label comes from the page. */
   subject?: string;
+  /**
+   * Whether a linked follow-up can be scheduled as a second step after a new decision (specs/038 D14): `offer` shows the optional choice,
+   * `paused` says this environment records no follow-ups. Absent where the caller schedules none.
+   */
+  followup?: 'offer' | 'paused';
   history: ClinicianDecisionHistoryDto;
   kind: ClinicianDecisionCreate['entryKind'];
   initial?: ClinicianDecisionDto;
   onCancel: () => void;
-  onSaved: () => void;
+  /** The decision is saved. `followup` is true when the clinician asked for the second step; `due` is the review-by date just recorded. */
+  onSaved: (next: { followup: boolean; due: string | null }) => void;
   /** Called when the server refused the entry because the result or its history changed (409). */
   onStale: () => void;
 }) {
@@ -46,6 +53,7 @@ export function DecisionForm({
   const [codes, setCodes] = useState<CdrDetailCode[]>(kind === 'amendment' ? (initial?.detailCodes ?? []) : []);
   const [note, setNote] = useState('');
   const [reviewBy, setReviewBy] = useState(kind === 'amendment' ? (initial?.reviewBy ?? '') : '');
+  const [thenFollowup, setThenFollowup] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -80,8 +88,8 @@ export function DecisionForm({
     setBusy(true);
     setError('');
     try {
-      await saveDecision(apiFetch, history.resultId, request.current);
-      onSaved();
+      const stored = await saveDecision(apiFetch, history.resultId, request.current);
+      onSaved({ followup: kind === 'decision' && followup === 'offer' && thenFollowup, due: stored.reviewBy });
     } catch (caught) {
       setUncertain(caught instanceof DecisionUnconfirmed);
       setRefused(caught instanceof SubmitError && [403, 404, 409].includes(caught.status ?? 0));
@@ -144,7 +152,7 @@ export function DecisionForm({
               <label htmlFor={`${formId}-review-by`} className="flex flex-col gap-1 text-sm">
                 Review by (optional)
                 <Input id={`${formId}-review-by`} type="date" value={reviewBy} onChange={(event) => setReviewBy(event.target.value)} />
-                <span className="text-xs text-muted-foreground">This records the intended review date. Schedule a linked follow-up separately to create an in-app reminder.</span>
+                <span className="text-xs text-muted-foreground">This records the intended review date only. It creates no reminder: only a linked follow-up does.</span>
               </label>
             )}
           </>
@@ -153,6 +161,21 @@ export function DecisionForm({
           Decision note
           <Textarea id={`${formId}-note`} rows={3} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
+        {/* Optional, and a second step with its own save: the decision never waits on it (specs/038 D14). */}
+        {kind === 'decision' && followup === 'offer' && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor={`${formId}-followup`} className="flex min-h-control items-center gap-2 text-sm">
+              <Checkbox id={`${formId}-followup`} checked={thenFollowup} onChange={(event) => setThenFollowup(event.target.checked)} />
+              Then schedule a linked follow-up (optional)
+            </label>
+            <span className="text-xs text-muted-foreground">
+              The decision is saved first. The follow-up is a second step with its own save, and it is what creates the in-app reminder.
+            </span>
+          </div>
+        )}
+        {kind === 'decision' && followup === 'paused' && (
+          <p className="text-sm text-muted-foreground">Follow-up recording is not available in this environment, so no reminder can be created for this decision here.</p>
+        )}
       </fieldset>
       {error && (
         <p role="alert" className="text-sm text-destructive">

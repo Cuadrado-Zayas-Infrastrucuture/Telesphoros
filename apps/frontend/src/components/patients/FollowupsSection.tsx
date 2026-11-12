@@ -14,7 +14,8 @@ export function FollowupsSection({
 }: {
   patientId: string;
   decision?: DecisionLink;
-  onDecisionClose?: () => void;
+  /** The linked follow-up form closed. `saved` is false when it was cancelled: the decision it was for stays saved either way. */
+  onDecisionClose?: (saved: boolean) => void;
   onEditingChange?: (editing: boolean) => void;
 }) {
   const location = useLocation();
@@ -50,11 +51,11 @@ export function FollowupsSection({
           decision={decision}
           onClose={() => {
             setSaved(false);
-            onDecisionClose?.();
+            onDecisionClose?.(false);
           }}
           onSaved={() => {
             setSaved(true);
-            onDecisionClose?.();
+            onDecisionClose?.(true);
           }}
         />
       </section>

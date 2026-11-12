@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { drugPresentation, type EvaluationSummaryDto } from '@telesphoros/shared-types';
 import { Button } from '@/components/ui/Button';
 import { ResultDetails } from '@/components/ResultDetails';
+import { RecommendationSummaryRegion } from '@/components/renders/RecommendationSummaryRegion';
 import { decisionStanding, type DecisionLink } from '@/lib/clinicianDecisions';
 import { evaluationStanding, outcomeLabel } from '@/lib/resultStatus';
 import { DecisionPanel } from './DecisionPanel';
@@ -23,7 +24,10 @@ export function StoredResult({
   decisions = true,
   selected = true,
   onSelect,
+  renders = false,
 }: {
+  /** True where the API records render events (specs/019): the open result's summary is then measured as displayed. */
+  renders?: boolean;
   evaluation: EvaluationSummaryDto;
   result: EvaluationSummaryDto['results'][number];
   followupBusy: boolean;
@@ -58,6 +62,27 @@ export function StoredResult({
     </span>
   );
   const panel = <DecisionPanel evaluation={evaluation} result={result} followupBusy={followupBusy} onFollowup={onFollowup} onStale={onStale} />;
+  const details = (
+    <ResultDetails
+      result={result}
+      geneStates={evaluation.geneStates}
+      fold={fold}
+      source={false}
+      lead={false}
+      provenance={
+        <>
+          <p>Knowledge: {evaluation.knowledgeSetId}</p>
+          <p>Engine: {evaluation.engineVersion}</p>
+          <p>Report: {evaluation.reportId}</p>
+          {evaluation.corrections.map((correction) => (
+            <p key={correction.id}>
+              Correction: {correction.kind} · {correction.reasonCode}
+            </p>
+          ))}
+        </>
+      }
+    />
+  );
   return (
     <section aria-label={`Stored result ${result.drug}`} className="flex flex-col gap-3 border-t border-border py-2">
       <h4 aria-label={drug.ariaLabel}>
@@ -80,25 +105,14 @@ export function StoredResult({
       {selected && (
         <div id={detailId} className="grid gap-4 pb-2 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-3">
-            <ResultDetails
-              result={result}
-              geneStates={evaluation.geneStates}
-              fold={fold}
-              source={false}
-              lead={false}
-              provenance={
-                <>
-                  <p>Knowledge: {evaluation.knowledgeSetId}</p>
-                  <p>Engine: {evaluation.engineVersion}</p>
-                  <p>Report: {evaluation.reportId}</p>
-                  {evaluation.corrections.map((correction) => (
-                    <p key={correction.id}>
-                      Correction: {correction.kind} · {correction.reasonCode}
-                    </p>
-                  ))}
-                </>
-              }
-            />
+            {/* Display only (specs/019): that this was on screen says nothing of reading, agreement or a decision. A folded result shows no wording, so it is not measured. */}
+            {renders && !fold ? (
+              <RecommendationSummaryRegion resultId={result.id} patientId={evaluation.patientId} label={`Recommendation summary for ${drug.ariaLabel}`}>
+                {details}
+              </RecommendationSummaryRegion>
+            ) : (
+              details
+            )}
           </div>
           <ResultEvidence evaluation={evaluation} result={result} historical={fold} className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1" />
           {decisions && (

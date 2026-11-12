@@ -59,10 +59,24 @@ export function PatientRoster() {
         )}
       </div>
       {patients && patients.length > 5 && (
-        <label htmlFor="patient-roster-filter" className="flex max-w-sm flex-col gap-1 text-sm">
-          Find loaded patients
-          <Input id="patient-roster-filter" value={filter} onChange={(event) => setFilter(event.target.value)} autoComplete="off" spellCheck={false} placeholder="Patient code" />
-        </label>
+        <div className="flex max-w-sm flex-col gap-1 text-sm">
+          <label htmlFor="patient-roster-filter" className="flex flex-col gap-1">
+            Find loaded patients
+            <Input
+              id="patient-roster-filter"
+              aria-describedby="patient-roster-scope"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Patient code"
+            />
+          </label>
+          {/* The API has no patient search, so the filter reaches only what this page has loaded, and says so (specs/038 D17). */}
+          <p id="patient-roster-scope" className="text-xs text-muted-foreground">
+            {hasMore ? `This searches the ${patients.length} patients loaded so far, not the whole list. Load more to widen it.` : `This searches all ${patients.length} patients.`}
+          </p>
+        </div>
       )}
       {error && (
         <div className="flex flex-col items-start gap-1 text-sm">

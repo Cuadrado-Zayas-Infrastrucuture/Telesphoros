@@ -56,10 +56,25 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
 
 ## Slice 3: decision and follow-up, comparison, scope, events
 
-- [ ] T301 (F10) A decision and its follow-up as one guided step; each outcome reported separately; only the missing write retried.
-- [ ] T302 (F11) Conflicting report revisions with their findings side by side.
-- [ ] T303 (F12) The patient filter states its scope.
-- [ ] T304 (F13) Render events in the main result view.
+- [x] T301 (D14, D15) `DecisionForm`, `DecisionPanel`, `FollowupForm`, `FollowupsSection`, `PatientClinicalSections`,
+  `lib/clinicianDecisions.ts` (`DecisionLink`): the optional second step, started from the history read; both outcomes reported; the
+  step waits for an open follow-up form; the review-by and reminder-date wording.
+- [x] T302 (D16) `SourceComparison`, `StructuredFindingsReview`: the conflicting sources side by side from the saved history.
+- [x] T303 (D17) `PatientRoster`: the filter states how far it reaches.
+- [x] T304 (D18) `StoredResult`, `ResultsList`, `RecommendationSummaryRegion`, `lib/resultRenders.ts`: render capture on the open
+  current result; the queue stops when the route is switched off.
+- [x] T305 Tests. `pages/PatientDecisionFollowup.test.tsx` runs the real patient page, forms and API clients against a stand-in for the
+  HTTP boundary: one patient, a current recommendation, its evidence, a deferral with a review-by date, and its follow-up; a failed
+  follow-up save retried alone as the same request; a cancel; no step without asking; a lost decision reply retried as the same request;
+  a 409; a double click; a paused environment; a reviewer. It proves the browser's side only. Also: the render queue's switched-off rule
+  with two controls; the source comparison; the filter's scope. Its stand-in adds `scrollIntoView`, which jsdom lacks.
+- [x] T306 Controls, 2026-11-12, in the sealed sandbox. Each alone turned the named test red: the step started without being asked; a
+  failed follow-up retried as a new request; a cancelled follow-up reported as saved; the step offered where recording is paused; a
+  switched-off route asked again; display measured in the synthetic staging; the review-by date not offered to the follow-up; the
+  comparison marking no upload; the filter claiming to search everything.
+- [ ] T307 Not done: no browser run, so the comparison table's overflow on a narrow screen and the focus ring of the measured region
+  were not seen. The step-2 flow was not run against a real API: `decision-e2e` covers the manual "Schedule linked follow-up" path and
+  was not run either.
 
 ## Slice 4: home, accessibility, protocol
 
