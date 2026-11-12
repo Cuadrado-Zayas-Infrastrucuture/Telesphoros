@@ -18,7 +18,7 @@ export function AssessmentResult({ evaluation, created }: { evaluation: Evaluati
           Held: {evaluation.hold?.message ?? evaluation.holdCode ?? 'No interpretation available.'} {evaluation.hold?.reviewerAction}
         </p>
       ) : (
-        <p className={line.tone === 'success' ? 'text-success' : 'text-warning'}>{line.message}</p>
+        <p className={line.tone === 'warning' ? 'text-warning' : undefined}>{line.message}</p>
       )}
       {evaluation.results.map((result) => (
         <section key={result.id} aria-label={`Assessment ${result.drug}`} className="space-y-1 border-t border-divider pt-2">

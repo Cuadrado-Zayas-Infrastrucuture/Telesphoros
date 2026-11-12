@@ -4,7 +4,7 @@ import type { ClinicianDecisionCreate, ClinicianDecisionHistoryDto, EvaluationSu
 import { CDR_CODE_LABELS, drugPresentation } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
-import { currentDecisionEntry, decisionLabels, readDecisionHistory, type DecisionLink } from '@/lib/clinicianDecisions';
+import { currentDecisionEntry, decisionLabels, decisionStanding, readDecisionHistory, type DecisionLink } from '@/lib/clinicianDecisions';
 import { readFollowupAssignees } from '@/lib/patientFollowups';
 import { DecisionForm } from './DecisionForm';
 import { DecisionNote } from './DecisionNote';
@@ -66,14 +66,7 @@ export function DecisionPanel({
   const { history, actor } = read;
   const current = currentDecisionEntry(history);
   const head = history.entries.find((entry) => entry.id === history.headEntryId);
-  const eligible =
-    evaluation.current &&
-    evaluation.state === 'active' &&
-    evaluation.disposition === 'evaluated' &&
-    result.outcome === 'shown' &&
-    evaluation.advisory.activeDisputes === 0 &&
-    history.basis.length === 1 &&
-    history.basis[0] === 'active';
+  const eligible = decisionStanding(evaluation, result).open && history.basis.length === 1 && history.basis[0] === 'active';
   const canWrite = roles.includes('clinician') && eligible;
   const author = head?.createdBy === actor && head.entryKind !== 'entered-in-error';
   return (

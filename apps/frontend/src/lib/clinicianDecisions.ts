@@ -8,6 +8,7 @@ import {
   type ClinicianDecisionCreate,
   type ClinicianDecisionHistoryDto,
   type CdrResponse,
+  type EvaluationSummaryDto,
 } from '@telesphoros/shared-types';
 import { SubmitError, type ApiFetch } from './api';
 
@@ -19,6 +20,22 @@ export const decisionLabels: Record<CdrResponse, string> = {
   'clarification-requested': 'Clarification requested',
 };
 export type DecisionLink = { id: string; label: string };
+
+/**
+ * Whether a new decision can be recorded on a result, read from what the result list already says, so the page can say it with the result
+ * instead of behind a click (specs/038 D4). These are the conditions the decision panel has always applied; the API decides again on every
+ * write. `reason` is the first thing in the way, in plain words.
+ */
+export function decisionStanding(
+  evaluation: Pick<EvaluationSummaryDto, 'current' | 'state' | 'disposition' | 'advisory'>,
+  result: { outcome: string },
+): { open: true; reason: null } | { open: false; reason: string } {
+  if (!evaluation.current || evaluation.state !== 'active') return { open: false, reason: 'This is not the current result, so no new decision can be recorded on it.' };
+  if (evaluation.disposition !== 'evaluated') return { open: false, reason: 'This assessment is on hold, so no decision can be recorded on it.' };
+  if (result.outcome !== 'shown') return { open: false, reason: 'No recommendation is shown for this drug, so there is no decision to record.' };
+  if (evaluation.advisory.activeDisputes > 0) return { open: false, reason: 'The evidence is in dispute, so no new decision can be recorded.' };
+  return { open: true, reason: null };
+}
 const path = (result: string) => `/api/v1/evaluation-results/${encodeURIComponent(result)}/clinician-decisions`;
 export async function readPatientResults(apiFetch: ApiFetch, patient: string, page: number, signal: AbortSignal) {
   const response = await apiFetch(`/api/v1/evaluations?patientId=${encodeURIComponent(patient)}&page=${page}&pageSize=10`, { signal });

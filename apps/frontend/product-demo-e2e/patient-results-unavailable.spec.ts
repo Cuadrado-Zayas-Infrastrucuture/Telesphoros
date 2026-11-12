@@ -9,7 +9,7 @@ test('the storage prototype reports disabled processing without inventing stored
   await page.getByRole('textbox', { name: 'Synthetic patient label', exact: true }).fill(label);
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   await expect(page.getByRole('heading', { name: label, exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Recorded results', exact: true }).click();
+  // The results are read with the page (specs/038 D4): no button opens them.
   const results = page.getByRole('region', { name: 'Recorded results', exact: true });
   await expect(results.getByRole('alert')).toHaveText('Stored results are unavailable while report processing is disabled.');
   await expect(results.getByRole('button', { name: 'Record decision', exact: true })).toHaveCount(0);

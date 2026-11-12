@@ -94,9 +94,72 @@ it('an outcome this screen does not know is never shown as a recommendation', ()
   expect(within(section).queryByText('drugz at the usual dose.')).not.toBeInTheDocument();
 });
 
-it('the evaluation line is green only when every drug has a recommendation', () => {
+// Finishing is not a verdict (specs/038 D6). The line used to be green whenever every drug had a recommendation, whatever the
+// recommendations said.
+it('a completed assessment says so in the ordinary colour, never in green', () => {
   show(evaluation([shown(ids[0]!, 'drugz'), shown(ids[1]!, 'drugy')]));
-  expect(screen.getByText('All 2 drugs evaluated.')).toHaveClass('text-success');
+  const line = screen.getByText('Assessment completed. All 2 drugs evaluated.');
+  expect(line).not.toHaveClass('text-success');
+  expect(line).not.toHaveClass('text-warning');
+});
+
+it('a restrictive recommendation after a completed assessment has no success colour anywhere near it', () => {
+  const { container } = show(evaluation([{ ...shown(ids[0]!, 'drugz'), recommendationText: 'Avoid drugz. Use an alternative not metabolised by GENEA.' }]));
+  expect(screen.getByText('Assessment completed. 1 drug evaluated.')).toBeVisible();
+  expect(screen.getByText('Avoid drugz. Use an alternative not metabolised by GENEA.')).toBeVisible();
+  expect(container.querySelector('.text-success')).toBeNull();
+});
+
+it('reads the stored citation as labelled lines, says which parts were not recorded, and keeps the stored form under technical provenance', () => {
+  const citation = {
+    guidelineId: 'syn-guideline-drugz',
+    guidelineVersion: 'synthetic-3',
+    sourceUrl: 'https://guidelines.example.test/drugz',
+    locator: { table: 'Synthetic Table 2', row: 'Poor Metabolizer', column: null },
+    verification: 'verified',
+  };
+  show(evaluation([{ ...shown(ids[0]!, 'drugz'), citation }]));
+  const source = within(within(screen.getByRole('region', { name: 'Assessment drugz' })).getByLabelText('Source'));
+  expect(source.getByText('syn-guideline-drugz · version synthetic-3')).toBeVisible();
+  expect(source.getByText('table Synthetic Table 2, row Poor Metabolizer')).toBeVisible();
+  expect(source.getByText('Verified')).toBeVisible();
+  expect(source.getByText('Strong')).toBeVisible();
+  const link = source.getByRole('link', { name: 'Open the source (new tab)' });
+  expect(link).toHaveAttribute('href', 'https://guidelines.example.test/drugz');
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  // The stored form is still there, on demand, and nowhere else.
+  expect(screen.getByText('Citation as stored:')).not.toBeVisible();
+  expect(screen.getByText(/"guidelineId": "syn-guideline-drugz"/)).not.toBeVisible();
+});
+
+it('a citation stored without a version, a location or a verification state says so, and invents none', () => {
+  show(evaluation([shown(ids[0]!, 'drugz')]));
+  const source = within(screen.getByLabelText('Source'));
+  expect(source.getByText('drug-genea · version not recorded')).toBeVisible();
+  expect(source.getAllByText('not recorded')).toHaveLength(2);
+  expect(source.queryByRole('link')).toBeNull();
+});
+
+it.each([
+  ['unverified', 'Not verified'],
+  ['disputed', 'Disputed'],
+  ['some-later-state', 'Not recognised by this screen'],
+])('a %s citation reads "%s" as a caution, never as verified', (verification, word) => {
+  show(evaluation([{ ...shown(ids[0]!, 'drugz'), citation: { guidelineId: 'drug-genea', verification } }]));
+  const source = within(screen.getByLabelText('Source'));
+  expect(source.getByText(word)).toHaveClass('text-warning');
+  expect(source.queryByText('Verified')).toBeNull();
+});
+
+it.each(['http://guidelines.example.test/drugz', 'javascript:alert(1)', 'not a url'])('offers no link for a source address that is not https (%s)', (sourceUrl) => {
+  show(evaluation([{ ...shown(ids[0]!, 'drugz'), citation: { guidelineId: 'drug-genea', sourceUrl } }]));
+  expect(within(screen.getByLabelText('Source')).queryByRole('link')).toBeNull();
+});
+
+it('an outcome with no wording shows no source, even if a citation came with it', () => {
+  show(evaluation([{ ...notShown(ids[0]!, 'drugz', 'no-guideline', null), citation: { guidelineId: 'drug-genea' } }]));
+  expect(screen.getByText('No guideline for this drug')).toBeVisible();
+  expect(screen.queryByLabelText('Source')).toBeNull();
 });
 
 it('one drug without a recommendation turns the evaluation line to a warning', () => {

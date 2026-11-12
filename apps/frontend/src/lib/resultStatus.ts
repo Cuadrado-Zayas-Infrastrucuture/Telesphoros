@@ -103,15 +103,18 @@ export function reasonMessage(result: Result): string | null {
   return renamed ? REASON_MESSAGES[renamed] : null;
 }
 
-/** The evaluation as a whole, coloured by its worst result: green only when every drug has a recommendation. */
-export function evaluationLine(results: readonly Result[]): { tone: 'success' | 'warning'; message: string } {
+/**
+ * The evaluation as a whole. A warning when any drug has no recommendation. Otherwise it only says the assessment finished: that is not
+ * a verdict on what the recommendations say, so it is never green (specs/038 D6).
+ */
+export function evaluationLine(results: readonly Result[]): { tone: 'neutral' | 'warning'; message: string } {
   const total = results.length;
   const missing = results.filter((result) => !hasRecommendation(result)).length;
   const held = results.filter((result) => result.outcome === 'held').length;
   if (total > 0 && held === total) return { tone: 'warning', message: `No drug could be evaluated. ${held} on hold.` };
   if (total === 0) return { tone: 'warning', message: 'No drug could be evaluated.' };
   if (missing > 0) return { tone: 'warning', message: `${missing} of ${total} drugs ${missing === 1 ? 'has' : 'have'} no recommendation.` };
-  return { tone: 'success', message: total === 1 ? '1 drug evaluated.' : `All ${total} drugs evaluated.` };
+  return { tone: 'neutral', message: total === 1 ? 'Assessment completed. 1 drug evaluated.' : `Assessment completed. All ${total} drugs evaluated.` };
 }
 
 function unreachable(value: never): never {
