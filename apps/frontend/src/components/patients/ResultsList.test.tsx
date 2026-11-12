@@ -231,7 +231,10 @@ it('opens the current result first even when an earlier, withdrawn one is listed
   show();
   expect(await screen.findByText('Z normal-low.')).toBeVisible();
   expect(screen.queryByText('Old text.')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'drugold: not current, Recommendation' })).toHaveAttribute('aria-expanded', 'false');
+  const closed = screen.getByRole('button', { name: 'drugold: not current, Recommendation' });
+  expect(closed).toHaveAttribute('aria-expanded', 'false');
+  // A row is a control: it keeps the 44px target (jsdom lays nothing out, so this checks the utility; no hosted browser suite measures a stored result).
+  expect(closed).toHaveClass('min-h-control');
 });
 
 it('opens the result a link named, when it is on the page read', async () => {
