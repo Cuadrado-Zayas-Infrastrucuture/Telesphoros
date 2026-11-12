@@ -83,5 +83,12 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
 
 ## Slice 4: home, accessibility, protocol
 
-- [ ] T401 (F14) A home that lists due follow-ups and results on hold from the existing reads.
-- [ ] T402 Accessibility tests for the changed tasks; the clinician usability protocol; the final report.
+- [x] T401 (D19) `HomeFollowups`, `ConversationWelcome`, `WorkspaceConversation`: the follow-ups assigned to the person signed in, on
+  the home, for the roles that read follow-ups. Results on hold are not listed (dependencies.md, entry 3).
+- [x] T402 (D20) Tests: `pages/WorkspaceHome.test.tsx` (the list, the empty and failed states, the roles, an automated accessibility
+  check); in `pages/PatientDecisionFollowup.test.tsx`, an automated accessibility check of the patient page with a result and the
+  decision form open, and the result row from the keyboard.
+- [x] T403 `docs/design/clinical-workspace-usability-protocol.md`: ten moderated tasks, what counts as a failure, the accessibility pass a
+  person makes in a browser, and the wording a pharmacist approves.
+- [x] T404 Controls, 2026-11-12, in the sealed sandbox: see the status note.
+- [ ] T405 Not done: the protocol has not been run with anyone. No browser run of any slice.

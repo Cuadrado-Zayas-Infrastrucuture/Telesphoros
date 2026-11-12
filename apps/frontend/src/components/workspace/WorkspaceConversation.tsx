@@ -429,7 +429,12 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     <div className="chat-home">
       <div className="one-screen-column flex flex-1 flex-col">
         {!started ? (
-          <ConversationWelcome preferredName={preferredName} canAttach={canAttach} canReadRecords={roles.some((role) => CLINICAL_READ_ROLES.includes(role))} />
+          <ConversationWelcome
+            preferredName={preferredName}
+            canAttach={canAttach}
+            canReadRecords={roles.some((role) => CLINICAL_READ_ROLES.includes(role))}
+            canFollowUp={roles.some((role) => role === 'clinician' || role === 'reviewer')}
+          />
         ) : (
           <ConversationEntries entries={entries} onCheckStatus={(entry) => void readStatus(entry.id, entry.reportId!, true)} />
         )}
