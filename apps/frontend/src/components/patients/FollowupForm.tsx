@@ -54,7 +54,8 @@ export function FollowupForm({
   );
   const [note, setNote] = useState(action === 'amend' && !entry?.noteRedacted ? (entry?.note ?? '') : '');
   const [nextChoice, setNextChoice] = useState(action === 'amend' ? (entry?.next ? 'date' : 'none') : action === 'schedule' || action === 'reschedule' ? 'date' : '');
-  const [due, setDue] = useState(action === 'reschedule' || action === 'amend' ? (entry?.next?.date ?? '') : '');
+  // A decision that recorded a review-by date offers it as the follow-up's date; the clinician can change it before saving.
+  const [due, setDue] = useState(action === 'reschedule' || action === 'amend' ? (entry?.next?.date ?? '') : (decision?.due ?? ''));
   const [timezone, setTimezone] = useState(entry?.next?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [assignee, setAssignee] = useState(entry?.next?.assignee ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +115,13 @@ export function FollowupForm({
   return (
     <form onSubmit={(event) => void save(event)} aria-label={title} className="flex flex-col gap-4 rounded-lg border border-border bg-panel p-4">
       <h3 className="font-medium">{title}</h3>
+      {/* The second of two separate saves (specs/038 D14): whatever happens here, the decision is already stored. */}
+      {decision?.guided && (
+        <p className="text-sm">
+          Step 2 of 2. The decision is already saved. This step schedules its follow-up and creates the reminder. If you cancel, or if saving here fails, the decision stays saved
+          and no reminder exists.
+        </p>
+      )}
       {decision && <p className="text-sm wrap-anywhere">Linked decision: {decision.label}. Choose the recorded medication for this follow-up explicitly.</p>}
       {loadError ? (
         <div role="alert">
@@ -219,8 +227,19 @@ export function FollowupForm({
                   <>
                     <label htmlFor="followup-due-date" className="flex flex-col gap-1 text-sm">
                       Next follow-up date
-                      <Input id="followup-due-date" type="date" required value={due} min={assessment ? date : undefined} onChange={(event) => setDue(event.target.value)} />
+                      <Input
+                        id="followup-due-date"
+                        aria-describedby="followup-due-meaning"
+                        type="date"
+                        required
+                        value={due}
+                        min={assessment ? date : undefined}
+                        onChange={(event) => setDue(event.target.value)}
+                      />
                     </label>
+                    <p id="followup-due-meaning" className="text-xs text-muted-foreground">
+                      The reminder falls due on this calendar date in the reminder timezone below ({timezone}).
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {[7, 14, 30].map((days) => (
                         <Button key={days} type="button" size="sm" variant="outline" onClick={() => setDue(localDate(days))}>

@@ -62,6 +62,28 @@ describe('the Patients page (specs/034 D2)', () => {
     expect(fetchImpl.mock.calls.some(([input]) => String(input).endsWith('/api/v1/patients?page=1&pageSize=20&order=desc'))).toBe(true);
   });
 
+  // Specs/038 D17: the filter searches what the page has loaded. No server search exists, so the page says how far the filter reaches.
+  it('says the filter covers only the patients loaded so far while more remain, and all of them once every page is loaded', async () => {
+    const many = (from: number, count: number) =>
+      Array.from({ length: count }, (_, index) => ({ ...PATIENT, id: `0f8fad5b-d9cb-469f-a165-7086772895${String(from + index).padStart(2, '0')}`, label: `SYN-${from + index}` }));
+    const base = api(['clinician']);
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname !== '/api/v1/patients' || url.searchParams.has('includeMerged')) return base(input, init);
+      const second = url.searchParams.get('page') === '2';
+      return new Response(JSON.stringify({ data: second ? many(26, 2) : many(6, 20), meta: { page: second ? 2 : 1, pageSize: 20, total: 22, totalPages: 2 } }));
+    });
+    open('/patients', ['clinician'], fetchImpl);
+    const records = await roster();
+    const filter = await records.findByRole('textbox', { name: 'Find loaded patients' });
+    expect(filter).toHaveAccessibleDescription('This searches the 20 patients loaded so far, not the whole list. Load more to widen it.');
+    await userEvent.type(filter, 'SYN-27');
+    expect(records.getByText('No match among loaded patients. Load more to keep looking.')).toBeVisible();
+    await userEvent.click(records.getByRole('button', { name: 'More patients' }));
+    expect(await records.findByRole('link', { name: 'SYN-27' })).toBeVisible();
+    expect(filter).toHaveAccessibleDescription('This searches all 22 patients.');
+  });
+
   it('shows a patient the chat adds while the page is open', async () => {
     open('/patients', ['clinician']);
     await (await roster()).findByRole('link', { name: 'SYN-004' });

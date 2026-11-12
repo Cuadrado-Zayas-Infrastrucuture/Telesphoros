@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -220,6 +220,14 @@ it('handles a source conflict only by an explicit, complete decision and keeps e
   await screen.findByText('Saved · reconciliation needed');
   expect(screen.getByRole('list', { name: 'Outstanding actions' })).toHaveTextContent('Choose between the conflicting sources');
   expect(screen.queryByRole('button', { name: /Matches source/ })).not.toBeInTheDocument(); // findings stay closed while sources conflict
+  // Specs/038 D16: the sources are compared beside the choice, from what the saved history carries, and nothing is chosen for the reviewer.
+  const compared = within(screen.getByRole('table', { name: 'Conflicting sources, side by side' }));
+  // Both carry the same laboratory report id, so each column also says which upload it is.
+  expect(compared.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['syn-report-1This upload', 'syn-report-1Another upload']);
+  expect(compared.getByRole('rowheader', { name: 'Saved' })).toBeVisible();
+  expect(compared.getAllByRole('cell', { name: 'None' })).toHaveLength(2); // both hold the same findings
+  expect(screen.getByText(/What each source reports for a finding .* is not sent with this list, so it cannot be compared here\./)).toBeVisible();
+  for (const radio of screen.getAllByRole('radio')) expect(radio).not.toBeChecked();
   const submit = screen.getByRole('button', { name: 'Record source decision' });
   expect(submit).toBeDisabled(); // nothing is preselected
   expect(await axe(container)).toHaveNoViolations();

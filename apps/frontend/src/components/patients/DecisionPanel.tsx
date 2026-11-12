@@ -1,11 +1,12 @@
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ClinicianDecisionCreate, ClinicianDecisionHistoryDto, EvaluationSummaryDto } from '@telesphoros/shared-types';
 import { CDR_CODE_LABELS, drugPresentation } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { currentDecisionEntry, decisionLabels, decisionStanding, readDecisionHistory, type DecisionLink } from '@/lib/clinicianDecisions';
 import { readFollowupAssignees } from '@/lib/patientFollowups';
+import { useFollowupRecording } from '@/hooks/useFollowupRecording';
 import { DecisionForm } from './DecisionForm';
 import { DecisionNote } from './DecisionNote';
 import { clinicianLabel } from '@/lib/clinicianLabel';
@@ -31,21 +32,37 @@ export function DecisionPanel({
   const [editing, setEditing] = useState<ClinicianDecisionCreate['entryKind'] | null>(null);
   const [saved, setSaved] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const recording = useFollowupRecording();
+  // The second step a clinician asked for while saving a decision (specs/038 D14). It waits for the history read that follows the save,
+  // because that read carries the id the server gave the decision; the step is never started from what the browser assumes was stored.
+  const wanted = useRef<{ due: string | null } | null>(null);
+  const [stepMissed, setStepMissed] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([readDecisionHistory(apiFetch, result.id, evaluation.id, evaluation.patientId, controller.signal), readFollowupAssignees(apiFetch, controller.signal)]).then(
       ([history, people]) => {
-        if (!controller.signal.aborted) {
-          setRead({ history, actor: people.currentActor });
-          setError(false);
-        }
+        if (controller.signal.aborted) return;
+        setRead({ history, actor: people.currentActor });
+        setError(false);
+        const next = wanted.current;
+        if (!next) return;
+        wanted.current = null;
+        const decided = currentDecisionEntry(history);
+        if (history.currentDecisionId && decided?.response)
+          onFollowup({
+            id: history.currentDecisionId,
+            label: `${drugPresentation({ name: result.drug }).displayName} · ${decisionLabels[decided.response]}`,
+            guided: true,
+            due: next.due,
+          });
+        else setStepMissed(true);
       },
       () => {
         if (!controller.signal.aborted) setError(true);
       },
     );
     return () => controller.abort();
-  }, [apiFetch, result.id, evaluation.id, evaluation.patientId, attempt]);
+  }, [apiFetch, result.id, result.drug, evaluation.id, evaluation.patientId, attempt, onFollowup]);
   function reload(wasSaved = false) {
     setRead(null);
     setError(false);
@@ -73,6 +90,7 @@ export function DecisionPanel({
     <div className="flex flex-col gap-3 border-t border-border pt-3">
       <p className="text-sm text-muted-foreground">A decision records clinical intent. It does not record an order, dispensing or medication use.</p>
       {saved && <p role="status">Decision saved.</p>}
+      {stepMissed && <p role="status">The follow-up step did not start. No follow-up was scheduled; use “Schedule linked follow-up” below.</p>}
       {current?.response ? <p className="font-medium">Current decision: {decisionLabels[current.response]}</p> : <p>No decisions recorded.</p>}
       {current && (
         <p className="text-sm">
@@ -87,8 +105,13 @@ export function DecisionPanel({
           kind={editing}
           initial={head}
           subject={drugPresentation({ name: result.drug }).displayName}
+          followup={editing !== 'decision' ? undefined : recording === 'paused' ? 'paused' : followupBusy ? undefined : 'offer'}
           onCancel={() => reload()}
-          onSaved={() => reload(true)}
+          onSaved={(next) => {
+            wanted.current = next.followup ? { due: next.due } : null;
+            setStepMissed(false);
+            reload(true);
+          }}
           onStale={onStale}
         />
       ) : (

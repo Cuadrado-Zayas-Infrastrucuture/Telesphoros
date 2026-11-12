@@ -19,7 +19,11 @@ export const decisionLabels: Record<CdrResponse, string> = {
   deferred: 'Deferred',
   'clarification-requested': 'Clarification requested',
 };
-export type DecisionLink = { id: string; label: string };
+/**
+ * A saved decision a follow-up is being scheduled for. `guided` marks the second step of recording a decision with its follow-up
+ * (specs/038 D14): the decision is already saved by then, and `due` is the review-by date it recorded, offered as the follow-up's date.
+ */
+export type DecisionLink = { id: string; label: string; guided?: boolean; due?: string | null };
 
 /**
  * Whether a new decision can be recorded on a result, read from what the result list already says, so the page can say it with the result

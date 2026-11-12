@@ -33,7 +33,8 @@ export function ResultsList({
   // result of the first evaluation the API marks current. After that only the reader moves it: a re-read that finds the open result
   // withdrawn leaves it open, now marked not current, instead of taking it away.
   const [chosen, setChosen] = useState<string | null | undefined>(undefined);
-  // In the synthetic staging a result can be read but nothing can be recorded about it (decisions are not switched on there).
+  // In the synthetic staging a result can be read but nothing can be recorded about it: decisions are not switched on there, and neither
+  // is the route that records render events (it needs the report pipeline), so neither is mounted.
   const decisions = !syntheticStagingMode();
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
@@ -112,6 +113,7 @@ export function ResultsList({
                 onFollowup={onFollowup}
                 onStale={() => setRefresh((value) => value + 1)}
                 decisions={decisions}
+                renders={decisions}
                 selected={selected === result.id}
                 onSelect={(select) => setChosen(select ? result.id : null)}
               />
