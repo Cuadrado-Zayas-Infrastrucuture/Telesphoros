@@ -10,8 +10,29 @@ import { syntheticStagingMode } from '@/lib/storageMode';
 import { StandingNotices } from '@/components/StandingNotices';
 import { StoredResult } from './StoredResult';
 
-export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId: string; followupBusy: boolean; onFollowup: (link: DecisionLink) => void }) {
+/** The result opened when a page is first read: the one a link named if it is there, else the first result the API marks current. */
+function firstToOpen(evaluations: readonly EvaluationSummaryDto[], linked: string | null | undefined): string | null {
+  const listed = evaluations.flatMap((evaluation) => evaluation.results.map((result) => ({ evaluation, result })));
+  return listed.find(({ result }) => result.id === linked)?.result.id ?? listed.find(({ evaluation }) => !evaluationStanding(evaluation).fold)?.result.id ?? null;
+}
+
+export function ResultsList({
+  patientId,
+  followupBusy,
+  onFollowup,
+  initialResultId,
+}: {
+  patientId: string;
+  followupBusy: boolean;
+  onFollowup: (link: DecisionLink) => void;
+  /** A result a link named (`?result=`): it opens first when it is on the page read. */
+  initialResultId?: string | null;
+}) {
   const { apiFetch } = useAuth();
+  // The one result whose detail is open (specs/038 D7). It is settled when a page is first read: the result a link named, or the first
+  // result of the first evaluation the API marks current. After that only the reader moves it: a re-read that finds the open result
+  // withdrawn leaves it open, now marked not current, instead of taking it away.
+  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
   // In the synthetic staging a result can be read but nothing can be recorded about it (decisions are not switched on there).
   const decisions = !syntheticStagingMode();
   const [page, setPage] = useState(1);
@@ -25,14 +46,16 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
     const controller = new AbortController();
     readPatientResults(apiFetch, patientId, page, controller.signal).then(
       (value) => {
-        if (!controller.signal.aborted) setData({ list: value, readAt: new Date() });
+        if (controller.signal.aborted) return;
+        setData({ list: value, readAt: new Date() });
+        setChosen((current) => (current === undefined ? firstToOpen(value.data, initialResultId) : current));
       },
       (caught: unknown) => {
         if (!controller.signal.aborted) setError(caught instanceof SubmitError ? caught.message : 'Stored results could not be loaded. Please retry.');
       },
     );
     return () => controller.abort();
-  }, [apiFetch, patientId, page, attempt, refresh]);
+  }, [apiFetch, patientId, page, attempt, refresh, initialResultId]);
   useEffect(() => {
     const reread = () => {
       if (document.visibilityState === 'visible') setRefresh((value) => value + 1);
@@ -45,6 +68,7 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
     };
   }, []);
   function reload(next = page) {
+    if (next !== page) setChosen(undefined);
     setData(null);
     setError('');
     setPage(next);
@@ -60,6 +84,7 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
       </div>
     );
   if (!data) return <ContentSkeleton label="Loading stored results…" variant="list" />;
+  const selected = chosen ?? null;
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">Stored synthetic results. Clinical use is not approved.{decisions ? ' Decisions below document intent only.' : ''}</p>
@@ -87,6 +112,8 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
                 onFollowup={onFollowup}
                 onStale={() => setRefresh((value) => value + 1)}
                 decisions={decisions}
+                selected={selected === result.id}
+                onSelect={(select) => setChosen(select ? result.id : null)}
               />
             ))}
           </article>

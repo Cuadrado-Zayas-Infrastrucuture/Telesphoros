@@ -8,10 +8,14 @@ export function PatientClinicalSections({ patientId }: { patientId: string }) {
   const { search } = useLocation();
   const [decision, setDecision] = useState<DecisionLink | null>(null);
   const [editing, setEditing] = useState(false);
+  const params = new URLSearchParams(search);
   return (
     <>
-      <PatientResults patientId={patientId} followupBusy={editing || !!decision || new URLSearchParams(search).has('followup')} onFollowup={setDecision} />
-      <FollowupsSection patientId={patientId} decision={decision ?? undefined} onDecisionClose={() => setDecision(null)} onEditingChange={setEditing} />
+      {/* The results use the page's full width, so a result's evidence can sit beside it (specs/038 D7). */}
+      <PatientResults patientId={patientId} followupBusy={editing || !!decision || params.has('followup')} onFollowup={setDecision} initialResultId={params.get('result')} />
+      <div className="max-w-3xl">
+        <FollowupsSection patientId={patientId} decision={decision ?? undefined} onDecisionClose={() => setDecision(null)} onEditingChange={setEditing} />
+      </div>
     </>
   );
 }

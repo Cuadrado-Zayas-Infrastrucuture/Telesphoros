@@ -56,6 +56,32 @@ Findings F08 and F09 of the audit have no public contract and are not part of th
   `REASON_MESSAGES`, `decisionLabels`). New sentences are in English only; no Spanish clinical copy is added, because none has been
   reviewed by a qualified person.
 
+## Decisions, slice 2 (`feat/clinical-workspace-2-decision-workspace`)
+
+- **D9, one result open at a time (F03, F06).** Every stored result is a row that always shows the drug, the outcome in plain words and
+  the phenotype it rests on, so a list of twenty drugs is read at a glance. The selected result opens below its row. When a page of
+  results is first read, the open result is the one a link named (`?result=<id>`), or else the first result of the first evaluation the
+  API marks `current`; a result that is not current is never opened for the reader. After that only the reader moves the selection: a
+  re-read that finds the open result withdrawn leaves it open, marked not current. Only the open result reads its decision history.
+- **D10, the evidence beside the result (F06, F07).** An evidence panel sits beside the open result on a wide screen and after its
+  wording on a narrow one, before the decision. Its parts are views of fields the result carries, shown without a click:
+  "Why this applies" (or "What the assessment used" for a result with no wording): the gene results the assessment used, and the
+  statement that the medication list and demographics were not used, which is true of the engine's inputs today;
+  "Show the source": the citation of D5;
+  "What is missing?": each gene with no usable result and the result's own reason, with the vocabulary's fixed message and reviewer
+  action, grouped as "From the report", "From the guidelines and definitions" or "The assessment", so a gap in the guidelines is not
+  read as a gap in the patient's results; a reason with no reviewer action says nothing can be done in the product yet;
+  "What changed?": corrections, and whether the guidelines loaded now differ from the set the result used; shown only when there is
+  something to say. A gene the result names with no state reads "no state was recorded", never as a normal result.
+- **D11, which reasons are about the report.** The grouping of D10 is new and is the front end's own table (`lib/resultEvidence.ts`,
+  every reason code placed; a new code fails to compile until it is placed). It changes no outcome. **A pharmacist confirms it before
+  release**: the three diplotype reasons (`allele-not-in-definitions`, `no-phenotype-mapping`, `no-gene-definition`) are placed under the
+  guidelines and definitions, because their messages name the definitions this system uses.
+- **D12, the entry names its patient.** The form that records, corrects or withdraws a decision says "For patient <label> · <drug>".
+  The label is the synthetic one the page title carries. A fixed identity bar that stays in view while the page scrolls is **not** in
+  this slice: it cannot be judged without a browser.
+- **D13, no owner is shown for a hold.** The API names no resolver, owner or due date for a hold, so the page shows none.
+
 ## Out of scope
 
 Server-side patient search (no contract exists: `patientListQuerySchema` has `page`, `pageSize`, `includeMerged`, `order`); a unified

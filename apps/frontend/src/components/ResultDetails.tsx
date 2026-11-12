@@ -12,7 +12,23 @@ type GeneState = EvaluationDto['geneStates'][number];
  * the citation as stored under "Technical provenance" (specs/038 D5). Guideline wording is shown only for an outcome that carries it
  * (`showsWording`).
  */
-export function ResultDetails({ result, geneStates, fold, provenance }: { result: Result; geneStates: readonly GeneState[]; fold: boolean; provenance: ReactNode }) {
+export function ResultDetails({
+  result,
+  geneStates,
+  fold,
+  provenance,
+  source: withSource = true,
+  lead = true,
+}: {
+  result: Result;
+  geneStates: readonly GeneState[];
+  fold: boolean;
+  provenance: ReactNode;
+  /** False where the source is shown in an evidence panel beside the result (the patient page), so it is not shown twice. */
+  source?: boolean;
+  /** False where the outcome and the phenotype are already in the result's row above this body. */
+  lead?: boolean;
+}) {
   const genes = result.genes.map((gene) => geneStates.find((state) => state.gene === gene) ?? { gene, phenotype: null, diplotype: null, activityScore: null });
   const reason = reasonMessage(result);
   const wording = showsWording(result) && (result.recommendationText || result.implication) && (
@@ -22,13 +38,13 @@ export function ResultDetails({ result, geneStates, fold, provenance }: { result
     </>
   );
   // The source is read with the wording it supports, and only for an outcome that carries wording.
-  const source = showsWording(result) && result.citation ? <ResultSource citation={result.citation} strength={result.strength} /> : null;
+  const source = withSource && showsWording(result) && result.citation ? <ResultSource citation={result.citation} strength={result.strength} /> : null;
   const tone = result.outcome === 'shown' ? 'font-medium' : result.outcome === 'held' ? 'text-warning' : 'text-muted-foreground';
   return (
     <>
-      <p className={`text-sm ${tone}`}>{outcomeLabel(result.outcome)}</p>
+      {lead && <p className={`text-sm ${tone}`}>{outcomeLabel(result.outcome)}</p>}
       {reason && <p className="text-sm">{reason}</p>}
-      {genes.length > 0 && (
+      {lead && genes.length > 0 && (
         <p className="text-sm">
           {genes.map((gene, index) => (
             <span key={gene.gene}>

@@ -101,7 +101,9 @@ test('a retracted stored result cannot offer a new decision', async ({ page }) =
   const f = fixtures[`${test.info().project.name}:held`]!;
   await signInAs(page, 'alice', `/patients/${f.patient}`);
   const result = page.getByRole('region', { name: `Stored result ${f.drug}` }).first();
-  // Specs/038 D4: the result says at once that no decision can be recorded; only its history is behind a click.
+  // Specs/038 D4, D7: a result that is not current is never opened for the reader. Its row says so; opened, it says that no decision can
+  // be recorded, and only its history is behind a further click.
+  await result.getByRole('button', { name: /: not current, / }).click();
   await expect(result.getByText('This is not the current result, so no new decision can be recorded on it.', { exact: true })).toBeVisible();
   await result.getByRole('button', { name: 'Decision history', exact: true }).click();
   await expect(result.getByText(/New decisions are unavailable/)).toBeVisible();

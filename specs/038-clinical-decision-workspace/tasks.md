@@ -33,8 +33,26 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
 
 ## Slice 2: the patient decision workspace
 
-- [ ] T201 (D7, F06, F07) A selected result with its evidence beside it on a wide screen and after it on a narrow one.
-- [ ] T202 The evidence actions "Why this applies", "Show the source", "What is missing?" as views of fields the result carries.
+- [x] T201 (D9) `ResultsList`, `StoredResult`: rows that always show drug, outcome and phenotype; one result open; the first current
+  result (or the one `?result=` names) opens when a page is first read; a re-read does not move the selection.
+- [x] T202 (D10, D11, D13) `lib/resultEvidence.ts`, `ResultEvidence`, `EvidenceBlock`: the four evidence parts as views of fields the
+  result carries.
+- [x] T203 (D12) `lib/patientLabel.ts`, `PatientPage`, `DecisionPanel`, `DecisionForm`: the decision form names its patient and drug.
+- [x] T204 Tests. New: what an assessment used, lacked and whose gap that is; a gene with no state is not assumed; an unknown reason;
+  "What changed?" only when there is something; twenty-two drugs with one result open and one decision history read; the current
+  result opens before a withdrawn one listed above it; a named result opens; the form names its patient. Changed, because selection is
+  new: the not-current and mixed-outcome tests open a row first.
+- [x] T205 Controls, 2026-11-12, in the sealed sandbox. Each alone turned the named tests red: a report gap filed under guidelines (1);
+  a gene with no usable result read as used (1); a gene with no state dropped (1); every result open at once (7); the first listed
+  result opened even if withdrawn (5); a re-read moving the open result (3); the form naming no patient (1); changed guidelines not
+  reported (1); the result's reason repeated beside the gene's (1).
+- [ ] T206 Not done: no browser run; the two-column layout at 1024px and wider, the row buttons' focus ring and the widened page were
+  not seen. D11's grouping awaits a pharmacist. No fixed identity bar (D12). `decision-e2e/patient-decisions.spec.ts` gained one step
+  by reading (open the row that is not current); no pull-request or nightly job runs that suite, so a person runs it.
+- [x] T207 Before the pull request, 2026-11-12: replayed on `main` as one commit after slice 1 merged (#384); the code the controls of
+  T205 ran on is unchanged. On that commit, in sealed jobs: the verify tier, the backend memory, PostgreSQL, PostgreSQL and S3 tiers,
+  the worker tier, and the secret scan. The slice's one new control, the result's row button, was read against the 44-pixel rule of
+  T110 and carries the control height; that is a reading, not a measurement.
 
 ## Slice 3: decision and follow-up, comparison, scope, events
 

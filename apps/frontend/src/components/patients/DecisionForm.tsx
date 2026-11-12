@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { DecisionUnconfirmed, decisionLabels, saveDecision } from '@/lib/clinicianDecisions';
 import { SubmitError } from '@/lib/api';
+import { usePatientLabel } from '@/lib/patientLabel';
 
 export function DecisionForm({
   history,
@@ -25,7 +26,10 @@ export function DecisionForm({
   onCancel,
   onSaved,
   onStale,
+  subject,
 }: {
+  /** What the entry is about, in display words (the drug). The patient's label comes from the page. */
+  subject?: string;
   history: ClinicianDecisionHistoryDto;
   kind: ClinicianDecisionCreate['entryKind'];
   initial?: ClinicianDecisionDto;
@@ -35,6 +39,8 @@ export function DecisionForm({
   onStale: () => void;
 }) {
   const { apiFetch } = useAuth();
+  const patientLabel = usePatientLabel();
+  const about = [patientLabel && `patient ${patientLabel}`, subject].filter(Boolean).join(' · ');
   const formId = useId();
   const [response, setResponse] = useState<CdrResponse | ''>(kind === 'amendment' ? (initial?.response ?? '') : '');
   const [codes, setCodes] = useState<CdrDetailCode[]>(kind === 'amendment' ? (initial?.detailCodes ?? []) : []);
@@ -89,6 +95,8 @@ export function DecisionForm({
   return (
     <form aria-label={title} onSubmit={(event) => void submit(event)} className="flex flex-col gap-3 rounded-lg border border-border bg-panel p-4">
       <h4 className="font-medium">{title}</h4>
+      {/* Who and what the entry is about, at the point it is confirmed (specs/038 D2). */}
+      {about && <p className="text-sm wrap-anywhere">For {about}</p>}
       {kind === 'amendment' && (
         <p className="text-sm">
           Correct how the existing decision was documented. Use a new decision when the treatment plan changes. Earlier notes stay in history; enter a correction note below.
