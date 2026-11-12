@@ -30,7 +30,26 @@
       "Bash(gh api --method PUT *rulesets*)",
       "Bash(gh api --method POST *rulesets*)",
       "Bash(gh api --method PATCH *rulesets*)",
-      "Bash(gh api --method DELETE *rulesets*)"
+      "Bash(gh api --method DELETE *rulesets*)",
+      "Bash(pnpm test*)",
+      "Bash(pnpm run test*)",
+      "Bash(pnpm --filter * test*)",
+      "Bash(pnpm -F * test*)",
+      "Bash(pnpm typecheck*)",
+      "Bash(pnpm lint*)",
+      "Bash(pnpm build*)",
+      "Bash(pnpm --filter * build*)",
+      "Bash(pnpm install*)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm dlx *)",
+      "Bash(npx *)",
+      "Bash(npm test*)",
+      "Bash(npm run *)",
+      "Bash(npm ci*)",
+      "Bash(npm install*)",
+      "Bash(jest*)",
+      "Bash(vitest*)",
+      "Bash(node --test*)"
     ]
   }
 }
