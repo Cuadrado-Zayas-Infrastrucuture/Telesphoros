@@ -680,7 +680,11 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(box).toHaveAttribute('placeholder', 'Attach a report. Typed questions are not answered here.');
     const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
     expect(tasks.getByText(/Attach a synthetic report/)).toBeVisible();
-    expect(tasks.getByRole('link', { name: 'Open a patient' })).toHaveAttribute('href', '/patients');
+    const patients = tasks.getByRole('link', { name: 'Open a patient' });
+    expect(patients).toHaveAttribute('href', '/patients');
+    // The 44px target is measured in a real browser (e2e/foundation.spec.ts), which caught this link at 17px. jsdom has no layout, so
+    // the nearest check here is that the link carries the control-height utility.
+    expect(patients).toHaveClass('min-h-control');
     expect(tasks.getByText(/Typed questions are not answered here\. They stay in this chat and are not saved\./)).toBeVisible();
     expect(screen.queryByText(/ask a question/i)).toBeNull();
   });

@@ -25,7 +25,8 @@ export function ConversationWelcome({
         {canAttach && <li>Attach a synthetic report, choose its patient, and follow its status here.</li>}
         {canReadRecords && (
           <li>
-            <Link to="/patients" className="underline">
+            {/* A link is a control: it gets the 44px target every other control has (e2e/foundation.spec.ts measures it). */}
+            <Link to="/patients" className="inline-flex min-h-control items-center underline">
               Open a patient
             </Link>{' '}
             to read stored results and their sources.

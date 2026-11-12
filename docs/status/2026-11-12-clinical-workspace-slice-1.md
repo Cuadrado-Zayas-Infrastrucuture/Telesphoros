@@ -24,3 +24,12 @@ Proved in the sealed sandbox: front-end typecheck, lint, build, `check:chunks` a
 controls each turn their tests red (tasks.md T107). **Not run:** every Playwright suite (the sandbox has no browser), so no rendered
 screen, theme, viewport, keyboard path or contrast was checked, and the two edited browser specs are untested. The backend tiers were not
 run: no backend file changed.
+
+**Correction, same day.** Before the push the backend memory, PostgreSQL, PostgreSQL and S3, and worker tiers were run on this commit
+in sealed jobs, and passed (pull request #384 has the counts). The first hosted run then failed in `browser`:
+`e2e/foundation.spec.ts`, "interactive controls meet the 44px minimum touch target", found the new "Open a patient" link in the chat
+welcome at 17 pixels, on both viewports; the other 228 tests of that suite passed. The link now has the control height every other
+control has. Because that suite failed, the two suites after it in the same step (`local-e2e` and `report-workspace`) did not run in
+that hosted run. The pull-request `browser` job does not run `decision-e2e` or `product-demo-e2e` at all, so the two specs edited by
+reading stay unverified whatever colour the job is, until someone runs `playwright.decisions.config.ts` and
+`playwright.product-demo.config.ts` with a browser.

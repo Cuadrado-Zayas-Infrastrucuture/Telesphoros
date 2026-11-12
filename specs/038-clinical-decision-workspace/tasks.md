@@ -26,6 +26,10 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
 - [x] T108 Results, 2026-11-12, in the sealed sandbox: see the status note `docs/status/2026-11-12-clinical-workspace-slice-1.md`.
 - [ ] T109 Not done, and needed before a release: the Playwright suites (`decision-e2e`, `product-demo-e2e`, `e2e`, `storage-e2e`) were
   not run, because the sandbox has no browser; two of their specs were edited by reading. No rendered screen was inspected.
+  The pull-request `browser` job runs `e2e`, `local-e2e` and `report-workspace` only: the two edited specs (`decision-e2e`,
+  `product-demo-e2e`) are run by neither it nor the nightly job, so a person runs them.
+- [x] T110 Hosted run 1 of #384 failed in `browser`: the welcome's "Open a patient" link was 17 pixels tall, under the 44-pixel
+  target (`e2e/foundation.spec.ts`). Fixed with the control-height utility; `WorkspacePage.test.tsx` now checks the link carries it.
 
 ## Slice 2: the patient decision workspace
 
