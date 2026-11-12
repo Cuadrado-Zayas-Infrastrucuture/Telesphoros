@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react';
 import type { EvaluationDto } from '@telesphoros/shared-types';
 import { outcomeLabel, reasonMessage, showsWording } from '@/lib/resultStatus';
+import { ResultSource } from './ResultSource';
 
 type Result = EvaluationDto['results'][number];
 type GeneState = EvaluationDto['geneStates'][number];
 
 /**
  * One result's body, shared by the assessment and the stored results: the outcome in plain words, the phenotype it rests on, its wording
- * (folded behind "Show the text anyway" when the evaluation is not current), and the raw codes in its provenance. Guideline wording is
- * shown only for an outcome that carries it (`showsWording`).
+ * and where that wording comes from (both folded behind "Show the text anyway" when the evaluation is not current), and the raw codes and
+ * the citation as stored under "Technical provenance" (specs/038 D5). Guideline wording is shown only for an outcome that carries it
+ * (`showsWording`).
  */
 export function ResultDetails({ result, geneStates, fold, provenance }: { result: Result; geneStates: readonly GeneState[]; fold: boolean; provenance: ReactNode }) {
   const genes = result.genes.map((gene) => geneStates.find((state) => state.gene === gene) ?? { gene, phenotype: null, diplotype: null, activityScore: null });
@@ -19,6 +21,8 @@ export function ResultDetails({ result, geneStates, fold, provenance }: { result
       {result.implication && <p className="text-sm wrap-anywhere">{result.implication}</p>}
     </>
   );
+  // The source is read with the wording it supports, and only for an outcome that carries wording.
+  const source = showsWording(result) && result.citation ? <ResultSource citation={result.citation} strength={result.strength} /> : null;
   const tone = result.outcome === 'shown' ? 'font-medium' : result.outcome === 'held' ? 'text-warning' : 'text-muted-foreground';
   return (
     <>
@@ -34,17 +38,23 @@ export function ResultDetails({ result, geneStates, fold, provenance }: { result
           ))}
         </p>
       )}
-      {wording &&
+      {(wording || source) &&
         (fold ? (
           <details>
             <summary className="flex min-h-control cursor-pointer items-center text-sm">Show the text anyway</summary>
-            <div className="flex flex-col gap-1">{wording}</div>
+            <div className="flex flex-col gap-1">
+              {wording}
+              {source}
+            </div>
           </details>
         ) : (
-          wording
+          <>
+            {wording}
+            {source}
+          </>
         ))}
       <details>
-        <summary className="flex min-h-control cursor-pointer items-center text-sm">Source and provenance</summary>
+        <summary className="flex min-h-control cursor-pointer items-center text-sm">Technical provenance</summary>
         <div className="flex flex-col gap-1 text-xs wrap-anywhere">
           <p>
             Outcome code: {result.outcome}
@@ -59,7 +69,12 @@ export function ResultDetails({ result, geneStates, fold, provenance }: { result
             ))}
           {provenance}
           {result.strength && <p>Recorded strength: {result.strength}</p>}
-          {result.citation && <pre className="whitespace-pre-wrap wrap-anywhere">{JSON.stringify(result.citation, null, 2)}</pre>}
+          {result.citation && (
+            <>
+              <p>Citation as stored:</p>
+              <pre className="whitespace-pre-wrap wrap-anywhere">{JSON.stringify(result.citation, null, 2)}</pre>
+            </>
+          )}
         </div>
       </details>
     </>

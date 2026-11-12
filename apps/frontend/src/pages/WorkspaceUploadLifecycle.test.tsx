@@ -66,7 +66,9 @@ async function attach(name = 'earlier-synthetic.json') {
   const file = new File(['x'], name, { type: 'application/json' });
   Object.defineProperty(file, 'arrayBuffer', { value: async () => new TextEncoder().encode('x').buffer });
   await userEvent.upload(document.querySelector<HTMLInputElement>('input[type=file]')!, file);
-  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT_ID));
+  // No patient is preselected (specs/038 D2): choose it once the list has loaded.
+  await screen.findByRole('option', { name: 'SYN-READONLY' });
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Patient' }), PATIENT_ID);
   await userEvent.click(screen.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }));
 }
 const send = () => userEvent.click(screen.getByRole('button', { name: 'Upload report' }));

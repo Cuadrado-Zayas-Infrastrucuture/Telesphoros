@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { evaluationSummaryDtoSchema } from '@telesphoros/shared-types';
 import { ResultsList } from './ResultsList';
@@ -67,10 +67,14 @@ it('the fixture is a valid evaluation summary, so the cases below test the list 
   expect(() => evaluationSummaryDtoSchema.parse(evaluation)).not.toThrow();
 });
 
-it('offers decisions on a stored result in an ordinary build (control for the staging case below)', async () => {
+// Specs/038 D4: a result a decision can be recorded on shows its decision controls with the result, without a click. `PANEL` is the stand-in above.
+const PANEL = { name: 'report stale result' };
+
+it('shows the decision controls with a current recommendation in an ordinary build, without a click (control for the staging case below)', async () => {
   show();
   expect(await screen.findByText('Z normal-low.')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Decision and history' })).toBeVisible();
+  expect(screen.getByRole('button', PANEL)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Decision history' })).not.toBeInTheDocument();
   expect(screen.getByText(/Decisions below document intent only/)).toBeVisible();
 });
 
@@ -78,10 +82,62 @@ it('shows the result and its source but offers no decisions in the synthetic sta
   vi.stubEnv('VITE_SYNTHETIC_ASSESSMENT', 'true');
   show();
   expect(await screen.findByText('Z normal-low.')).toBeVisible();
-  expect(screen.getByText(/Source and provenance/)).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Decision and history' })).not.toBeInTheDocument();
+  expect(within(screen.getByLabelText('Source')).getByText('drugz-genea-geneb · version not recorded')).toBeVisible();
+  expect(screen.getByText('Technical provenance')).toBeVisible();
+  expect(screen.queryByRole('button', PANEL)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Decision history' })).not.toBeInTheDocument();
   expect(screen.queryByText(/Decisions below document intent only/)).not.toBeInTheDocument();
   expect(screen.getByText(/Clinical use is not approved/)).toBeVisible();
+});
+
+// The three ways a drug has no recommendation stay three different things, and none of them offers a decision.
+it('held, no guideline and a guideline that gives no recommendation read differently, and each says why no decision can be recorded', async () => {
+  const result = (ordinal: number, drug: string, outcome: string, reasonCode: string | null) => ({
+    ...evaluation.results[0]!,
+    id: `55555555-5555-4555-8555-55555555556${ordinal}`,
+    ordinal,
+    drug,
+    outcome,
+    reasonCode,
+    strength: null,
+    citation: null,
+    recommendationText: null,
+  });
+  const mixed = {
+    ...evaluation,
+    results: [result(0, 'drugheld', 'held', 'cell-disputed'), result(1, 'drugnone', 'no-guideline', null), result(2, 'drugsilent', 'no-published-recommendation', null)],
+  };
+  expect(() => evaluationSummaryDtoSchema.parse(mixed)).not.toThrow();
+  auth.apiFetch.mockImplementation(async () => page(mixed as never));
+  show();
+  const held = within(await screen.findByRole('region', { name: 'Stored result drugheld' }));
+  const none = within(screen.getByRole('region', { name: 'Stored result drugnone' }));
+  const silent = within(screen.getByRole('region', { name: 'Stored result drugsilent' }));
+  expect(held.getByText('On hold: needs review')).toBeVisible();
+  expect(none.getByText('No guideline for this drug')).toBeVisible();
+  expect(silent.getByText('The guideline gives no recommendation for this case')).toBeVisible();
+  for (const section of [held, none, silent]) {
+    expect(section.getByText('No recommendation is shown for this drug, so there is no decision to record.')).toBeVisible();
+    expect(section.queryByRole('button', PANEL)).not.toBeInTheDocument();
+    expect(section.queryByText('Recommendation')).not.toBeInTheDocument();
+  }
+});
+
+it('an assessment on hold says so with each result, and its decision history stays one click away', async () => {
+  const heldEvaluation = {
+    ...evaluation,
+    disposition: 'held',
+    holdCode: 'gene-absent',
+    hold: { message: 'A needed gene result is missing.', reviewerAction: 'Ask the laboratory for it.' },
+  };
+  expect(() => evaluationSummaryDtoSchema.parse(heldEvaluation)).not.toThrow();
+  auth.apiFetch.mockImplementation(async () => page(heldEvaluation as never));
+  show();
+  expect(await screen.findByText('Held: A needed gene result is missing. Ask the laboratory for it.')).toBeVisible();
+  expect(screen.getByText('This assessment is on hold, so no decision can be recorded on it.')).toBeVisible();
+  expect(screen.queryByRole('button', PANEL)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Decision history' }));
+  expect(screen.getByRole('button', PANEL)).toBeVisible();
 });
 
 // A result that is not the current one must never read as current guidance: a notice says what happened and what to do, and its wording
@@ -99,6 +155,11 @@ it.each(notCurrent)('%s: a notice, and the wording only behind "Show the text an
   show();
   expect(await screen.findByText(notice)).toBeVisible();
   expect(screen.getByText('Z normal-low.')).not.toBeVisible();
+  // Its source is folded with its wording, and no decision can be recorded on it: only its history is offered.
+  expect(screen.getByLabelText('Source')).not.toBeVisible();
+  expect(screen.getByText('This is not the current result, so no new decision can be recorded on it.')).toBeVisible();
+  expect(screen.queryByRole('button', PANEL)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Decision history' })).toBeVisible();
   fireEvent.click(screen.getByText('Show the text anyway'));
   expect(screen.getByText('Z normal-low.')).toBeVisible();
   expect(screen.queryByText('Current evaluation')).not.toBeInTheDocument();
@@ -153,8 +214,7 @@ it('re-reads the list when the tab becomes visible again', async () => {
 it('re-reads the list when a decision write was refused because the result changed (409)', async () => {
   auth.apiFetch.mockImplementationOnce(async () => list()).mockImplementation(async () => page(variant({ state: 'retracted', current: false })));
   show();
-  fireEvent.click(await screen.findByRole('button', { name: 'Decision and history' }));
-  fireEvent.click(screen.getByRole('button', { name: 'report stale result' }));
+  fireEvent.click(await screen.findByRole('button', PANEL));
   expect(await screen.findByText('Withdrawn. Do not use this result.')).toBeVisible();
   expect(auth.apiFetch).toHaveBeenCalledTimes(2);
 });

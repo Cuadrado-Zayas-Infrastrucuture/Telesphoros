@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
-import { WRITER_ROLES } from '@/auth/roles';
+import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { PromptInput } from '@/components/prompt-kit/PromptInput';
 import { PromptInputTextarea } from '@/components/prompt-kit/PromptInputTextarea';
 import { SystemMessage } from '@/components/prompt-kit/SystemMessage';
@@ -29,10 +29,13 @@ import '@/styles/one-screen.css';
 
 const QUESTION_ID = 'workspace-question';
 const CONFIRMATION = 'I confirm this file contains synthetic data only';
+/** Said before anyone types (specs/038 D3): a typed question gets a note, never an answer (specs/024 D3). */
+const NOT_ANSWERED = 'Typed questions are not answered here.';
 
 /**
  * The chat home's conversation (specs/024): attach a synthetic report, choose its patient, confirm it is synthetic, send. The report appears with its status
  * word and a "Check status" action. A typed question gets a note, not an answer: there is no interpretation outside the local preview, and no request is made.
+ * The box and the welcome say so before anyone types, and no patient is chosen until the clinician chooses one (specs/038 D2, D3).
  * The parent remounts this (a new key) for "New chat", which is how a conversation starts empty.
  */
 export function WorkspaceConversation({ active = true }: { active?: boolean }) {
@@ -42,8 +45,8 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
   const [file, setFile] = useState<File | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const attachment = useRemovedAttachment();
-  const [selectedPatientId, setPatientId] = useState('');
-  const patientId = selectedPatientId || patients?.[0]?.id || '';
+  // The patient is always the clinician's own choice (specs/038 D2): never the first one the list happened to load.
+  const [patientId, setPatientId] = useState('');
   const [synthetic, setSynthetic] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -147,8 +150,8 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         : fileError
     : !text
       ? canAttach
-        ? 'Attach a report or ask a question.'
-        : 'Type a question.'
+        ? 'Attach a report to upload it.'
+        : 'Nothing to send yet.'
       : null;
 
   /** Read the known report directly: a patient's history can span many pages or a merged group. */
@@ -337,6 +340,8 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
                   {fileError ?? uploadError}
                 </p>
               )}
+              {/* The identity is repeated at the point of confirmation (specs/038 D2). */}
+              <p className="text-sm">{chosen ? `This report will be stored for ${chosen.label}.` : 'No patient is chosen yet.'}</p>
               <p className="text-xs text-muted-foreground">Your report uploads after you confirm these details. Progress will appear in this chat.</p>
               <div className="flex justify-end gap-2">
                 {uploading ? (
@@ -373,7 +378,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
           rows={2}
           maxLength={400}
           aria-label="Question"
-          placeholder={file ? 'Add a note (optional)' : canAttach ? 'Attach a report, or ask a question' : 'Ask a question'}
+          placeholder={file ? 'Add a note (optional)' : canAttach ? `Attach a report. ${NOT_ANSWERED}` : NOT_ANSWERED}
           className="bg-transparent px-1"
         />
         <div className="flex items-center justify-between gap-2">
@@ -424,7 +429,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     <div className="chat-home">
       <div className="one-screen-column flex flex-1 flex-col">
         {!started ? (
-          <ConversationWelcome preferredName={preferredName} canAttach={canAttach} />
+          <ConversationWelcome preferredName={preferredName} canAttach={canAttach} canReadRecords={roles.some((role) => CLINICAL_READ_ROLES.includes(role))} />
         ) : (
           <ConversationEntries entries={entries} onCheckStatus={(entry) => void readStatus(entry.id, entry.reportId!, true)} />
         )}

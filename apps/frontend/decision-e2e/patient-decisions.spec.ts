@@ -13,10 +13,9 @@ test('a stored result records a decision and schedules a linked follow-up', asyn
   const auth = await me;
   const api = new URL(auth.url()).origin;
   const headers = { Authorization: auth.request().headers().authorization! };
-  await page.getByRole('button', { name: 'Recorded results', exact: true }).click();
+  // Specs/038 D4: the stored results and a current recommendation's decision controls are on the page without a click.
   const result = page.getByRole('region', { name: `Stored result ${f.drug}` }).first();
   await expect(result).toBeVisible();
-  await result.getByRole('button', { name: 'Decision and history', exact: true }).click();
   await result.getByRole('button', { name: 'Record decision', exact: true }).click();
   const form = result.getByRole('form', { name: 'Record decision' });
   await form.getByRole('combobox', { name: 'Decision', exact: true }).selectOption('modified');
@@ -79,9 +78,7 @@ test('a changed decision head refuses the stale save and preserves the physician
   const auth = await me;
   const api = new URL(auth.url()).origin;
   const headers = { Authorization: auth.request().headers().authorization! };
-  await page.getByRole('button', { name: 'Recorded results', exact: true }).click();
   const result = page.getByRole('region', { name: `Stored result ${f.drug}` }).first();
-  await result.getByRole('button', { name: 'Decision and history', exact: true }).click();
   await result.getByRole('button', { name: 'Record decision', exact: true }).click();
   const form = result.getByRole('form', { name: 'Record decision' });
   await form.getByRole('combobox', { name: 'Decision', exact: true }).selectOption('accepted');
@@ -103,9 +100,10 @@ test('a changed decision head refuses the stale save and preserves the physician
 test('a retracted stored result cannot offer a new decision', async ({ page }) => {
   const f = fixtures[`${test.info().project.name}:held`]!;
   await signInAs(page, 'alice', `/patients/${f.patient}`);
-  await page.getByRole('button', { name: 'Recorded results', exact: true }).click();
   const result = page.getByRole('region', { name: `Stored result ${f.drug}` }).first();
-  await result.getByRole('button', { name: 'Decision and history', exact: true }).click();
+  // Specs/038 D4: the result says at once that no decision can be recorded; only its history is behind a click.
+  await expect(result.getByText('This is not the current result, so no new decision can be recorded on it.', { exact: true })).toBeVisible();
+  await result.getByRole('button', { name: 'Decision history', exact: true }).click();
   await expect(result.getByText(/New decisions are unavailable/)).toBeVisible();
   await expect(result.getByRole('button', { name: 'Record decision', exact: true })).toHaveCount(0);
   await expect(result.getByRole('form')).toHaveCount(0);
@@ -114,9 +112,7 @@ test('a retracted stored result cannot offer a new decision', async ({ page }) =
 test('a reviewer can inspect decision history without write controls', async ({ page }) => {
   const f = fixtures[`${test.info().project.name}:reviewer`]!;
   await signInAs(page, 'gina', `/patients/${f.patient}`);
-  await page.getByRole('button', { name: 'Recorded results', exact: true }).click();
   const result = page.getByRole('region', { name: `Stored result ${f.drug}` }).first();
-  await result.getByRole('button', { name: 'Decision and history', exact: true }).click();
   await expect(result.getByText('No decisions recorded.', { exact: true })).toBeVisible();
   await expect(result.getByRole('button', { name: 'Record decision', exact: true })).toHaveCount(0);
   await expect(result.getByRole('form')).toHaveCount(0);
@@ -124,7 +120,7 @@ test('a reviewer can inspect decision history without write controls', async ({ 
 
 test('a temporary read failure stays distinct from disabled processing and can retry', async ({ page }) => {
   const f = fixtures[`${test.info().project.name}:reviewer`]!;
-  await signInAs(page, 'alice', `/patients/${f.patient}`);
+  // The results are read with the page (specs/038 D4), so the failing read is arranged before the page opens.
   let fail = true;
   await page.route('**/api/v1/evaluations?*', async (route) => {
     if (fail) {
@@ -132,7 +128,7 @@ test('a temporary read failure stays distinct from disabled processing and can r
       await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'UNAVAILABLE' } }) });
     } else await route.continue();
   });
-  await page.getByRole('button', { name: 'Recorded results', exact: true }).click();
+  await signInAs(page, 'alice', `/patients/${f.patient}`);
   const section = page.getByRole('region', { name: 'Recorded results', exact: true });
   await expect(section.getByRole('alert')).toHaveText('Stored results could not be loaded. Please retry.');
   await section.getByRole('button', { name: 'Retry stored results', exact: true }).click();

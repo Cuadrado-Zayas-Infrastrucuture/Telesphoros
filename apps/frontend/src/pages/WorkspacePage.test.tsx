@@ -35,13 +35,15 @@ const report = (status: ReportStatus, fileUploaded = true) => ({
 });
 const page = (data: unknown[]) => ({ data, meta: { page: 1, pageSize: 20, total: data.length, totalPages: data.length ? 1 : 0 } });
 
+const TWIN = { ...PATIENT, id: '2b8fad5b-d9cb-469f-a165-70867728951a', label: 'SYN-0041' };
 let listed: ReportStatus = 'received';
 let listedUploaded = true;
+let roster = [PATIENT];
 function api(roles: Role[]) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     const body = url.includes('/api/v1/patients')
-      ? page([PATIENT])
+      ? page(roster)
       : url.endsWith(`/api/v1/reports/${REPORT_ID}`)
         ? report(listed, listedUploaded)
         : url.includes('/api/v1/reports')
@@ -58,10 +60,29 @@ const file = () => document.querySelector<HTMLInputElement>('input[type=file]')!
 const CONFIRM = { name: 'I confirm this file contains synthetic data only' };
 const NOTE = 'Interpretation is not available in the prototype yet.';
 const conversation = () => screen.findByRole('region', { name: 'Conversation' });
+/** Attaches the file and nothing else: the patient choice is left as the page made it. */
+const attachOnly = () => userEvent.upload(file(), json());
+/** No patient is preselected (specs/038 D2), so a clinician chooses one. Waits for the list, since a loading select has no such option. */
+async function choosePatient(id = PATIENT.id) {
+  const picker = await screen.findByRole('combobox', { name: 'Patient' });
+  await waitFor(() =>
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .some((option) => (option as HTMLOptionElement).value === id),
+    ).toBe(true),
+  );
+  await userEvent.selectOptions(picker, id);
+}
+async function attach() {
+  await attachOnly();
+  await choosePatient();
+}
 
 beforeEach(() => {
   listed = 'received';
   listedUploaded = true;
+  roster = [PATIENT];
   vi.mocked(submitReport).mockResolvedValue({ reference: REPORT_ID });
 });
 afterEach(() => {
@@ -110,7 +131,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('preserves the unsent question and attachment across patient creation navigation', async () => {
     const { router } = open(['clinician']);
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep this draft');
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
     await addPatientFromSidebar();
     await screen.findByRole('heading', { name: 'New patient' });
@@ -137,7 +158,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('keeps a report note with its upload without treating it as an interpretation question', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.type(screen.getByRole('textbox', { name: 'Report note' }), 'Review at next visit');
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
@@ -152,7 +173,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     vi.mocked(submitReport).mockRejectedValueOnce(new Error('outside-response-not-for-display'));
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.type(screen.getByRole('textbox', { name: 'Report note' }), 'Keep this upload note');
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
@@ -168,7 +189,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('removes an attached file from its chip in the message box, with Undo', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
     const form = within(screen.getByRole('form', { name: 'Report and question' }));
     await userEvent.click(form.getByRole('button', { name: 'Remove SYN-004-cyp2c19.json' }));
@@ -184,7 +205,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     });
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
@@ -207,7 +228,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     vi.mocked(cancelOwnedUpload).mockRejectedValueOnce(new SubmitError('Cancellation is pending. Retry cancellation before starting over.'));
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
@@ -221,7 +242,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('offers no cancel for an upload that has not failed', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     expect(within(screen.getByRole('dialog', { name: 'Report details' })).queryByRole('button', { name: 'Cancel upload' })).not.toBeInTheDocument();
   });
 
@@ -255,7 +276,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('requires fresh confirmation after replacing a file', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.upload(file(), new File(['{}'], 'replacement.json'));
     expect(screen.getByRole('checkbox', CONFIRM)).not.toBeChecked();
@@ -289,11 +310,12 @@ describe('the chat-first home in every build (specs/024)', () => {
     });
     renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
     await userEvent.click(details.getByRole('button', { name: 'More patients' }));
     expect(await details.findByRole('alert')).toHaveTextContent(/patients/i);
     expect(details.getByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
+    expect(details.getByText('This report will be stored for SYN-004.')).toBeVisible();
     fail = false;
     await userEvent.click(details.getByRole('button', { name: 'Retry loading patients' }));
     expect(await details.findByRole('option', { name: 'SYN-LATER' })).toBeInTheDocument();
@@ -308,7 +330,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('opens report details over chat on attachment without starting an upload', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     const details = await screen.findByRole('dialog', { name: 'Report details' });
     expect(within(details).getByRole('combobox', { name: 'Patient' })).toBeVisible();
     expect(within(details).getByRole('checkbox', CONFIRM)).not.toBeChecked();
@@ -318,7 +340,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('keeps a dismissed attachment and requires its details to be confirmed before uploading', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await screen.findByRole('dialog', { name: 'Report details' });
     await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
     expect(screen.queryByRole('dialog', { name: 'Report details' })).toBeNull();
@@ -384,7 +406,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('opens the patient page from report details and explains the label rules there', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
     expect(await screen.findByRole('textbox', { name: 'Synthetic patient label' })).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
   });
@@ -402,7 +424,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     });
     renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
     await userEvent.type(await screen.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-NEW');
     await userEvent.click(screen.getByRole('button', { name: 'Create patient' }));
@@ -434,7 +456,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('can undo removing an unsent attachment without losing the selected patient or note, and sends nothing by itself', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     const form = within(screen.getByRole('form', { name: 'Report and question' }));
     await userEvent.type(form.getByRole('textbox', { name: 'Question' }), 'Keep this note');
     await userEvent.click(form.getByRole('button', { name: 'Remove file' }));
@@ -452,7 +474,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('expires the attachment Undo after eight seconds', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
     act(() => vi.advanceTimersByTime(7_999));
@@ -465,7 +487,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('keeps the attachment Undo while the pointer is on it and starts the clock again when the pointer leaves', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
     const notice = screen.getByRole('button', { name: 'Undo attachment removal' }).closest('[role="status"]')!;
@@ -482,7 +504,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('a replacement attachment supersedes the removed file instead of leaving an Undo that restores stale input', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await userEvent.click(screen.getByRole('button', { name: 'Remove file' }));
     await userEvent.upload(file(), new File(['{"synthetic":true}'], 'SYN-REPLACEMENT.json'));
     const form = within(screen.getByRole('form', { name: 'Report and question' }));
@@ -493,7 +515,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('needs the synthetic confirmation before it sends (D5)', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     expect(screen.getByText('Confirm the file is synthetic.')).toBeVisible();
@@ -503,7 +525,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('sends an attached JSON report once, with the confirmation, and shows it with its status word (CH-3)', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
@@ -528,7 +550,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     );
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await screen.findByRole('combobox', { name: 'Patient' });
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
@@ -548,7 +570,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('"Check status" reloads the known report and shows its new status word (CH-3)', async () => {
     const { fetchImpl } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await screen.findByRole('combobox', { name: 'Patient' });
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
     await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
@@ -597,13 +619,78 @@ describe('the chat-first home in every build (specs/024)', () => {
     );
     renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl: fetchImpl as unknown as typeof fetch });
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attachOnly();
     const retry = await screen.findByRole('button', { name: 'Retry loading patients' });
     expect(within(retry.parentElement!).getByRole('alert')).toHaveTextContent(/patients/i);
     patientsDown = false;
     await userEvent.click(retry);
-    expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
+    // The list arrives, and the choice is still the clinician's to make.
+    expect(await screen.findByRole('option', { name: 'SYN-004' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Patient' })).toHaveValue('');
     expect(screen.queryByRole('button', { name: 'Retry loading patients' })).not.toBeInTheDocument();
+  });
+
+  it('two similar patients: none is chosen for the clinician, and nothing is sent until one is (specs/038 D2)', async () => {
+    roster = [PATIENT, TWIN];
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await attachOnly();
+    const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
+    await details.findByRole('option', { name: 'SYN-0041' });
+    expect(details.getByRole('combobox', { name: 'Patient' })).toHaveValue('');
+    expect(details.getByText('No patient is chosen yet.')).toBeVisible();
+    await userEvent.click(details.getByRole('checkbox', CONFIRM));
+    await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
+    expect(details.getByText('Choose the patient first.')).toBeVisible();
+    expect(submitReport).not.toHaveBeenCalled();
+    await choosePatient(TWIN.id);
+    expect(details.getByText('This report will be stored for SYN-0041.')).toBeVisible();
+    await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
+    await waitFor(() => expect(submitReport).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(submitReport).mock.calls[0]![0].patientId).toBe(TWIN.id);
+    expect(await within(await conversation()).findByText('SYN-004-cyp2c19.json · SYN-0041')).toBeVisible();
+  });
+
+  it('an upload stays with the patient it was sent for: the choice is locked while it is sent, and a later choice does not move it', async () => {
+    roster = [PATIENT, TWIN];
+    let finish!: (value: { reference: string }) => void;
+    vi.mocked(submitReport).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await attach();
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    const thread = within(await conversation());
+    expect(await thread.findByText('SYN-004-cyp2c19.json · SYN-004')).toBeVisible();
+    // The reply is late. Meanwhile the next file is attached for the other patient.
+    await act(async () => finish({ reference: REPORT_ID }));
+    await thread.findByText('Received');
+    await userEvent.upload(file(), new File(['{"synthetic":true}'], 'SYN-0041-next.json'));
+    await choosePatient(TWIN.id);
+    expect(screen.getByText('This report will be stored for SYN-0041.')).toBeVisible();
+    expect(thread.getByText('SYN-004-cyp2c19.json · SYN-004')).toBeVisible();
+    expect(vi.mocked(submitReport).mock.calls[0]![0].patientId).toBe(PATIENT.id);
+    expect(submitReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what the chat does before anyone types: questions are not answered, and the supported tasks are listed (specs/038 D3)', async () => {
+    open(['clinician']);
+    const box = await screen.findByRole('textbox', { name: 'Question' });
+    await screen.findByRole('button', { name: 'Attach a report' });
+    expect(box).toHaveAttribute('placeholder', 'Attach a report. Typed questions are not answered here.');
+    const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
+    expect(tasks.getByText(/Attach a synthetic report/)).toBeVisible();
+    expect(tasks.getByRole('link', { name: 'Open a patient' })).toHaveAttribute('href', '/patients');
+    expect(tasks.getByText(/Typed questions are not answered here\. They stay in this chat and are not saved\./)).toBeVisible();
+    expect(screen.queryByText(/ask a question/i)).toBeNull();
+  });
+
+  it('a member with no role is told the same, and is offered neither attaching nor a patient record', async () => {
+    open([]);
+    expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveAttribute('placeholder', 'Typed questions are not answered here.');
+    const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
+    expect(tasks.getAllByRole('listitem')).toHaveLength(1);
+    expect(tasks.queryByRole('link')).toBeNull();
   });
 
   it('"New chat" starts an empty conversation', async () => {
@@ -625,7 +712,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     );
     renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.upload(file(), json());
+    await attach();
     await screen.findByRole('combobox', { name: 'Patient' });
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
     await userEvent.type(await screen.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
