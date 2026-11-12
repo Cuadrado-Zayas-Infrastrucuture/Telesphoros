@@ -62,4 +62,12 @@ the host. The pilot's own README, `~/opensandbox-pilot/README.md`, holds the det
   longer match. Rebuild the image (`~/opensandbox-pilot/images/telesphoros/build.sh <clone> <ref>`) before trusting a
   result.
 
-This is an instruction, not yet an enforced control: the deny rules above do not cover it.
+`.claude/settings.json` backs it with deny rules for the ordinary ways to run code on the host: `pnpm` `test`,
+`typecheck`, `lint`, `build`, `install`, `exec` and `dlx` (tests and builds also through `--filter` or `-F`), `npx`,
+`npm` `test`, `run`, `ci` and `install`, `jest`, `vitest` and `node --test`. Like the rules above, they match the
+command as written, so `bash -c`, a script or `node path/to/file.js` still pass (see "What it does not stop"): a
+guard rail, not a boundary. They do not reach commands a script runs, such as the `pnpm` calls inside
+`scripts/staging/release/frontend.sh`, and they do not apply to commands the founder types in a terminal.
+Re-checked 2026-11-12 with the procedure above (Claude Code 2.1.310, stand-ins for `pnpm`, `npx`, `npm`, `jest`,
+`vitest` and `node`): 19 of 19 refused by the permission system; `pnpm --version`, `node --version` and `cat` of a plain
+file ran, and the stand-ins' own log shows the refused commands never started.
