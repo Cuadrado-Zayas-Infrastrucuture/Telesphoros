@@ -92,3 +92,10 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
   person makes in a browser, and the wording a pharmacist approves.
 - [x] T404 Controls, 2026-11-12, in the sealed sandbox: see the status note.
 - [ ] T405 Not done: the protocol has not been run with anyone. No browser run of any slice.
+- [x] T406 Before the pull request, 2026-11-12: replayed on `main` as one commit after slice 3 merged (#386). On that commit, in sealed
+  jobs, the verify tier, the backend PostgreSQL tier, the PostgreSQL and S3 tier (all three shards) and the worker tier passed, and the
+  secret scan found nothing. In the backend memory tier one test this slice does not touch (`test/db/readiness.pg-spec.ts`, "turns NOT
+  ready when the database disappears") ran past its 5-second timeout while three jobs shared the machine, and passed on its own. The
+  home list's link and retry button carry the control height. Read, not run: a hosted test records every request after the page is
+  idle, and the list re-reads on window focus, as the sidebar's Follow-ups count already does on that page; the status note has the
+  detail.
