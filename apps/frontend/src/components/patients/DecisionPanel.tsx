@@ -82,7 +82,15 @@ export function DecisionPanel({
       )}
       {!eligible && <p className="text-sm text-warning">New decisions are unavailable for this result. State: {history.basis.join(', ')}.</p>}
       {editing ? (
-        <DecisionForm history={history} kind={editing} initial={head} onCancel={() => reload()} onSaved={() => reload(true)} onStale={onStale} />
+        <DecisionForm
+          history={history}
+          kind={editing}
+          initial={head}
+          subject={drugPresentation({ name: result.drug }).displayName}
+          onCancel={() => reload()}
+          onSaved={() => reload(true)}
+          onStale={onStale}
+        />
       ) : (
         <div className="flex flex-wrap gap-2">
           {canWrite && (

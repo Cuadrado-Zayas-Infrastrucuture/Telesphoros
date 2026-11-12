@@ -13,6 +13,7 @@ import { when } from '@/lib/formatWhen';
 import { SubmitError } from '@/lib/api';
 import { getDemographics, getPatient, type DemographicsRead } from '@/lib/patientDemographics';
 import { PatientBanner } from '@/components/patients/PatientBanner';
+import { PatientLabelContext } from '@/lib/patientLabel';
 
 /**
  * Spec 025 T303 (PD-5): one patient's page. Its demographics as recorded now, every earlier version (readable, never overwritten), and for clinicians a
@@ -85,19 +86,24 @@ export default function PatientPage() {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <Link to="/workspace" className="inline-flex min-h-control items-center text-sm text-muted-foreground underline-offset-2 hover:underline">
-          Back to chat
-        </Link>
-        <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
-        <p className="text-sm text-muted-foreground">Synthetic patient, added {when(patient.createdAt)}.</p>
-        {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}
-        {read.kind === 'found' && version === undefined && <PatientBanner value={read.value} />}
+    <PatientLabelContext.Provider value={patient.label}>
+      <div className="flex max-w-5xl flex-col gap-6">
+        <div className="flex max-w-3xl flex-col gap-6">
+          <div className="flex flex-col gap-1">
+            <Link to="/workspace" className="inline-flex min-h-control items-center text-sm text-muted-foreground underline-offset-2 hover:underline">
+              Back to chat
+            </Link>
+            <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
+            <p className="text-sm text-muted-foreground">Synthetic patient, added {when(patient.createdAt)}.</p>
+            {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}
+            {read.kind === 'found' && version === undefined && <PatientBanner value={read.value} />}
+          </div>
+          <DemographicsSection patientId={id} read={read} version={version} canWrite={canWrite} onViewVersion={view} onSaved={reload} />
+          <MedicationsSection key={id} patientId={id} canWrite={roles.includes('clinician')} />
+        </div>
+        {/* Wider than the record above it, so a result's evidence can sit beside the result (specs/038 D7). */}
+        {(roles.includes('clinician') || roles.includes('reviewer')) && <PatientClinicalSections key={`clinical-${id}`} patientId={id} />}
       </div>
-      <DemographicsSection patientId={id} read={read} version={version} canWrite={canWrite} onViewVersion={view} onSaved={reload} />
-      <MedicationsSection key={id} patientId={id} canWrite={roles.includes('clinician')} />
-      {(roles.includes('clinician') || roles.includes('reviewer')) && <PatientClinicalSections key={`clinical-${id}`} patientId={id} />}
-    </div>
+    </PatientLabelContext.Provider>
   );
 }
