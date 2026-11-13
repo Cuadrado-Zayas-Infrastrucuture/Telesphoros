@@ -47,9 +47,14 @@ export class PostgresPatientsRepository extends PatientsRepository {
     super();
   }
 
-  list(tenantId: string, { offset, limit, order }: PageRequest, options: { includeMerged?: boolean } = {}): Promise<Page<PatientRecord>> {
+  list(tenantId: string, { offset, limit, order }: PageRequest, options: { includeMerged?: boolean; labelContains?: string } = {}): Promise<Page<PatientRecord>> {
     // The direction is one of two fixed words chosen here, never text from the request; the same index is read forward or backward, so the early stop on `seq` holds.
     const direction = order === 'desc' ? 'DESC' : 'ASC';
+    // A label search (spec 040) adds one fixed fragment chosen here; the text is always a bound parameter. `strpos`, not `LIKE`, so no character of the
+    // text is a wildcard. Without a search the statements are the same text as before.
+    const search = options.labelContains;
+    const matching = (alias: 'p' | 'q', parameter: number) => (search === undefined ? '' : ` AND strpos(lower(${alias}.label), lower($${parameter})) > 0`);
+    const searched = search === undefined ? [] : [search];
     return this.db.withTenant(tenantId, async (client) => {
       // The alias edges in force (a merge makes the source an alias of the target; nothing on the patient row changes).
       // The edges are computed once and shared by the page and the total. The total rides on the page's own statement (a scalar subquery, run once),
@@ -61,17 +66,17 @@ export class PostgresPatientsRepository extends PatientsRepository {
            .map((c) => `p.${c}`)
            .join(', ')}, e.target_patient_id::text AS merged_into,
                 (SELECT count(*)::int FROM patients q LEFT JOIN edges f ON f.source_patient_id = q.id
-                  WHERE q.tenant_id = $1 AND q.deleted_at IS NULL AND ($4::boolean OR f.source_patient_id IS NULL)) AS total
+                  WHERE q.tenant_id = $1 AND q.deleted_at IS NULL AND ($4::boolean OR f.source_patient_id IS NULL)${matching('q', 5)}) AS total
            FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
-          WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($4::boolean OR e.source_patient_id IS NULL) ORDER BY p.seq ${direction} LIMIT $2 OFFSET $3`,
-        [tenantId, limit, offset, options.includeMerged === true],
+          WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($4::boolean OR e.source_patient_id IS NULL)${matching('p', 5)} ORDER BY p.seq ${direction} LIMIT $2 OFFSET $3`,
+        [tenantId, limit, offset, options.includeMerged === true, ...searched],
       );
       if (rows.length > 0 || offset === 0) return { items: rows.map(withMergedInto), total: rows[0]?.total ?? 0 };
       const past = await client.query<{ n: number }>(
         `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1))
          SELECT count(*)::int AS n FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
-          WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($2::boolean OR e.source_patient_id IS NULL)`,
-        [tenantId, options.includeMerged === true],
+          WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($2::boolean OR e.source_patient_id IS NULL)${matching('p', 3)}`,
+        [tenantId, options.includeMerged === true, ...searched],
       );
       return { items: [], total: past.rows[0]!.n };
     });

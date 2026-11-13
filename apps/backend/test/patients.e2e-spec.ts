@@ -255,3 +255,81 @@ describe('patients: a retried create (audit item 25)', () => {
     await api().put(`${BASE}/${mine.id}`).set(bearer(token)).send({ label: 'SYN-RETRY-4B', requestId }).expect(400);
   });
 });
+
+describe('patients: search by label (spec 040)', () => {
+  const search = (token: string, query: string) => api().get(`${BASE}?${query}`).set(bearer(token));
+  const labels = (res: request.Response) => (res.body.data as { label: string }[]).map((p) => p.label);
+
+  it('finds a label that contains the text anywhere, ignoring case, and never a deleted patient', async () => {
+    const owner = await signToken({ sub: 'user-search-match', roles: ['clinician'] });
+    for (const label of ['SYN-0042', 'SYN-1042-B', 'OTHER-42X', 'syn-lower-7']) await makePatient(owner, label);
+    const gone = await makePatient(owner, 'SYN-GONE-042');
+    await api().delete(`${BASE}/${gone.id}`).set(bearer(owner)).expect(204);
+
+    expect(labels(await search(owner, 'labelContains=042').expect(200))).toEqual(['SYN-0042', 'SYN-1042-B']); // at the end and in the middle
+    expect(labels(await search(owner, 'labelContains=other').expect(200))).toEqual(['OTHER-42X']); // at the start, typed in lower case
+    expect(labels(await search(owner, 'labelContains=LOWER').expect(200))).toEqual(['syn-lower-7']); // stored in lower case, typed in upper
+    const deleted = await search(owner, 'labelContains=GONE').expect(200);
+    expect(deleted.body).toEqual({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
+  });
+
+  it('pages the matches alone: none, one, and more than one page, in either order', async () => {
+    const owner = await signToken({ sub: 'user-search-pages', roles: ['clinician'] });
+    for (let i = 1; i <= 5; i++) await makePatient(owner, `SYN-MANY-${i}`);
+    await makePatient(owner, 'SYN-ONE-1');
+    await makePatient(owner, 'SYN-NOISE-1');
+
+    expect((await search(owner, 'labelContains=NOMATCH&pageSize=2').expect(200)).body).toEqual({ data: [], meta: { page: 1, pageSize: 2, total: 0, totalPages: 0 } });
+    const one = await search(owner, 'labelContains=one&pageSize=2').expect(200);
+    expect(labels(one)).toEqual(['SYN-ONE-1']);
+    expect(one.body.meta).toEqual({ page: 1, pageSize: 2, total: 1, totalPages: 1 });
+
+    const expected = [['SYN-MANY-1', 'SYN-MANY-2'], ['SYN-MANY-3', 'SYN-MANY-4'], ['SYN-MANY-5']];
+    for (const [index, page] of expected.entries()) {
+      const res = await search(owner, `labelContains=many&pageSize=2&page=${index + 1}`).expect(200);
+      expect(labels(res)).toEqual(page);
+      expect(res.body.meta).toEqual({ page: index + 1, pageSize: 2, total: 5, totalPages: 3 });
+    }
+    const beyond = await search(owner, 'labelContains=many&pageSize=2&page=4').expect(200); // past the last match: empty, the total still counted
+    expect(beyond.body).toEqual({ data: [], meta: { page: 4, pageSize: 2, total: 5, totalPages: 3 } });
+    expect(labels(await search(owner, 'labelContains=many&order=desc').expect(200))).toEqual(['SYN-MANY-5', 'SYN-MANY-4', 'SYN-MANY-3', 'SYN-MANY-2', 'SYN-MANY-1']);
+  });
+
+  it("searches only the caller's organization, which holds the same labels as another", async () => {
+    const callers = [await signToken({ sub: 'user-search-org-a', roles: ['clinician'] }), await signToken({ sub: 'user-search-org-b', roles: ['clinician'] })];
+    const ids: string[][] = [];
+    for (const caller of callers) ids.push([(await makePatient(caller, 'SYN-T-1')).id, (await makePatient(caller, 'SYN-T-2')).id]);
+    for (const [index, caller] of callers.entries()) {
+      const res = await search(caller, 'labelContains=syn-t-').expect(200);
+      expect((res.body.data as { id: string }[]).map((p) => p.id)).toEqual(ids[index]);
+      expect(res.body.meta.total).toBe(2);
+    }
+  });
+
+  it('is read by every clinical role, and refused to a member without one, an administrator alone and no token', async () => {
+    const sub = 'user-search-roles';
+    await makePatient(await signToken({ sub, roles: ['clinician'] }), 'SYN-ROLE-1');
+    for (const roles of [['reader'], ['reviewer'], ['clinician']]) {
+      expect(labels(await search(await signToken({ sub, roles }), 'labelContains=role').expect(200))).toEqual(['SYN-ROLE-1']);
+    }
+    for (const caller of [await signToken({ sub }), await signToken({ sub, roles: ['admin'] })]) {
+      expect((await search(caller, 'labelContains=role').expect(403)).body.error.code).toBe('FORBIDDEN');
+    }
+    await api().get(`${BASE}?labelContains=role`).expect(401);
+  });
+
+  it.each([
+    ['an empty text', 'labelContains='],
+    ['a text over 40 characters', `labelContains=${'ZQX'.repeat(14)}`],
+    ['a space', 'labelContains=ZQX%20Doe'],
+    ['a wildcard', 'labelContains=ZQX%25'],
+    ['an underscore', 'labelContains=ZQX_1'],
+    ['a quote', 'labelContains=ZQX%271'],
+    ['the parameter given twice', 'labelContains=ZQX&labelContains=ZQY'],
+  ])('refuses %s with 400, naming the field and never repeating the value', async (_name, query) => {
+    const res = await search(await clinicianA(), query).expect(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.details.map((d: { field: string }) => d.field)).toContain('labelContains');
+    expect(JSON.stringify(res.body)).not.toMatch(/ZQ[XY]/);
+  });
+});

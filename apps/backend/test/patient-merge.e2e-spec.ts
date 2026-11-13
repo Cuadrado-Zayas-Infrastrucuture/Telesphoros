@@ -195,6 +195,25 @@ describe('who may propose and decide a merge', () => {
     expect(await lab.row(`SELECT count(*)::int AS n FROM patients WHERE tenant_id = $1`, [lab.tenant])).toEqual([{ n: 2 }]);
   });
 
+  it('finds a merged-away patient in a label search only when merged-away patients are asked for (spec 040 D2)', async () => {
+    const { c1, c2 } = await organization();
+    const [a, b] = [await lab.patient(c1), await lab.patient(c1)];
+    const labelOf = async (id: string) => (await lab.api().get(`/api/v1/patients/${id}`).set(bearer(c1.token)).expect(200)).body.label as string;
+    const [labelA, labelB] = [await labelOf(a), await labelOf(b)];
+    const p = await propose(c1, 'merge', a, b).expect(201);
+    await decide(c2, p.body.id, 'approved').expect(201);
+    const found = async (query: string) => (await patients(c1, query).expect(200)).body as { data: { id: string; mergedInto: string | null }[]; meta: { total: number } };
+
+    const hidden = await found(`?labelContains=${labelA}`);
+    expect(hidden.data).toEqual([]);
+    expect(hidden.meta.total).toBe(0);
+    const shown = await found(`?labelContains=${labelA}&includeMerged=true`);
+    expect(shown.data).toEqual([expect.objectContaining({ id: a, mergedInto: b })]);
+    expect(shown.meta.total).toBe(1);
+    // Control: the patient it was merged into is found as before.
+    expect((await found(`?labelContains=${labelB}`)).data.map((row) => row.id)).toEqual([b]);
+  });
+
   it('refuses new reports and identifiers on the merged-away patient, naming where they belong, and takes them on the other one', async () => {
     const { c1, c2 } = await organization();
     const [a, b] = [await lab.patient(c1), await lab.patient(c1)];

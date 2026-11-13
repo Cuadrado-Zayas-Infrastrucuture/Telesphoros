@@ -22,6 +22,8 @@ import {
   disputeCreateSchema,
   patientCreateSchema,
   patientInputSchema,
+  patientLabelSearchSchema,
+  patientListQuerySchema,
   REPORT_CONTENT_TYPES,
   REPORT_TYPES,
   reportTypeSchema,
@@ -370,5 +372,33 @@ describe('invitationCreateSchema retry id (audit item 25)', () => {
   it('refuses an id that is not a UUID and any other extra field', () => {
     for (const requestId of ['', 'abc', 5]) expect(invitationCreateSchema.safeParse({ email: 'a@example.test', roles: [], requestId }).success).toBe(false);
     expect(invitationCreateSchema.safeParse({ email: 'a@example.test', roles: [], tenantId: 't' }).success).toBe(false);
+  });
+});
+
+describe('patient search text (spec 040, PS-1 and PS-6)', () => {
+  it('takes 1 to 40 letters, digits and hyphens, unchanged', () => {
+    for (const text of ['a', 'SYN-0', '0042', '-', 'A'.repeat(40)]) expect(patientLabelSearchSchema.parse(text)).toBe(text);
+  });
+
+  it('refuses empty, too long, spaces, wildcards, quotes, names and anything not a string, and does not trim', () => {
+    for (const text of ['', 'A'.repeat(41), ' SYN', 'SYN ', 'SYN%', 'SYN_1', "S'1", 'S\\1', 'Jane Doe', ['SYN'], 7, null]) {
+      expect(patientLabelSearchSchema.safeParse(text).success, JSON.stringify(text)).toBe(false);
+    }
+  });
+
+  it('never repeats the refused text in its messages', () => {
+    for (const text of ['ZQX Doe', 'ZQX%', 'ZQX'.repeat(14)]) {
+      const result = patientLabelSearchSchema.safeParse(text);
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).not.toContain('ZQX');
+    }
+  });
+
+  it('is an optional field of the list query, which stays strict', () => {
+    expect(patientListQuerySchema.parse({})).toEqual({ page: 1, pageSize: 20, includeMerged: false, order: 'asc' });
+    expect(patientListQuerySchema.parse({}).labelContains).toBeUndefined();
+    expect(patientListQuerySchema.parse({ labelContains: 'syn-15' })).toEqual({ page: 1, pageSize: 20, includeMerged: false, order: 'asc', labelContains: 'syn-15' });
+    expect(patientListQuerySchema.safeParse({ labelContains: ['SYN', 'ONE'] }).success).toBe(false);
+    expect(patientListQuerySchema.safeParse({ labelPrefix: 'SYN' }).success).toBe(false);
   });
 });
