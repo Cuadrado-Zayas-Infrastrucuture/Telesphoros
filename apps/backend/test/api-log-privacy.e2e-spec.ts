@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -30,6 +30,12 @@ class PrivacyFaultsController {
   transport(@Res({ passthrough: true }) res: Response & { err?: Error }) {
     res.err = new Error(MARKER);
     return { status: 'synthetic' };
+  }
+
+  /** A read that takes a query (spec 040: a patient search text is part of a label). */
+  @Get('search')
+  search(@Query(new ZodValidationPipe(z.strictObject({ labelContains: z.string() }))) query: { labelContains: string }) {
+    return { status: 'synthetic', fields: Object.keys(query).length }; // a count, never the value
   }
 
   @Get(':id')
@@ -68,6 +74,8 @@ it('keeps exception contents and request values out of real filter and HTTP JSON
   await app.listen(0);
   try {
     await request(app.getHttpServer()).get('/api/v1/privacy/transport').expect(200);
+    // A successful read with a query string (spec 040: a patient search text is part of a label).
+    await request(app.getHttpServer()).get(`/api/v1/privacy/search?labelContains=${MARKER}`).expect(200);
     const res = await request(app.getHttpServer()).get(`/api/v1/privacy/${MARKER}`).set('Authorization', `Bearer ${MARKER}`).set('Cookie', `session=${MARKER}`).expect(500);
     await request(app.getHttpServer()).get(`/api/v1/privacy/${MARKER}?secret=${MARKER}`).expect(400);
     await request(app.getHttpServer()).post('/api/v1/privacy').send({ value: MARKER }).expect(500);

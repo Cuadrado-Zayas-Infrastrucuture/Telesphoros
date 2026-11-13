@@ -8,8 +8,11 @@ import { byCreatedAt, type Page, type PageRequest, type PatientRecord, slicePage
  * Phase 3 provides a database-backed implementation of this same class.
  */
 export abstract class PatientsRepository {
-  /** Merged-away patients (M2.1c-2) are left out unless `includeMerged`; each record says what it was merged into. */
-  abstract list(tenantId: string, page: PageRequest, options?: { includeMerged?: boolean }): Promise<Page<PatientRecord>>;
+  /**
+   * Merged-away patients (M2.1c-2) are left out unless `includeMerged`; each record says what it was merged into. With `labelContains` (spec 040),
+   * only the patients whose label contains that text, ignoring case, matched literally; the total counts those alone.
+   */
+  abstract list(tenantId: string, page: PageRequest, options?: { includeMerged?: boolean; labelContains?: string }): Promise<Page<PatientRecord>>;
   abstract findById(tenantId: string, id: string): Promise<PatientRecord | undefined>;
   abstract findByLabel(tenantId: string, label: string): Promise<PatientRecord | undefined>;
   abstract insert(record: PatientRecord): Promise<void>;
@@ -38,8 +41,10 @@ export class InMemoryPatientsRepository extends PatientsRepository {
     return [...this.rows.values()].filter((row) => row.tenantId === tenantId);
   }
 
-  async list(tenantId: string, page: PageRequest) {
-    return slicePage(this.owned(tenantId).sort(byCreatedAt), page);
+  async list(tenantId: string, page: PageRequest, options: { labelContains?: string } = {}) {
+    const text = options.labelContains?.toLowerCase();
+    const rows = text === undefined ? this.owned(tenantId) : this.owned(tenantId).filter((row) => row.label.toLowerCase().includes(text));
+    return slicePage(rows.sort(byCreatedAt), page);
   }
   async findById(tenantId: string, id: string) {
     const row = this.rows.get(id);
