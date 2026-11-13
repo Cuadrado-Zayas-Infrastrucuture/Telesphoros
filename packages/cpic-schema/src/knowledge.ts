@@ -60,6 +60,14 @@ const IDENTIFIER_FORMS = {
 type IdentifierField = keyof typeof IDENTIFIER_FORMS;
 const identifierSchema = (field: IdentifierField) =>
   z.string().refine((value) => IDENTIFIER_FORMS[field].real.test(value) || IDENTIFIER_FORMS[field].synthetic.test(value), `Not a valid ${field}.`);
+/**
+ * Whether a value is an RxNorm id in either form, real or "syn-": exactly what a guideline may state as its `rxcui` (spec 039). The forms
+ * stay private: `as const` does not freeze an object, and the schema reads them on every parse, so exporting them would let any consumer
+ * weaken validation for the whole process.
+ */
+export function isRxcuiForm(value: string): boolean {
+  return IDENTIFIER_FORMS.rxcui.real.test(value) || IDENTIFIER_FORMS.rxcui.synthetic.test(value);
+}
 const originSchema = z.enum(KNOWLEDGE_ORIGINS);
 
 const provenanceSchema = z.strictObject({

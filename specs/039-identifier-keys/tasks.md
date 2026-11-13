@@ -11,10 +11,11 @@ Date: 2026-11-12. `plan.md` approved by the founder on 2026-11-12, with D1 to D9
   - Done 2026-11-12: `identifier-conflicts/` (five folders and `expected.json`, the exact problems for each) and `identifier-map/` (`set/` and `expected.json`, the answer for each id). The knowledge set lives in `identifier-map/set/` because the loader refuses any other file at a set's top level. Checked in a sealed job: with today's loader all six sets load, so each conflict set fails only for its one conflict; with the T1 throwaway rules, each folder's problems equal `expected.json` exactly.
 - [x] T3 Write the new and added specs; run them and see them fail for the right reason.
   - Done 2026-11-12, run in a sealed job against the code as it is. `knowledge-loader.spec.ts`: the 53 existing cases pass; of the 12 added, 10 fail for the reason they test (no problem reported for each conflict in either mode, nothing refused for IK-8, one shared test id for 4 drugs for IK-7) and 2 pass (the answers file is complete; the control loads). `knowledge-set.spec.ts`: all 5 fail (`drugForRxcui is not a function`; the constructor does not throw). `identifier-map.spec.ts`: the suite cannot find `./identifier-map`. `identifier-map-boundary.spec.ts`: the module is missing (ENOENT); the walker controls pass, and so do the two fences, which hold today and are shown able to fail in T8. `cpic-schema.test.ts`: 3 fail (`isRxcuiForm is not a function`), and the test that the forms stay private passes, as it does today.
-- [ ] T4 Add `isRxcuiForm` to `packages/cpic-schema`, and change `toSchema13` (IK-7).
-- [ ] T5 The four loader rules (IK-1, IK-2).
-- [ ] T6 The four knowledge-set lookups (IK-3).
-- [ ] T7 `identifier-map.ts` and its boundary spec (IK-4 to IK-6).
+- [x] T4 Add `isRxcuiForm` to `packages/cpic-schema`, and change `toSchema13` (IK-7).
+- [x] T5 The four loader rules (IK-1, IK-2).
+- [x] T6 The four knowledge-set lookups (IK-3).
+- [x] T7 `identifier-map.ts` and its boundary spec (IK-4 to IK-6).
+  - T4 to T7 done 2026-11-12. In a sealed job: `cpic-schema.test.ts` 69 of 69; the 8 suites under `services/knowledge` 134 of 134; the backend default tier 169 suites and 2,290 tests passed, none failed (32 suites skipped without Postgres; 33 tests more than T1's run, which is the number added); the workspace typecheck exit 0; eslint on `services/knowledge` and the helper exit 0; prettier clean on every changed file. The Postgres tier runs in T9.
 - [ ] T8 Deliberate breakages, one at a time, in a job.
 - [ ] T9 Full local loop in sealed jobs, including the database and storage tier; gitleaks.
 - [ ] T10 Verification record and clinical validation note.

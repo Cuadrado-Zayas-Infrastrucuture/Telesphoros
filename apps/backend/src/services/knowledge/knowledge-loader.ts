@@ -128,6 +128,7 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
     if (strict) checkCoverage(path, file, geneMaps, problems);
     checkSupersession(path, file, guidelineById, supersededBy, problems);
   }
+  checkIdentifierKeys(candidates, problems);
 
   if (problems.length > 0) throw new KnowledgeLoadError(problems);
 
@@ -184,6 +185,40 @@ function checkSupersession(path: string, file: GuidelineFile, byId: ReadonlyMap<
     const other = supersededBy.get(id);
     if (other !== undefined && other !== file.id) problems.push(`${path}: "${id}" is already superseded by "${other}".`);
     supersededBy.set(id, file.id);
+  }
+}
+
+/**
+ * Spec 039 IK-1 and IK-2, in every mode: an RxNorm id names one drug and an HGNC id one gene, a drug states one RxNorm id in all its files,
+ * and a drug is identified in all its files or in none (all schema 1.3, or all 1.2). Without these, a lookup by id would pick whichever file
+ * came last. Each problem names the drug and both files, never an id: the drug name is already a closed lower-case form.
+ */
+function checkIdentifierKeys(candidates: readonly Candidate[], problems: string[]): void {
+  const rxcuiOfDrug = new Map<string, { rxcui: string; path: string }>();
+  const drugOfRxcui = new Map<string, { drug: string; path: string }>();
+  const geneOfHgnc = new Map<string, { gene: string; path: string }>();
+  const versionOfDrug = new Map<string, { version: string; path: string }>();
+  for (const { path, file } of candidates) {
+    if (file.kind === 'gene-phenotype-map') {
+      if (file.schemaVersion !== '1.3' || file.hgncId === undefined) continue;
+      const owner = geneOfHgnc.get(file.hgncId);
+      if (owner === undefined) geneOfHgnc.set(file.hgncId, { gene: file.gene, path });
+      else if (owner.gene !== file.gene) problems.push(`${owner.path} and ${path} state the same HGNC id for two genes.`);
+      continue;
+    }
+    const first = versionOfDrug.get(file.drug);
+    if (first === undefined) versionOfDrug.set(file.drug, { version: file.schemaVersion, path });
+    else if (first.version !== file.schemaVersion) {
+      const [older, newer] = first.version === '1.2' ? [first.path, path] : [path, first.path];
+      problems.push(`drug "${file.drug}": ${older} is schema 1.2 and ${newer} is 1.3; a drug is identified in all its files or in none.`);
+    }
+    if (file.schemaVersion !== '1.3' || file.rxcui === undefined) continue;
+    const stated = rxcuiOfDrug.get(file.drug);
+    if (stated === undefined) rxcuiOfDrug.set(file.drug, { rxcui: file.rxcui, path });
+    else if (stated.rxcui !== file.rxcui) problems.push(`drug "${file.drug}": ${stated.path} and ${path} state different RxNorm ids.`);
+    const owner = drugOfRxcui.get(file.rxcui);
+    if (owner === undefined) drugOfRxcui.set(file.rxcui, { drug: file.drug, path });
+    else if (owner.drug !== file.drug) problems.push(`${owner.path} and ${path} state the same RxNorm id for two drugs.`);
   }
 }
 
