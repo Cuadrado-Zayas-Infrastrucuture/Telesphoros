@@ -32,6 +32,25 @@ const REACHES_APPLICATION = [...APPLICATION_ROLES, 'public'];
 /** `tenant_id = (SELECT app_tenant())`, or the capability-bound `app_tenant_bound()`, as PostgreSQL prints it back. */
 const TENANT_PREDICATE = /\(tenant_id = \( SELECT app_tenant(?:_bound)?\(\) AS app_tenant\)\)/;
 
+/**
+ * The only functions an application role may run that read the tenant or actor setting themselves. Each is a binding primitive: it compares the
+ * setting with the capability, so a setting that names another organization binds nothing. Every other function takes the organization and the
+ * person from these, so the capability check and the suspended-organization stop (0047) cannot be skipped by calling it with a setting.
+ */
+const READS_SETTING: Readonly<Record<string, string>> = {
+  'app_actor()': '0028: the person behind the binding; reads the setting only in guc and dual mode with no capability, and refuses a setting that disagrees with the capability',
+  'app_capability_version()': '0031: the membership version of the capability; refuses a setting that disagrees with the capability',
+  'app_tenant_bound()': '0047: the organization behind the binding, as app_actor(); app_tenant() reads it and adds the active check',
+};
+/** Functions in `public` that an application role may execute and whose body reads `app.current_tenant_id` or `app.current_actor`. */
+const SETTING_READERS = `SELECT DISTINCT p.oid::regprocedure::text AS fn
+  FROM pg_proc p
+ WHERE p.pronamespace = 'public'::regnamespace
+   AND p.prosrc ~ $1
+   AND EXISTS (SELECT 1 FROM unnest($2::text[]) r(rolname) WHERE has_function_privilege(r.rolname, p.oid, 'EXECUTE'))
+ ORDER BY 1`;
+const READS_TENANT_OR_ACTOR = String.raw`current_setting\(\s*'app\.(current_tenant_id|current_actor)'`;
+
 interface TenantTable {
   relname: string;
   owner: string;
@@ -131,6 +150,13 @@ describe('tenant isolation holds for every table with a tenant_id column, whiche
     expect(views.map((v) => v.relname)).toContain('structured_report_findings');
     expect(views.filter((v) => v.relkind !== 'v' || !(v.reloptions ?? []).includes('security_invoker=true')).map((v) => v.relname)).toEqual([]);
   });
+
+  it('no function an application role can run reads the tenant or actor setting itself, except the binding primitives, each with its reason', async () => {
+    for (const reason of Object.values(READS_SETTING)) expect(reason).toMatch(/^\d{4}: \S/);
+    const readers = await q<{ fn: string }>(SETTING_READERS, [READS_TENANT_OR_ACTOR, [...APPLICATION_ROLES]]);
+    // Both directions, as for NOT_FORCED: a new reader fails, and so does a primitive that stopped reading the setting or was dropped.
+    expect(readers.map((r) => r.fn)).toEqual(Object.keys(READS_SETTING).sort());
+  });
 });
 
 describe('controls: the guard goes red on the mistakes it exists to catch', () => {
@@ -192,5 +218,21 @@ describe('controls: the guard goes red on the mistakes it exists to catch', () =
     const [policy] = added as [Policy];
     expect(reachesApplication(policy)).toBe(true);
     expect(tenantBound(policy)).toBe(false);
+  });
+
+  const readersIn = async (c: Client) => (await c.query<{ fn: string }>(SETTING_READERS, [READS_TENANT_OR_ACTOR, [...APPLICATION_ROLES]])).rows.map((r) => r.fn);
+  const RAW_READER = `CREATE FUNCTION zz_control_reader() RETURNS text LANGUAGE sql AS $$ SELECT current_setting('app.current_tenant_id', true) $$;
+    REVOKE ALL ON FUNCTION zz_control_reader() FROM PUBLIC;`;
+
+  it('a function the application can run that reads the setting itself is found', async () => {
+    const found = await inRollback(`${RAW_READER} GRANT EXECUTE ON FUNCTION zz_control_reader() TO telesphoros_app;`, readersIn);
+    expect(found).toContain('zz_control_reader()');
+    expect(found).not.toEqual(Object.keys(READS_SETTING).sort());
+  });
+
+  it('the same function is not counted while no application role can run it (the privilege filter is real)', async () => {
+    const found = await inRollback(RAW_READER, readersIn);
+    expect(found).not.toContain('zz_control_reader()');
+    expect(found).toEqual(expect.arrayContaining(Object.keys(READS_SETTING))); // and the primitives are still seen beside it
   });
 });

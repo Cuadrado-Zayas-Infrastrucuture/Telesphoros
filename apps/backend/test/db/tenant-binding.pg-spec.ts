@@ -107,6 +107,15 @@ describe('T020: every tenant-setting policy reads the capability, for every role
     expect(await owner((c) => c.query(`SELECT count(*)::int AS n FROM ledger_events WHERE tenant_id = 'org-beta'`))).toMatchObject({ rows: [{ n: 0 }] });
   });
 
+  it.each([
+    ['two-argument', `SELECT outbox_append('report.file-committed', gen_random_uuid())`],
+    ['three-argument (0075)', `SELECT outbox_append('report.file-committed', gen_random_uuid(), 'req-binding-0002')`],
+  ])('a forged setting for org-beta beside an org-alpha capability cannot append an outbox event through the %s form', async (_form, sql) => {
+    const { token: alpha } = await issueCurrent('org-alpha', 'alice');
+    expect(await code(as(db.appUrl, { 'app.capability': alpha, 'app.current_tenant_id': 'org-beta', 'app.current_actor': 'mallory' }, (c) => c.query(sql)))).toBe('42501');
+    expect(await code(as(db.appUrl, { 'app.capability': alpha }, (c) => c.query(sql)))).toBe('ok'); // positive control: the capability alone appends
+  });
+
   it('without a capability, dual keeps the setting path (the control: the same forged setting reads beta, which is the fallback slice 6 removes)', async () => {
     expect(await scalar<number>(db.appUrl, { 'app.current_tenant_id': 'org-beta' }, 'SELECT count(*)::int FROM patients')).toBe(1);
   });
