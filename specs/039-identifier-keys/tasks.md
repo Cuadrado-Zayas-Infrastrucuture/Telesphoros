@@ -2,10 +2,10 @@
 
 Date: 2026-11-12. None may start until `plan.md` is approved.
 
-- [ ] T1 In a job, check that no existing test loads 1.2 and 1.3 guideline files of one drug into one set (IK-2); stop and report if one does.
-- [ ] T2 Write the conflict fixtures and `identifier-map/expected.json` by hand; commit them before any code.
+- [ ] T1 In a job, with IK-1 and IK-2 applied as a throwaway patch and the helper unchanged, list every existing test they refuse, and every test that pins the content hash of a signed test copy; stop and report anything beyond the signed copies IK-7 names.
+- [ ] T2 Write the conflict fixtures and `identifier-map/` by hand; commit them before any code.
 - [ ] T3 Write the new and added specs; run them and see them fail for the right reason.
-- [ ] T4 Export `IDENTIFIER_FORMS` from `packages/cpic-schema`.
+- [ ] T4 Add `isRxcuiForm` to `packages/cpic-schema`, and change `toSchema13` (IK-7).
 - [ ] T5 The four loader rules (IK-1, IK-2).
 - [ ] T6 The four knowledge-set lookups (IK-3).
 - [ ] T7 `identifier-map.ts` and its boundary spec (IK-4 to IK-6).

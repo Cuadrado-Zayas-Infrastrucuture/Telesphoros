@@ -1,7 +1,7 @@
 # Plan: identifier keys for drugs and genes (spec 039)
 
 Date: 2026-11-12
-Status: NOT approved. Written with D1 to D5 as recommended; a different answer changes the parts named under each decision in `spec.md`.
+Status: NOT approved. Written with D1 to D7 as recommended; a different answer changes the parts named under each decision in `spec.md`.
 
 ## What exists, read for this plan at `ed9268a5`
 
@@ -17,13 +17,14 @@ Status: NOT approved. Written with D1 to D5 as recommended; a different answer c
 
 ## The changes
 
-1. **`packages/cpic-schema/src/knowledge.ts`**: `export` before `const IDENTIFIER_FORMS`. Nothing else, so every hash and parse is unchanged.
+1. **`packages/cpic-schema/src/knowledge.ts`**: a new exported function, `isRxcuiForm(value: string): boolean`, true when the value matches either form in `IDENTIFIER_FORMS.rxcui`. The constant stays private: `as const` does not freeze an object, and the schema reads it on every parse, so exporting it would let any consumer weaken validation for the whole process. Every hash and parse is unchanged.
 2. **`knowledge-loader.ts`**: after the existing per-file checks, three cross-file rules (IK-1) and one (IK-2), each a problem naming both files: `drug "<name>": <a> and <b> state different RxNorm ids.`, `<a> and <b> state the same RxNorm id for two drugs.`, `<a> and <b> state the same HGNC id for two genes.`, `drug "<name>": <a> is schema 1.2 and <b> is 1.3; a drug is identified in all its files or in none.` A drug name is already a closed lower-case form (`drugNameSchema`), so naming it prints no content. Run in every mode, before the set is built.
-3. **`knowledge-set.ts`**: four read-only lookups (IK-3): `drugForRxcui(id)`, `rxcuiOfDrug(drug)`, `geneForHgnc(id)`, `hgncOfGene(gene)`, built once in the constructor from 1.3 files only. Plain `Map` lookups by exact key.
-4. **`services/knowledge/identifier-map.ts`** (new, IK-4, IK-5): `mapRxNormIngredients(knowledge, ids: readonly string[]): IngredientMatch[]`, where `IngredientMatch` is `{ rxcui, status: 'matched', drug, guidelines: string[] }` or `{ rxcui, status: 'not-matched', reason: 'no-identified-guideline' | 'invalid-identifier' }`. The form check uses `IDENTIFIER_FORMS.rxcui`: synthetic form when every file of the set is synthetic, real form otherwise. `guidelines` are the ids of the drug's guideline files, sorted, superseded ones included and marked as the set marks them today (the caller decides which apply, as the engine does). No import but `KnowledgeSet` and `@telesphoros/cpic-schema`.
-5. **`services/knowledge/identifier-map-boundary.spec.ts`** (new, IK-6): the module's imports are only those two; no file outside `services/knowledge` imports it. The walker recognises `import`, `import type`, `require` and a bare `import '…'`.
+3. **`knowledge-set.ts`**: four read-only lookups (IK-3): `drugForRxcui(id)`, `rxcuiOfDrug(drug)`, `geneForHgnc(id)`, `hgncOfGene(gene)`, built once in the constructor from 1.3 files only. Plain `Map` lookups by exact key. The constructor throws when the files break IK-1, because two callers build a set without the loader (`dispute-overlay.ts:85`, `test/helpers/report-lookup.ts:85`) and a `Map` would otherwise keep the last file silently. The loader reports the same conflict first, as a problem naming the files, so a loaded set never reaches that throw.
+4. **`services/knowledge/identifier-map.ts`** (new, IK-4): `mapRxNormIngredients(knowledge, ids: readonly string[]): IngredientMatch[]`, where `IngredientMatch` is `{ rxcui, status: 'matched', drug, guidelines: { id: string; supersededBy: string | null }[] }` or `{ rxcui, status: 'not-matched', reason: 'no-identified-guideline' | 'invalid-identifier' }`. An id is well formed when `isRxcuiForm` accepts it, in either form, whatever the set holds; a well-formed id no guideline states is `no-identified-guideline`, in a synthetic, real, mixed or empty set alike. `guidelines` lists every guideline file of the drug, sorted by id, with `supersededBy` worked out from the `supersedes` fields of the set's files, as the engine does (`recommendation-engine.ts:59`), so a caller cannot take a superseded file for a current one. No import but `KnowledgeSet` and `@telesphoros/cpic-schema`.
+5. **`services/knowledge/identifier-map-boundary.spec.ts`** (new, IK-6): the module imports only those two; no file outside `services/knowledge` imports it or names `drugForRxcui`, `rxcuiOfDrug`, `geneForHgnc` or `hgncOfGene`; no file under `patient-medications/` imports from `services/`. The walker reads `import`, `import type`, `export … from`, `require`, dynamic `import()` and a bare `import '…'`, and a control file proves each form is seen.
+6. **`apps/backend/test/helpers/knowledge.ts`** (IK-7): `toSchema13` gives each drug name and each gene symbol its own real-form id beyond any assigned range, derived from the name so the same drug always gets the same id: `99` followed by ten digits for an RxNorm id, `HGNC:9` followed by six digits for an HGNC id, with a check that two names never share one. `TEST_REAL_FORM_IDS` keeps its values for the tests that name them.
 
-Not changed: the engine, `identifiersFor`, every migration and stored row, the ledger, the medications module and its MD-6 spec, the front end, `knowledge/cpic/`, every existing fixture.
+Not changed: the engine, `identifiersFor`, every migration and stored row, the ledger, the medications module and its MD-6 spec, the front end, `knowledge/cpic/`, every committed fixture.
 
 ## Fixtures (invented, written before the code)
 
@@ -37,21 +38,24 @@ Not changed: the engine, `identifiersFor`, every migration and stored row, the l
 | `half-identified-drug/` | a 1.2 and a 1.3 guideline for `drugq` | refused, IK-2 |
 | `control/` | a 1.3 drug with two guideline files and the same `rxcui`, and a 1.3 guideline over a 1.2 gene map | loads; the second has no identifiers on its results, as today |
 
-`data/fixtures/knowledge/identifier-map/expected.json`: the invented id list and, for each, the hand-written answer against `synthetic-identifiers` plus the `control` set: matched ids; an id no guideline states; the id of a drug that exists only by name in a 1.2 set; a digits id against a synthetic set (`invalid-identifier`); for IK-5, a set built in the test from real-form invented ids (the `TEST_REAL_FORM_IDS` pattern spec 033's tests use) and a second digits id standing for a multiple-ingredient product (`no-identified-guideline`, the same path as any id no guideline states); a malformed id; a repeated id; and a name that equals a guideline's drug passed as an id (`not-matched`).
+`data/fixtures/knowledge/identifier-map/`: a small invented 1.3 set and `expected.json`, the invented id list with the hand-written answer for each. The set holds a drug with a superseded file and its successor, and a drug whose name is spelled like an id (`syn-rxcui-drugr`, which the drug-name schema allows) but whose `rxcui` is another value. The list holds: matched ids; an id no guideline states; the id spelled like that drug's name (`no-identified-guideline`, which a name fallback would match); a well-formed digits id, which this synthetic set does not hold (`no-identified-guideline`); a malformed id (`invalid-identifier`); a plain drug name (`invalid-identifier`); and a repeated id. A drug known only from a 1.2 file is checked against the `control` set.
 
 ## Tests, written first and seen to fail
 
 | Spec | Covers |
 | --- | --- |
 | `knowledge-loader.spec.ts` (added cases) | IK-1, IK-2: each conflict fixture refused with its rule; `control` loads; every existing case unchanged |
-| `knowledge-set.spec.ts` (new or added) | IK-3: the four lookups, exact match, no case folding, 1.2-only drug has no id, unknown id has no drug |
-| `identifier-map.spec.ts` (new) | IK-4, IK-5, IK-8, IK-9: the expected answers; order kept; repeated ids; nothing logged; same answers whatever order the files are read in |
-| `identifier-map-boundary.spec.ts` (new) | IK-6 |
-| existing suites | IK-7: pinned hashes, set ids, engine and MD-6 specs pass unchanged |
+| `knowledge-set.spec.ts` (new or added) | IK-3: the four lookups, exact match, no case folding, 1.2-only drug has no id, unknown id has no drug; a set built directly that breaks IK-1 throws |
+| `identifier-map.spec.ts` (new) | IK-4, IK-8, IK-9: the expected answers; order kept; repeated ids; superseded files marked; nothing logged; the same answers from a `KnowledgeSet` built with its files in reversed order (the loader sorts files before reading, `knowledge-loader.ts:201-208`, so order is tested on the set itself) |
+| `identifier-map-boundary.spec.ts` (new) | IK-6, with a control file for each import form |
+| `test/helpers/knowledge.ts` callers | IK-7: every signed test copy loads under IK-1; two drugs never share a test id |
+| existing suites | IK-7: pinned hashes, set ids, engine and MD-6 specs pass, unchanged except for the helper |
+
+IK-5 has no test of its own: the mapping cannot tell a combination product's id from an ingredient's, so a test of it would run the same path as any unknown id and could not fail. It is a curation rule, recorded in the clinical validation note.
 
 ## Deliberate breakages
 
-One at a time, in a sealed job, after a control run that must pass: each of the four loader rules removed; each lookup made case-insensitive; the mapping falling back to a name match; the form check removed; the order of answers changed; a forbidden import added to the mapping module; the boundary walker missing a bare import. Expected survivors named before the run.
+One at a time, in a sealed job, after a control run that must pass: each of the four loader rules removed; the constructor's conflict check removed; each lookup made case-insensitive; the mapping falling back to a name match; the form check removed; `supersededBy` always null; the order of answers changed; a forbidden import added to the mapping module; a lookup called outside `services/knowledge`; a `services/` import in a medication file; the boundary walker missing each import form; the helper giving every drug one id again. Expected survivors named before the run.
 
 ## Verification
 
@@ -59,4 +63,4 @@ In sealed jobs, never on the host: the new and changed specs; `pnpm typecheck`, 
 
 ## Not in this slice
 
-Any caller of the mapping; spec 031's flags; HGNC ids on stored gene states (D3); asking the engine by id (D5); splitting combination products (D2); real identifiers; the private repository.
+Any caller of the mapping; spec 031's flags and their clinical sign-off (D7); HGNC ids on stored gene states (D3); asking the engine by id (D5); splitting combination products (D2); recording an RxNorm release on guidelines (D6); real identifiers; the private repository, which runs its whole loop again when it next merges public.
