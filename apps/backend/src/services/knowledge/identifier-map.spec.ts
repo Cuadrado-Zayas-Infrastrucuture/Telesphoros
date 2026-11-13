@@ -36,6 +36,25 @@ describe('mapRxNormIngredients (spec 039 IK-4)', () => {
     });
   });
 
+  it('sorts the files by id, whatever order the knowledge set holds them in', async () => {
+    const set = await mapSet();
+    // The set orders a drug's files by their genes. Give the combined table an id that sorts first, so the two orders differ.
+    const guidelines = set.allGuidelines().map((file) => (file.id === 'drugz-genea-geneb' ? { ...file, id: 'drugz-combined' } : file));
+    const renamed = new KnowledgeSet(set.id, set.mode, set.allGeneMaps(), guidelines, set.files);
+    expect(renamed.guidelinesForDrug('drugz').map((file) => file.id)).toEqual(['drugz-genea', 'drugz-combined']);
+    expect(mapRxNormIngredients(renamed, ['syn-rxcui-drugz'])).toEqual([
+      {
+        rxcui: 'syn-rxcui-drugz',
+        status: 'matched',
+        drug: 'drugz',
+        guidelines: [
+          { id: 'drugz-combined', supersededBy: null },
+          { id: 'drugz-genea', supersededBy: 'drugz-combined' },
+        ],
+      },
+    ]);
+  });
+
   it('never matches a drug by its name, even a name spelled like an identifier', async () => {
     const answers = mapRxNormIngredients(await mapSet(), ['syn-rxcui-drugr', 'drugq', 'drugz']);
     expect(answers).toEqual([
@@ -122,6 +141,8 @@ describe('mapRxNormIngredients: no content, no logging, the same answers every t
     expect(mapRxNormIngredients(set, expected.ids)).toEqual(mapRxNormIngredients(set, expected.ids));
     // The loader sorts the files it reads, so order is tested on the set itself.
     const reversed = new KnowledgeSet(set.id, set.mode, [...set.allGeneMaps()].reverse(), [...set.allGuidelines()].reverse(), [...set.files].reverse());
+    // Against the same set's answers as well as the written ones: reversing can happen to restore the written order, and still differ.
+    expect(mapRxNormIngredients(reversed, expected.ids)).toEqual(mapRxNormIngredients(set, expected.ids));
     expect(mapRxNormIngredients(reversed, expected.ids)).toEqual(expected.answers);
   });
 
