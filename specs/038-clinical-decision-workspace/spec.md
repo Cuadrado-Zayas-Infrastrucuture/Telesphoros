@@ -105,6 +105,20 @@ Findings F08 and F09 of the audit have no public contract and are not part of th
   route is switched off (503 `PIPELINE_DISABLED`) instead of retrying. The explicit "Reviewed" control of specs/019 is **not** adopted
   here: where an acknowledgement sits beside a decision is a product decision.
 
+## Decisions, slice 4 (`feat/clinical-workspace-4-home-and-protocol`)
+
+- **D19, the home lists the work the API can list (F14, home).** The chat's welcome shows, to the roles that read follow-ups, the open
+  follow-ups assigned to the person signed in: patient, medication, when the reminder is due and in which timezone, and the way to open
+  it. It is the first three from the inbox's own read; the full list and its filters stay in the sidebar. An overdue reminder is a late
+  task, and the section says it is not a clinical warning. No score ranks anything. **Results on hold and results whose guidelines have
+  changed are not listed on the home**: results can be read across patients one page at a time, with no way to ask for only those, so a
+  list built in the browser would be silently incomplete; see [dependencies.md](dependencies.md), entry 3.
+- **D20, accessibility is tested where a rule can test it, and said to be unproven where it cannot.** The changed tasks carry automated
+  checks (`vitest-axe` on the home, the patient page with a result and the decision form open, and the source conflict), a keyboard test
+  of the result rows, and a focus test of the line that reports the follow-up step's outcome. Contrast, reflow, zoom, real focus order
+  and a screen reader's reading need a browser and a person; the protocol is in
+  [clinical-workspace-usability-protocol.md](../../docs/design/clinical-workspace-usability-protocol.md).
+
 ## Out of scope
 
 Server-side patient search (no contract exists: `patientListQuerySchema` has `page`, `pageSize`, `includeMerged`, `order`); a unified
