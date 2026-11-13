@@ -1,15 +1,15 @@
 # Plan: patient search on the server (spec 040)
 
 Date: 2026-11-13
-Status: draft, waiting for the founder's approval. Written with D1 to D5 as recommended in `spec.md`; a different answer changes the parts
-named under each slice below. No code until the plan is approved; `tasks.md` follows the approval.
+Status: approved by the founder on 2026-11-13, with D1 to D5 as recommended ("Approve as recommended"). Written with them; a different
+answer would change the parts named under each slice below.
 
 ## What exists, read for this plan at `a4de0bee`
 
 | Piece | Where | What matters here |
 | --- | --- | --- |
 | List query schema | `packages/shared-types/src/patient-merge.ts:70-78` | `patientListQuerySchema` extends `paginationQuerySchema` with `includeMerged` and `order`. Lives in the merge file, which is why dependencies.md names it |
-| Pagination | `packages/shared-types/src/pagination.ts:7-10`, `:17`, `:34-36` | `z.strictObject` (unknown keys refused, if `.extend()` keeps it: PS-6, first task); `listOrderSchema`; `buildMeta` |
+| Pagination | `packages/shared-types/src/pagination.ts:7-10`, `:17`, `:34-36` | `z.strictObject`: unknown keys refused, and `.extend()` keeps it (`patients.e2e-spec.ts:215` refuses `sort=label`); `listOrderSchema`; `buildMeta` |
 | Label alphabet | `packages/shared-types/src/patient.ts:9-14` | Trimmed, 1 to 40, `^[A-Za-z0-9-]+$`. dependencies.md said 1 to 64; no label is longer than 40, so a longer text could match nothing |
 | Controller | `apps/backend/src/patients/patients.controller.ts:30-35` | `@Roles(...CLINICAL_READ_ROLES)`, `ZodValidationPipe(patientListQuerySchema)`, passes the whole query to the service |
 | Read roles | `apps/backend/src/auth/clinical-read.ts` | `reader`, `clinician`, `reviewer`; `admin` is not a clinical role |
@@ -51,7 +51,7 @@ named under each slice below. No code until the plan is approved; `tasks.md` fol
 
 | Test | Where | Covers |
 | --- | --- | --- |
-| T0 An unknown parameter is refused, not ignored | `patients.e2e-spec.ts` (new case) | PS-6. Written and run against the API at `a4de0bee` before any change: `?labelContains=SYN` and `?search=SYN` both 400 there, and the result goes in the verification record. Kept afterwards with `?search=SYN` only, so the next parameter is held to the same rule. If either answers 200 at `a4de0bee`, stop: an older API ignores the parameter, the front end cannot tell its page from a search result, and that comes back to the founder as a decision before any code |
+| T0 An older API refuses the parameter | `patients.e2e-spec.ts:215` (existing) and a one-off probe | PS-6. The existing case already holds the rule for any unknown parameter (`sort=label`) and stays. Before any change, `?labelContains=SYN` is sent to the API at `a4de0bee` on both tiers and its 400 goes in the verification record. If it answers 200, stop: an older API ignores the parameter, the front end cannot tell its page from a search result, and that comes back to the founder as a decision before any code |
 | T1 The rule, in the shared schema | `packages/shared-types/src/shared-types.test.ts` (added cases) | PS-1. Accepts `a`, `SYN-0`, 40 characters. Refuses empty, 41 characters, ` SYN`, `SYN%`, `SYN_1`, `S'1`, `Jane Doe`, an array |
 | T2 Matching | `patients.e2e-spec.ts` | PS-2. Matches in the middle and at the end of a label; ignores case both ways; a deleted patient never matches |
 | T3 Paging | `patients.e2e-spec.ts` | PS-3. With `pageSize=2`: a text matching 0 (200, empty, total 0), 1, and 5 patients (pages 1 to 3, `totalPages` 3, page 4 empty with total 5); `order=desc` reverses the matches |
@@ -75,7 +75,7 @@ One at a time, in a sealed job, after a control run that must pass. Each must tu
 | `lower()` dropped on either side | T2 (case) |
 | `strpos` replaced by `LIKE $5 || '%'` without escaping | T8 (`%` matches everyone) |
 | The schema's alphabet widened to allow `%` and `_` | T1 |
-| The list's query schema made non-strict | T0 |
+| The list's query schema made non-strict | T0 (`patients.e2e-spec.ts:215`) |
 | `includeMerged` ignored when searching | T7 |
 | The request serializer given the URL | T10 |
 
