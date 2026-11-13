@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -42,21 +42,37 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
 }
 
 /**
- * Real-form identifiers for signed-off test copies. Each is beyond any range RxNorm, HGNC or PharmVar has assigned, so no test
- * names a real drug, gene or release. A non-synthetic file must use the real form (spec 033 D1).
+ * The real-form PharmVar release for signed-off test copies, beyond any release PharmVar has made, so no test names a real one. A
+ * non-synthetic file must use the real form (spec 033 D1).
  */
-export const TEST_REAL_FORM_IDS = { rxcui: '999999999999', hgncId: 'HGNC:9999999', pharmvarVersion: '999.0.0' } as const;
+export const TEST_REAL_FORM_IDS = { pharmvarVersion: '999.0.0' } as const;
 
-/** Adds the schema 1.3 fields to a schema 1.2 file, with real-form test identifiers and origin "cpic". */
+const testIdOwners = new Map<string, string>();
+/**
+ * A real-form id for a drug or a gene of a signed-off test copy, beyond any range RxNorm or HGNC has assigned, so no test names a real
+ * drug or gene: "99" and ten digits, or "HGNC:9" and six. Derived from the name, so a drug keeps its id in every copy, and each drug and
+ * each gene gets its own: one id for all of them would break spec 039 IK-1 (IK-7). Two names that came out the same fail here.
+ */
+function testIdFor(kind: 'rxcui' | 'hgncId', name: string): string {
+  const width = kind === 'rxcui' ? 10 : 6;
+  const number = parseInt(createHash('sha256').update(`${kind}:${name}`).digest('hex').slice(0, 12), 16) % 10 ** width;
+  const id = `${kind === 'rxcui' ? '99' : 'HGNC:9'}${String(number).padStart(width, '0')}`;
+  const owner = testIdOwners.get(id);
+  if (owner !== undefined && owner !== name) throw new Error(`Test ids collide: ${owner} and ${name} both get ${id}. Rename one of them.`);
+  testIdOwners.set(id, name);
+  return id;
+}
+
+/** Adds the schema 1.3 fields to a schema 1.2 file, with real-form test identifiers of its own and origin "cpic". */
 function toSchema13(file: KnowledgeFile): void {
   if (file.schemaVersion !== '1.2') return;
   file.schemaVersion = '1.3';
   if (file.kind === 'gene-phenotype-map') {
-    file.hgncId = TEST_REAL_FORM_IDS.hgncId;
+    file.hgncId = testIdFor('hgncId', file.gene);
     file.origin = 'cpic';
     if (file.alleles !== undefined) file.pharmvarVersion = TEST_REAL_FORM_IDS.pharmvarVersion;
   } else {
-    file.rxcui = TEST_REAL_FORM_IDS.rxcui;
+    file.rxcui = testIdFor('rxcui', file.drug);
     for (const row of file.recommendations) row.origin = 'cpic';
   }
 }

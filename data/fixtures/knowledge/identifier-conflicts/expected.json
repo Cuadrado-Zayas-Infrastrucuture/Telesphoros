@@ -1,0 +1,15 @@
+{
+  "one-drug-two-ids": [
+    "drug \"drugq\": guidelines/drugq-genea.json and guidelines/drugq-geneb.json state different RxNorm ids."
+  ],
+  "two-drugs-one-id": [
+    "guidelines/drugq-genea.json and guidelines/drugr-genea.json state the same RxNorm id for two drugs."
+  ],
+  "two-genes-one-id": [
+    "phenotypes/genea.json and phenotypes/geneb.json state the same HGNC id for two genes."
+  ],
+  "half-identified-drug": [
+    "drug \"drugq\": guidelines/drugq-geneb.json is schema 1.2 and guidelines/drugq-genea.json is 1.3; a drug is identified in all its files or in none."
+  ],
+  "control": []
+}
