@@ -1,4 +1,5 @@
 import { createPublicKey } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { KnowledgeLoadError, loadKnowledge } from './knowledge-loader';
@@ -523,5 +524,64 @@ describe('loadKnowledge: every combination has a cell or is signed as not covere
         'guidelines/drugy-geneb.json: phenotype "Synthetic Unknown" is not one of the phenotypes defined for GENEB.',
       );
     }
+  });
+});
+
+describe('loadKnowledge: one identifier names one drug or one gene (spec 039 IK-1, IK-2)', () => {
+  const CONFLICTS_DIR = join(SYNTHETIC_DIR, '../identifier-conflicts');
+  // The answers were written by hand before the rules (spec 039 T2). The list is written out, not read from the folder, so a folder that
+  // goes missing fails here instead of running nothing.
+  const expected = JSON.parse(readFileSync(join(CONFLICTS_DIR, 'expected.json'), 'utf8')) as Record<string, string[]>;
+  const CASES = ['one-drug-two-ids', 'two-drugs-one-id', 'two-genes-one-id', 'half-identified-drug'] as const;
+
+  it('has a written answer for every case and for the control, which has no problem', () => {
+    expect(Object.keys(expected).sort()).toEqual([...CASES, 'control'].sort());
+    expect(expected.control).toEqual([]);
+    for (const name of CASES) expect({ name, count: expected[name]!.length }).toEqual({ name, count: 1 });
+  });
+
+  it.each(CASES)('refuses %s outside production, naming both files and nothing else', async (name) => {
+    expect(await problemsOf(join(CONFLICTS_DIR, name))).toEqual(expected[name]);
+  });
+
+  it.each(CASES)('refuses %s under the production rules too, beside the refusals of synthetic content', async (name) => {
+    const problems = await problemsOf(join(CONFLICTS_DIR, name), 'production');
+    expect(problems).toEqual(expect.arrayContaining(expected[name]!));
+    expect(problems.filter((p) => p.includes('synthetic test content is not allowed in production')).length).toBeGreaterThan(0);
+  });
+
+  it('loads the control: one drug in two files with one RxNorm id, a 1.3 guideline over a 1.2 gene map, and a drug whose only file is 1.2', async () => {
+    const set = await loadKnowledge({ directory: join(CONFLICTS_DIR, 'control'), mode: 'non-production' });
+    expect(set.drugs()).toEqual(['drugq', 'drugs', 'drugt']);
+    expect(set.guidelinesForDrug('drugq').map((g) => g.rxcui)).toEqual(['syn-rxcui-drugq', 'syn-rxcui-drugq']);
+    expect(set.gene('GENEC')?.schemaVersion).toBe('1.2');
+    expect(set.guidelinesForDrug('drugt').map((g) => g.schemaVersion)).toEqual(['1.2']);
+  });
+
+  it('names a drug and the files in each problem, never an identifier or any other content (IK-8)', async () => {
+    for (const name of CASES) {
+      const problems = await problemsOf(join(CONFLICTS_DIR, name));
+      expect({ name, refused: problems.length > 0 }).toEqual({ name, refused: true });
+      for (const problem of problems) {
+        expect({ name, problem }).toEqual({ name, problem: expect.not.stringMatching(/syn-rxcui|syn-hgnc|Synthetic|\d{3,}/) });
+      }
+    }
+  });
+
+  it('gives each drug and each gene of a signed test copy its own real-form id, the same one every time (IK-7)', async () => {
+    const ids = async () => {
+      const set = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
+      const drugs = Object.fromEntries(set.drugs().map((drug) => [drug, [...new Set(set.guidelinesForDrug(drug).map((g) => g.rxcui))]]));
+      const genes = Object.fromEntries(set.allGeneMaps().map((map) => [map.gene, map.hgncId]));
+      return { drugs, genes };
+    };
+    const first = await ids();
+    expect(Object.keys(first.drugs).length).toBeGreaterThan(1);
+    expect(Object.keys(first.genes).length).toBeGreaterThan(1);
+    for (const [drug, rxcuis] of Object.entries(first.drugs)) expect({ drug, rxcuis }).toEqual({ drug, rxcuis: [expect.stringMatching(/^99[0-9]{10}$/)] });
+    for (const [gene, hgncId] of Object.entries(first.genes)) expect({ gene, hgncId }).toEqual({ gene, hgncId: expect.stringMatching(/^HGNC:9[0-9]{6}$/) });
+    expect(new Set(Object.values(first.drugs).flat()).size).toBe(Object.keys(first.drugs).length);
+    expect(new Set(Object.values(first.genes)).size).toBe(Object.keys(first.genes).length);
+    expect(await ids()).toEqual(first);
   });
 });

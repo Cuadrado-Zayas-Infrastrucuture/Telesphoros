@@ -8,6 +8,7 @@ import {
   geneStateResultSchema,
   guidelineFileSchema,
   hasAtMostTwoDecimals,
+  isRxcuiForm,
   knowledgeFileSchema,
   OUTCOMES,
   REASON_CODES,
@@ -19,6 +20,7 @@ import {
   splitDiplotype,
   toHundredths,
 } from './index';
+import * as everyExport from './index';
 
 const base = {
   schemaVersion: '1.2',
@@ -764,5 +766,47 @@ describe('cells a guideline marks as not covered (audit DATA-01)', () => {
   it('a marker needs a note, and an empty list is refused rather than read as "complete"', () => {
     expect(guidelineFileSchema.safeParse(combined13({ notCovered: [{ when: { GENEA: 'Poor', GENEB: 'Slow' } }] })).success).toBe(false);
     expect(guidelineFileSchema.safeParse(combined13({ notCovered: [] })).success).toBe(false);
+  });
+});
+
+describe('isRxcuiForm (spec 039)', () => {
+  // Real-form values beyond any range RxNorm has assigned, as elsewhere in this file, so no test names a real drug.
+  it('accepts an RxNorm id in the real form or the invented "syn-" form', () => {
+    const accepted = ['990000000001', '999999999999', '9999999999999999', 'syn-rxcui-drugq', 'syn-rxcui-a', 'syn-rxcui-ingredient-r'];
+    expect(accepted.filter((value) => !isRxcuiForm(value))).toEqual([]);
+  });
+
+  it('refuses anything else, with no trimming or case folding', () => {
+    const refused = [
+      '',
+      '0',
+      '0042',
+      '99999999999999999',
+      ' 990000000001',
+      '990000000001 ',
+      '990000000001\n',
+      '9e11',
+      'rxcui-990000000001',
+      'syn-rxcui-',
+      'syn-rxcui--x',
+      'SYN-RXCUI-DRUGQ',
+      'syn-rxcui-Drugq',
+      'drugq',
+      'HGNC:9999999',
+      'syn-hgnc-genea',
+    ];
+    expect(refused.filter((value) => isRxcuiForm(value))).toEqual([]);
+  });
+
+  it('accepts exactly what a guideline may state as its RxNorm id', () => {
+    const synthetic = { ...guideline(), schemaVersion: '1.3', recommendations: [cell({ GENEA: 'Normal' }, { origin: 'cpic' })] };
+    for (const value of ['990000000001', 'syn-rxcui-drugq', '0042', 'syn-rxcui-', 'drugq']) {
+      const parses = [true, false].some((isSynthetic) => guidelineFileSchema.safeParse({ ...synthetic, synthetic: isSynthetic, rxcui: value }).success);
+      expect({ value, accepted: isRxcuiForm(value) }).toEqual({ value, accepted: parses });
+    }
+  });
+
+  it('keeps the identifier forms themselves private, so no consumer can change what the schema accepts', () => {
+    expect(Object.keys(everyExport)).not.toContain('IDENTIFIER_FORMS');
   });
 });
