@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1.3",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC, PharmGKB or PharmVar content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1",
+    "license": "proprietary",
+    "redistribution": "restricted"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugz-genea-geneb",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-2",
+  "title": "Synthetic combined guideline for drugz",
+  "drug": "drugz",
+  "rxcui": "syn-rxcui-drugz",
+  "genes": [
+    "GENEA",
+    "GENEB"
+  ],
+  "supersedes": [
+    "drugz-genea"
+  ],
+  "recommendations": [
+    {
+      "when": {
+        "GENEA": "Synthetic Normal",
+        "GENEB": "Synthetic Low"
+      },
+      "locator": {
+        "table": "Synthetic Table 7",
+        "row": "Synthetic Normal + Synthetic Low"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "Z normal, low.",
+      "origin": "cpic"
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Normal",
+        "GENEB": "Synthetic High"
+      },
+      "locator": {
+        "table": "Synthetic Table 7",
+        "row": "Synthetic Normal + Synthetic High"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "Z normal, high.",
+      "origin": "cpic"
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Poor",
+        "GENEB": "Synthetic Low"
+      },
+      "locator": {
+        "table": "Synthetic Table 7",
+        "row": "Synthetic Poor + Synthetic Low"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "Z poor, low.",
+      "origin": "cpic"
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Poor",
+        "GENEB": "Synthetic High"
+      },
+      "locator": {
+        "table": "Synthetic Table 7",
+        "row": "Synthetic Poor + Synthetic High"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Optional",
+      "recommendationText": "Z poor, high.",
+      "origin": "cpic"
+    }
+  ]
+}

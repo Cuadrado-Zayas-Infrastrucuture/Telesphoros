@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.2",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC, PharmGKB or PharmVar content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1",
+    "license": "proprietary",
+    "redistribution": "restricted"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "genec",
+  "kind": "gene-phenotype-map",
+  "gene": "GENEC",
+  "phenotypes": [
+    "Synthetic Fast",
+    "Synthetic Slow"
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "ids": [
+    "syn-rxcui-drugz",
+    "syn-rxcui-drugq",
+    "syn-rxcui-unknown",
+    "syn-rxcui-drugr",
+    "syn-rxcui-ingredient-r",
+    "990000000001",
+    "0042",
+    "drugq",
+    "syn-rxcui-drugq"
+  ],
+  "answers": [
+    {
+      "rxcui": "syn-rxcui-drugz",
+      "status": "matched",
+      "drug": "drugz",
+      "guidelines": [
+        {
+          "id": "drugz-genea",
+          "supersededBy": "drugz-genea-geneb"
+        },
+        {
+          "id": "drugz-genea-geneb",
+          "supersededBy": null
+        }
+      ]
+    },
+    {
+      "rxcui": "syn-rxcui-drugq",
+      "status": "matched",
+      "drug": "drugq",
+      "guidelines": [
+        {
+          "id": "drugq-genea",
+          "supersededBy": null
+        }
+      ]
+    },
+    {
+      "rxcui": "syn-rxcui-unknown",
+      "status": "not-matched",
+      "reason": "no-identified-guideline"
+    },
+    {
+      "rxcui": "syn-rxcui-drugr",
+      "status": "not-matched",
+      "reason": "no-identified-guideline"
+    },
+    {
+      "rxcui": "syn-rxcui-ingredient-r",
+      "status": "matched",
+      "drug": "syn-rxcui-drugr",
+      "guidelines": [
+        {
+          "id": "syn-rxcui-drugr-genea",
+          "supersededBy": null
+        }
+      ]
+    },
+    {
+      "rxcui": "990000000001",
+      "status": "not-matched",
+      "reason": "no-identified-guideline"
+    },
+    {
+      "rxcui": "0042",
+      "status": "not-matched",
+      "reason": "invalid-identifier"
+    },
+    {
+      "rxcui": "drugq",
+      "status": "not-matched",
+      "reason": "invalid-identifier"
+    },
+    {
+      "rxcui": "syn-rxcui-drugq",
+      "status": "matched",
+      "drug": "drugq",
+      "guidelines": [
+        {
+          "id": "drugq-genea",
+          "supersededBy": null
+        }
+      ]
+    }
+  ]
+}
