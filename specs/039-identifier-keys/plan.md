@@ -1,7 +1,7 @@
 # Plan: identifier keys for drugs and genes (spec 039)
 
 Date: 2026-11-12
-Status: NOT approved. Written with D1 to D9 as recommended; a different answer changes the parts named under each decision in `spec.md`.
+Status: approved by the founder on 2026-11-12, with D1 to D9 as recommended ("Approve as recommended"). Written with them; a different answer changes the parts named under each decision in `spec.md`.
 
 ## What exists, read for this plan at `ed9268a5`
 
