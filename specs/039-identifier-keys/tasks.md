@@ -2,7 +2,7 @@
 
 Date: 2026-11-12. None may start until `plan.md` is approved.
 
-- [ ] T1 In a job, with IK-1 and IK-2 applied as a throwaway patch and the helper unchanged, list every existing test they refuse, and every test that pins the content hash of a signed test copy; stop and report anything beyond the signed copies IK-7 names.
+- [ ] T1 In a job, with IK-1 and IK-2 applied as a throwaway patch, list every existing test they refuse: once with the helper unchanged, and once with the helper changed as IK-7 says, so the signed copies cannot hide another refusal. Also list any test that pins the content hash of a signed test copy. Stop and report anything beyond the signed copies IK-7 names.
 - [ ] T2 Write the conflict fixtures and `identifier-map/` by hand; commit them before any code.
 - [ ] T3 Write the new and added specs; run them and see them fail for the right reason.
 - [ ] T4 Add `isRxcuiForm` to `packages/cpic-schema`, and change `toSchema13` (IK-7).
