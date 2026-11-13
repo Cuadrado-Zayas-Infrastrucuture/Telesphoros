@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import {
   CDR_CODE_LABELS,
   CDR_ELIGIBILITY_POLICY,
@@ -349,6 +350,32 @@ it('the decision form names its patient and drug, and says the review-by date cr
   expect(form.getByText('For patient SYN-FLOW · drugz')).toBeVisible();
   await userEvent.selectOptions(form.getByRole('combobox', { name: 'Decision' }), 'deferred');
   expect(form.getByText('This records the intended review date only. It creates no reminder: only a linked follow-up does.')).toBeVisible();
+});
+
+// An automated check finds only what a rule can detect. It is not a statement of conformance: contrast, focus order on a real screen,
+// reflow and a screen reader's reading are checked by a person in a browser (specs/038, "What a reviewer should check by hand").
+it('the patient page with an open result, its evidence and the decision form open has no violation an automated check can find', async () => {
+  const stub = server();
+  const { container } = renderApp(`/patients/${PATIENT}`, { signedInAs: ['clinician'], fetchImpl: stub.fetchImpl });
+  const result = within(await screen.findByRole('region', { name: 'Stored result drugz' }));
+  await userEvent.click(await result.findByRole('button', { name: 'Record decision' }));
+  await result.findByRole('form', { name: 'Record decision' });
+  expect(await axe(container)).toHaveNoViolations();
+});
+
+it('a result row opens and closes from the keyboard, and says which state it is in', async () => {
+  const stub = server();
+  const result = await openResult(stub);
+  const row = await result.findByRole('button', { name: 'drugz: Recommendation' });
+  expect(row).toHaveAttribute('aria-expanded', 'true');
+  row.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(row).toHaveAttribute('aria-expanded', 'false');
+  expect(result.queryByText('Z normal-low.')).not.toBeInTheDocument();
+  await userEvent.keyboard(' ');
+  expect(row).toHaveAttribute('aria-expanded', 'true');
+  expect(await result.findByText('Z normal-low.')).toBeVisible();
+  expect(row).toHaveFocus();
 });
 
 it('a reviewer reads the result, its evidence and the decision history, and is offered no way to record', async () => {

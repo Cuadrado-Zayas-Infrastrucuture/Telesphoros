@@ -83,5 +83,19 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
 
 ## Slice 4: home, accessibility, protocol
 
-- [ ] T401 (F14) A home that lists due follow-ups and results on hold from the existing reads.
-- [ ] T402 Accessibility tests for the changed tasks; the clinician usability protocol; the final report.
+- [x] T401 (D19) `HomeFollowups`, `ConversationWelcome`, `WorkspaceConversation`: the follow-ups assigned to the person signed in, on
+  the home, for the roles that read follow-ups. Results on hold are not listed (dependencies.md, entry 3).
+- [x] T402 (D20) Tests: `pages/WorkspaceHome.test.tsx` (the list, the empty and failed states, the roles, an automated accessibility
+  check); in `pages/PatientDecisionFollowup.test.tsx`, an automated accessibility check of the patient page with a result and the
+  decision form open, and the result row from the keyboard.
+- [x] T403 `docs/design/clinical-workspace-usability-protocol.md`: ten moderated tasks, what counts as a failure, the accessibility pass a
+  person makes in a browser, and the wording a pharmacist approves.
+- [x] T404 Controls, 2026-11-12, in the sealed sandbox: see the status note.
+- [ ] T405 Not done: the protocol has not been run with anyone. No browser run of any slice.
+- [x] T406 Before the pull request, 2026-11-12: replayed on `main` as one commit after slice 3 merged (#386). On that commit, in sealed
+  jobs, the verify tier, the backend PostgreSQL tier, the PostgreSQL and S3 tier (all three shards) and the worker tier passed, and the
+  secret scan found nothing. In the backend memory tier one test this slice does not touch (`test/db/readiness.pg-spec.ts`, "turns NOT
+  ready when the database disappears") ran past its 5-second timeout while three jobs shared the machine, and passed on its own. The
+  home list's link and retry button carry the control height. Read, not run: a hosted test records every request after the page is
+  idle, and the list re-reads on window focus, as the sidebar's Follow-ups count already does on that page; the status note has the
+  detail.

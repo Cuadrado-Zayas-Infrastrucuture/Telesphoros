@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import mascot from '@/assets/telesphoros-mascot.png';
+import { HomeFollowups } from './HomeFollowups';
 
 /**
  * The empty conversation: the mascot, a greeting and what can be done here. It lists the supported tasks and says, before anyone types, that a typed
@@ -9,7 +10,10 @@ export function ConversationWelcome({
   preferredName,
   canAttach,
   canReadRecords = false,
+  canFollowUp = false,
 }: {
+  /** Roles that read follow-ups (clinician, reviewer): they get the list of follow-ups assigned to them. */
+  canFollowUp?: boolean;
   preferredName: string | null | undefined;
   canAttach: boolean;
   /** Roles that may open a patient's record; the others are not offered the link. */
@@ -34,6 +38,7 @@ export function ConversationWelcome({
         )}
         <li>Typed questions are not answered here. They stay in this chat and are not saved.</li>
       </ul>
+      {canFollowUp && <HomeFollowups />}
     </div>
   );
 }
