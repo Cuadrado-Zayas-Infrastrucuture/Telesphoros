@@ -86,6 +86,18 @@ describe('a suspended organization reads and writes nothing (0047)', () => {
     expect(await patients({ 'app.capability': live })).toBe(1); // the same capability binds again, nothing was revoked
   });
 
+  it.each([
+    ['two-argument', `SELECT outbox_append('report.file-committed', gen_random_uuid())`],
+    ['three-argument (0075)', `SELECT outbox_append('report.file-committed', gen_random_uuid(), 'req-active-0003')`],
+  ])('appends no outbox event through the %s form once suspended, and appends again on reinstatement', async (_form, sql) => {
+    const as = { 'app.current_tenant_id': 'org-held', 'app.current_actor': 'alice' };
+    await expect(asApp(as, (c) => c.query(sql))).resolves.toBeDefined(); // positive control: active
+    await setStatus('org-held', 'suspended');
+    await expect(asApp(as, (c) => c.query(sql))).rejects.toMatchObject({ code: '42501' });
+    await setStatus('org-held', 'active');
+    await expect(asApp(as, (c) => c.query(sql))).resolves.toBeDefined();
+  });
+
   it('another organization is unaffected (control)', async () => {
     await setStatus('org-held', 'suspended');
     expect(await patients({ 'app.current_tenant_id': 'org-live', 'app.current_actor': 'carol' })).toBe(1);

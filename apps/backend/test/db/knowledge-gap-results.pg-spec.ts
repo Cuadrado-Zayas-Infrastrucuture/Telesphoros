@@ -114,17 +114,19 @@ it('refuses held / knowledge-gap with wording: the held shape stays wording-free
 });
 
 it('reverting 0074 is refused while a knowledge-gap result exists, and goes through and back up once none does', async () => {
-  const { steps, reverted } = revertThrough('knowledge_gap_reason');
+  const { steps, reverted } = revertThrough('knowledge_gap_reason'); // 0074 and every migration above it, newest first
   const t = tenant();
   await store(t, 'Synthetic Intermediate', 'Synthetic High');
-  await expect(withAdmin(pg.adminUrl, (c) => migrateDown(c, steps))).rejects.toThrow(/Refusing to revert: stored results carry knowledge-gap/);
+  // The migrations above 0074 go first, so the refusal below is 0074's own guard and not a later migration's down.
+  if (steps > 1) expect(await withAdmin(pg.adminUrl, (c) => migrateDown(c, steps - 1))).toEqual(reverted.slice(0, -1));
+  await expect(withAdmin(pg.adminUrl, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to revert: stored results carry knowledge-gap/);
   await withAdmin(pg.adminUrl, async (c) => {
     // The test administrator removes the synthetic rows to exercise the empty path; nothing else may delete evaluation results.
     await c.query('BEGIN');
     await c.query('SET LOCAL session_replication_role = replica');
     await c.query("DELETE FROM evaluation_results WHERE reason_code = 'knowledge-gap'");
     await c.query('COMMIT');
-    expect(await migrateDown(c, steps)).toEqual(reverted);
+    expect(await migrateDown(c, 1)).toEqual(['0074']);
     expect(await migrateUp(c)).toEqual([...reverted].reverse());
   });
 });
