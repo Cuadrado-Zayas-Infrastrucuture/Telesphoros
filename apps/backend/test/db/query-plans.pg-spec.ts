@@ -189,6 +189,26 @@ it('measures real core list/count, filtered and parent/detail lookups with hand-
   expect((await measure('report-detail', () => reports.findById(t, selected.reportId)))?.id).toBe(selected.reportId);
 });
 
+it('measures the label search (spec 040) with hand-written result controls', async () => {
+  const t = tenants[0]!;
+  const page = { offset: 0, limit: 20 };
+  // The tenant holds SYN-1 to SYN-1500 and the two patients seedLabReport adds, labelled SYN- and 8 random hex digits. The seeded matches are
+  // counted by hand; the two random labels are read back and checked one by one, so a random label that happens to hold the text counts too.
+  const random = (await withAdmin(pg.adminUrl, (c) => c.query(`SELECT label FROM patients WHERE tenant_id = $1 AND label !~ '^SYN-[0-9]{1,4}$'`, [t]))).rows.map((row) =>
+    (row.label as string).toLowerCase(),
+  );
+  expect(random).toHaveLength(2);
+  const alsoIn = (text: string) => random.filter((label) => label.includes(text)).length;
+  // SYN-15, SYN-150 to SYN-159, SYN-1500.
+  expect((await measure('patients-search', () => patients.list(t, page, { labelContains: 'syn-15' }))).total).toBe(12 + alsoIn('syn-15'));
+  expect((await measure('patients-search-one', () => patients.list(t, page, { labelContains: 'SYN-1500' }))).total).toBe(1 + alsoIn('syn-1500'));
+  // No hex digit is X or Z.
+  expect((await measure('patients-search-none', () => patients.list(t, page, { labelContains: 'XYZ' }))).total).toBe(0);
+  for (const label of ['patients-search', 'patients-search-one', 'patients-search-none']) {
+    expect((evidence.find((e) => e.label === label) as { statements: number }).statements).toBe(1); // the page carries its total: no second statement
+  }
+});
+
 it('measures filtered/public pages, complete internal reads and sparse/dense context histories', async () => {
   const t = tenants[0]!;
   const page = { offset: 0, limit: 20 };

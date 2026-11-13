@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { listOrderSchema, paginationQuerySchema } from './pagination';
+import { patientLabelSearchSchema } from './patient';
 
 /**
  * Possible duplicates and the merge of two patient records (M2.1c-2).
@@ -67,12 +68,16 @@ export const duplicateCandidateDtoSchema = z.strictObject({
 });
 export type DuplicateCandidateDto = z.infer<typeof duplicateCandidateDtoSchema>;
 
-/** `GET /patients`: pagination plus whether merged-away patients are listed (default: no). Query strings arrive as text. */
+/**
+ * `GET /patients`: pagination, whether merged-away patients are listed (default: no), and optionally only the patients whose label contains a text,
+ * ignoring case (spec 040). Query strings arrive as text; a parameter given twice arrives as a list and is refused, and so is any unknown one.
+ */
 export const patientListQuerySchema = paginationQuerySchema.extend({
   includeMerged: z
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
   order: listOrderSchema,
+  labelContains: patientLabelSearchSchema.optional(),
 });
 export type PatientListQuery = z.infer<typeof patientListQuerySchema>;

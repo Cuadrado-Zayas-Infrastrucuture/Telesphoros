@@ -13,6 +13,17 @@ export const patientLabelSchema = z
   .max(40, 'Use 40 characters or fewer.')
   .regex(/^[A-Za-z0-9-]+$/, 'Use letters, numbers and hyphens only (no names or real identifiers).');
 
+/**
+ * The text of a patient search (`GET /patients?labelContains=`, spec 040): part of a label, in the label's alphabet. Not trimmed and not changed, so
+ * the browser checks a text with this same rule before sending it. The alphabet holds no wildcard, quote or space, and is ASCII, so lower-casing
+ * has one answer everywhere. Messages name the rule, never the text.
+ */
+export const patientLabelSearchSchema = z
+  .string()
+  .min(1, 'Enter part of a patient label.')
+  .max(40, 'Use 40 characters or fewer.')
+  .regex(/^[A-Za-z0-9-]+$/, 'Use letters, numbers and hyphens only.');
+
 /** POST and PUT body (full replacement). */
 export const patientInputSchema = z.strictObject({ label: patientLabelSchema });
 export type PatientInput = z.infer<typeof patientInputSchema>;

@@ -20,9 +20,15 @@ export class PatientsService {
 
   async list(
     principal: Principal,
-    { page, pageSize, includeMerged, order }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean; order?: PatientListQuery['order'] },
+    {
+      page,
+      pageSize,
+      includeMerged,
+      order,
+      labelContains,
+    }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean; order?: PatientListQuery['order']; labelContains?: string },
   ) {
-    const result = await this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize, order }, { includeMerged });
+    const result = await this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize, order }, { includeMerged, labelContains });
     return { ...result, items: await this.withCoded(principal.tenantId, result.items) };
   }
 
