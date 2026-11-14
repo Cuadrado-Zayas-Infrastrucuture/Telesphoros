@@ -90,7 +90,7 @@ export function DecisionPanel({
     <div className="flex flex-col gap-3 border-t border-border pt-3">
       <p className="text-sm text-muted-foreground">A decision records clinical intent. It does not record an order, dispensing or medication use.</p>
       {saved && <p role="status">Decision saved.</p>}
-      {stepMissed && <p role="status">The follow-up step did not start. No follow-up was scheduled; use “Schedule linked follow-up” below.</p>}
+      {stepMissed && <p role="status">Follow-up scheduling did not start. No follow-up was scheduled. Select “Schedule linked follow-up” below.</p>}
       {current?.response ? <p className="font-medium">Current decision: {decisionLabels[current.response]}</p> : <p>No decisions recorded.</p>}
       {current && (
         <p className="text-sm">

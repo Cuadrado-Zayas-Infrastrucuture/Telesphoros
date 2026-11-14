@@ -76,12 +76,12 @@ describe('the Patients page (specs/034 D2)', () => {
     open('/patients', ['clinician'], fetchImpl);
     const records = await roster();
     const filter = await records.findByRole('textbox', { name: 'Find loaded patients' });
-    expect(filter).toHaveAccessibleDescription('This searches the 20 patients loaded so far, not the whole list. Load more to widen it.');
+    expect(filter).toHaveAccessibleDescription('Search covers only the patients loaded so far (20). Load more to expand it.');
     await userEvent.type(filter, 'SYN-27');
     expect(records.getByText('No match among loaded patients. Load more to keep looking.')).toBeVisible();
     await userEvent.click(records.getByRole('button', { name: 'More patients' }));
     expect(await records.findByRole('link', { name: 'SYN-27' })).toBeVisible();
-    expect(filter).toHaveAccessibleDescription('This searches all 22 patients.');
+    expect(filter).toHaveAccessibleDescription('Search covers all patients (22).');
   });
 
   it('shows a patient the chat adds while the page is open', async () => {

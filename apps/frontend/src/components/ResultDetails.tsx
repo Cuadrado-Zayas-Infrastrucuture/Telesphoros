@@ -8,8 +8,8 @@ type GeneState = EvaluationDto['geneStates'][number];
 
 /**
  * One result's body, shared by the assessment and the stored results: the outcome in plain words, the phenotype it rests on, its wording
- * and where that wording comes from (both folded behind "Show the text anyway" when the evaluation is not current), and the raw codes and
- * the citation as stored under "Technical provenance" (specs/038 D5). Guideline wording is shown only for an outcome that carries it
+ * and where that wording comes from (both folded behind "View result text (not current)" when the evaluation is not current), and the raw
+ * codes and the citation as stored under "Technical details" (specs/038 D5). Guideline wording is shown only for an outcome that carries it
  * (`showsWording`).
  */
 export function ResultDetails({
@@ -57,7 +57,7 @@ export function ResultDetails({
       {(wording || source) &&
         (fold ? (
           <details>
-            <summary className="flex min-h-control cursor-pointer items-center text-sm">Show the text anyway</summary>
+            <summary className="flex min-h-control cursor-pointer items-center text-sm">View result text (not current)</summary>
             <div className="flex flex-col gap-1">
               {wording}
               {source}
@@ -70,7 +70,7 @@ export function ResultDetails({
           </>
         ))}
       <details>
-        <summary className="flex min-h-control cursor-pointer items-center text-sm">Technical provenance</summary>
+        <summary className="flex min-h-control cursor-pointer items-center text-sm">Technical details</summary>
         <div className="flex flex-col gap-1 text-xs wrap-anywhere">
           <p>
             Outcome code: {result.outcome}
@@ -87,7 +87,7 @@ export function ResultDetails({
           {result.strength && <p>Recorded strength: {result.strength}</p>}
           {result.citation && (
             <>
-              <p>Citation as stored:</p>
+              <p>Saved citation:</p>
               <pre className="whitespace-pre-wrap wrap-anywhere">{JSON.stringify(result.citation, null, 2)}</pre>
             </>
           )}

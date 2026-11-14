@@ -98,19 +98,19 @@ it('an outcome this screen does not know is never shown as a recommendation', ()
 // recommendations said.
 it('a completed assessment says so in the ordinary colour, never in green', () => {
   show(evaluation([shown(ids[0]!, 'drugz'), shown(ids[1]!, 'drugy')]));
-  const line = screen.getByText('Assessment completed. All 2 drugs evaluated.');
+  const line = screen.getByText('Assessment complete. All 2 drugs assessed.');
   expect(line).not.toHaveClass('text-success');
   expect(line).not.toHaveClass('text-warning');
 });
 
 it('a restrictive recommendation after a completed assessment has no success colour anywhere near it', () => {
   const { container } = show(evaluation([{ ...shown(ids[0]!, 'drugz'), recommendationText: 'Avoid drugz. Use an alternative not metabolised by GENEA.' }]));
-  expect(screen.getByText('Assessment completed. 1 drug evaluated.')).toBeVisible();
+  expect(screen.getByText('Assessment complete. 1 drug assessed.')).toBeVisible();
   expect(screen.getByText('Avoid drugz. Use an alternative not metabolised by GENEA.')).toBeVisible();
   expect(container.querySelector('.text-success')).toBeNull();
 });
 
-it('reads the stored citation as labelled lines, says which parts were not recorded, and keeps the stored form under technical provenance', () => {
+it('reads the stored citation as labelled lines, says which parts were not recorded, and keeps the stored form under technical details', () => {
   const citation = {
     guidelineId: 'syn-guideline-drugz',
     guidelineVersion: 'synthetic-3',
@@ -128,7 +128,7 @@ it('reads the stored citation as labelled lines, says which parts were not recor
   expect(link).toHaveAttribute('href', 'https://guidelines.example.test/drugz');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   // The stored form is still there, on demand, and nowhere else.
-  expect(screen.getByText('Citation as stored:')).not.toBeVisible();
+  expect(screen.getByText('Saved citation:')).not.toBeVisible();
   expect(screen.getByText(/"guidelineId": "syn-guideline-drugz"/)).not.toBeVisible();
 });
 
@@ -143,7 +143,7 @@ it('a citation stored without a version, a location or a verification state says
 it.each([
   ['unverified', 'Not verified'],
   ['disputed', 'Disputed'],
-  ['some-later-state', 'Not recognised by this screen'],
+  ['some-later-state', 'Value not recognized in this view'],
 ])('a %s citation reads "%s" as a caution, never as verified', (verification, word) => {
   show(evaluation([{ ...shown(ids[0]!, 'drugz'), citation: { guidelineId: 'drug-genea', verification } }]));
   const source = within(screen.getByLabelText('Source'));

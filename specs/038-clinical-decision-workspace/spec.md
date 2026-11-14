@@ -119,6 +119,19 @@ Findings F08 and F09 of the audit have no public contract and are not part of th
   and a screen reader's reading need a browser and a person; the protocol is in
   [clinical-workspace-usability-protocol.md](../../docs/design/clinical-workspace-usability-protocol.md).
 
+## Decisions, the wording review (`chore/wording-review-d11`)
+
+- **D21, the wording review of D8 and D11 (2026-11-14).** The founder and the co-founder, both pharmacists, read every new sentence of
+  slices 1 to 4, the reason grouping and the reason vocabulary on one review sheet, starting from an editorial proposal, and marked each
+  part. **D11 is confirmed**: every reason stays where D10 placed it, the three diplotype reasons included, and the three headings stay
+  "From the report", "From the guidelines and definitions" and "The assessment". The vocabulary's messages and reviewer actions
+  (`REASON_MESSAGES`, `REVIEWER_ACTIONS`) are reworded; no code, outcome, precedence or placement changes, and a message names "this
+  system" for a limit of the product and "guideline entry" where it said "guideline cell". The evidence parts of D10 are now "Why this
+  applies" (or "Assessment inputs"), "View source", "Missing information and limitations" and "What changed?"; a reason with no
+  reviewer action reads "No reviewer action is specified for this status."; "Show the text anyway" is "View result text (not current)"
+  and "Technical provenance" is "Technical details". Where D10, D17 or D19 quote a sentence, the code's wording is the reviewed one.
+  The review covered English only, so D8's rule on Spanish stands.
+
 ## Out of scope
 
 Server-side patient search (no contract exists: `patientListQuerySchema` has `page`, `pageSize`, `includeMerged`, `order`); a unified

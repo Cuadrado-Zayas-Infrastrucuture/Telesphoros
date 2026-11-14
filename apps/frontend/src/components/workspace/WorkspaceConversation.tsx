@@ -30,7 +30,7 @@ import '@/styles/one-screen.css';
 const QUESTION_ID = 'workspace-question';
 const CONFIRMATION = 'I confirm this file contains synthetic data only';
 /** Said before anyone types (specs/038 D3): a typed question gets a note, never an answer (specs/024 D3). */
-const NOT_ANSWERED = 'Typed questions are not answered here.';
+const NOT_ANSWERED = 'Questions cannot be answered here.';
 
 /**
  * The chat home's conversation (specs/024): attach a synthetic report, choose its patient, confirm it is synthetic, send. The report appears with its status
@@ -341,7 +341,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
                 </p>
               )}
               {/* The identity is repeated at the point of confirmation (specs/038 D2). */}
-              <p className="text-sm">{chosen ? `This report will be stored for ${chosen.label}.` : 'No patient is chosen yet.'}</p>
+              <p className="text-sm">{chosen ? `This report will be saved in the record for ${chosen.label}.` : 'No patient selected.'}</p>
               <p className="text-xs text-muted-foreground">Your report uploads after you confirm these details. Progress will appear in this chat.</p>
               <div className="flex justify-end gap-2">
                 {uploading ? (

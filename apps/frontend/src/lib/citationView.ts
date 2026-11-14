@@ -37,7 +37,7 @@ function verificationWords(state: string): { word: string; caution: boolean } {
     case 'disputed':
       return { word: 'Disputed', caution: true };
     default:
-      return { word: 'Not recognised by this screen', caution: true };
+      return { word: 'Value not recognized in this view', caution: true };
   }
 }
 

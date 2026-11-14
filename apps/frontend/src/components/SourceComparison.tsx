@@ -15,7 +15,7 @@ export function SourceComparison({ sources, thisReportId }: { sources: readonly 
     <div className="flex flex-col gap-2">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <caption className="pb-1 text-left font-semibold">Conflicting sources, side by side</caption>
+          <caption className="pb-1 text-left font-semibold">Conflicting sources</caption>
           <thead>
             <tr>
               <td className="px-2 py-2" />

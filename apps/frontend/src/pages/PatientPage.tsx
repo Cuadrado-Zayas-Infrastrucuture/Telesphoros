@@ -94,7 +94,7 @@ export default function PatientPage() {
               Back to chat
             </Link>
             <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
-            <p className="text-sm text-muted-foreground">Synthetic patient, added {when(patient.createdAt)}.</p>
+            <p className="text-sm text-muted-foreground">Synthetic patient · Added {when(patient.createdAt)}</p>
             {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}
             {read.kind === 'found' && version === undefined && <PatientBanner value={read.value} />}
           </div>

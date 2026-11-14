@@ -152,7 +152,7 @@ export function DecisionForm({
               <label htmlFor={`${formId}-review-by`} className="flex flex-col gap-1 text-sm">
                 Review by (optional)
                 <Input id={`${formId}-review-by`} type="date" value={reviewBy} onChange={(event) => setReviewBy(event.target.value)} />
-                <span className="text-xs text-muted-foreground">This records the intended review date only. It creates no reminder: only a linked follow-up does.</span>
+                <span className="text-xs text-muted-foreground">Saving this review date does not create a reminder. Use “Schedule linked follow-up” to create one.</span>
               </label>
             )}
           </>
@@ -174,7 +174,7 @@ export function DecisionForm({
           </div>
         )}
         {kind === 'decision' && followup === 'paused' && (
-          <p className="text-sm text-muted-foreground">Follow-up recording is not available in this environment, so no reminder can be created for this decision here.</p>
+          <p className="text-sm text-muted-foreground">Follow-ups cannot be recorded here. A reminder cannot be created for this decision.</p>
         )}
       </fieldset>
       {error && (

@@ -99,3 +99,11 @@ decisions in [spec.md](spec.md). One branch and one pull request per slice.
   home list's link and retry button carry the control height. Read, not run: a hosted test records every request after the page is
   idle, and the list re-reads on window focus, as the sidebar's Follow-ups count already does on that page; the status note has the
   detail.
+
+## The wording review (D21)
+
+- [x] T501 (D8, D11, D21) The reviewed wording, 2026-11-14: `packages/cpic-schema/src/vocabulary.ts` (messages and reviewer actions),
+  the evidence panel (`ResultEvidence`, `lib/resultEvidence.ts`), the decision and follow-up lines, the result's disclosures and source
+  labels, the roster's search note, the chat's welcome and placeholder, and the home's follow-up list; the tests and the
+  `decision-e2e` step that name them; `docs/design/outcomes-and-reason-codes.md` and the usability protocol. D11's grouping is
+  confirmed unchanged.

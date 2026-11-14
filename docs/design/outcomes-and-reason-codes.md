@@ -56,21 +56,25 @@ value from a report.
 
 | Code | Outcome | Plain meaning | Reviewer action |
 | --- | --- | --- | --- |
-| `duplicate-gene-conflict` | held | The same gene appears more than once with different values | Obtain ordering or supersession evidence, or a corrected report |
-| `duplicate-identical` | held | The same gene appears more than once with identical values | Confirm it is a repeated summary line |
-| `sentinel-literal-in-source` | held | The report says "no result" in place of a value | Ask the lab whether the test failed |
-| `other-gene-unresolved` | held | The value is not a recognized phenotype (unfamiliar wording, or a genotype only) | Obtain the phenotype from the lab |
-| `out-of-review-scope` | held | The guideline cell exists but has not passed review | none yet |
-| `cell-disputed` | held | The guideline cell is under dispute | Resolve through the cell review process (independent second person) |
-| `gene-absent` | held | The report has no result for a gene this guideline needs | Obtain the missing gene result from the lab |
-| `malformed-diplotype` | held | A diplotype is not "allele/allele" | Obtain a correctly formatted result |
-| `allele-not-in-definitions` | held | An allele is not in the reviewed definitions | Obtain the phenotype, or add the allele through the reviewed definition process |
-| `no-phenotype-mapping` | held | The tables define no phenotype for this allele combination | Obtain the phenotype from the lab |
-| `no-gene-definition` | held | The system has no definitions for this gene | Obtain the phenotype; the gene needs a reviewed definition |
-| `knowledge-gap` | held | The guideline file has no cell for this combination of phenotypes | Add the missing cell, or sign it as not covered, through the reviewed knowledge process |
-| `association-abstained` | abstained | Values listed with no key tying them to genes | Request a corrected or differently laid out report |
+| `duplicate-gene-conflict` | held | The report lists this gene more than once with different values | Obtain documentation confirming which result should be used, or request a corrected report |
+| `duplicate-identical` | held | The report lists this gene more than once with identical values | Confirm that the duplicate is a repeated summary entry |
+| `sentinel-literal-in-source` | held | The report lists "no result" or similar wording for this gene | Ask the lab to clarify why no result was reported |
+| `other-gene-unresolved` | held | This system does not recognize the reported value as a phenotype (unfamiliar wording, or a genotype only) | Request the phenotype from the lab |
+| `out-of-review-scope` | held | The guideline entry (cell) for this case has not passed this system's review | none |
+| `cell-disputed` | held | The guideline entry (cell) for this case is under dispute | Resolve the dispute through the guidance review process; an independent second reviewer is required |
+| `gene-absent` | held | A gene result required by this guideline is missing from the report | Request the missing gene result from the lab |
+| `malformed-diplotype` | held | The reported diplotype does not match the allele/allele format expected by this system | Ask the lab to clarify the diplotype or provide it in the required format |
+| `allele-not-in-definitions` | held | An allele in this report is not included in the definitions available in this system | Request the phenotype from the lab, or have the allele added through the definition review process |
+| `no-phenotype-mapping` | held | The available guideline tables do not define a phenotype for this allele combination | Request the phenotype from the lab |
+| `no-gene-definition` | held | This system has no definitions available for this gene | Request the phenotype from the lab; a reviewed definition is also needed for this gene |
+| `knowledge-gap` | held | The available guideline data have no entry (cell) for this combination; a pharmacist must review the case | Use the knowledge review process to add an entry or sign off that this case is not covered |
+| `association-abstained` | abstained | The report does not clearly link values to genes; this system did not assign them | Request a report that clearly links each value to its gene |
 | `no-published-recommendation` | no-published-recommendation | A verified cell says "No recommendation" for this case | none |
-| `no-guideline-for-drug` | no-guideline | No loaded guideline covers the drug | none |
+| `no-guideline-for-drug` | no-guideline | The guidelines available in this system do not cover the drug | none |
+
+**Wording reviewed (2026-11-14, spec 038 D21).** The founder and the co-founder, both pharmacists, reviewed the messages and reviewer
+actions; the table above follows `vocabulary.ts`, which holds the exact text. No code is added, no outcome or precedence changes, and no
+meaning changes: a "guideline entry" on screen is a cell here, and "none" means the screen says no reviewer action is specified.
 
 The last four rows of gene-level problems exist because the engine can also be fed a **diplotype** (a structured
 lab feed). A report read from a PDF gives phenotypes.

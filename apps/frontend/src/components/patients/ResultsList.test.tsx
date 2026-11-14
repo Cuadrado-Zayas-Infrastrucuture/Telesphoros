@@ -83,7 +83,7 @@ it('shows the result and its source but offers no decisions in the synthetic sta
   show();
   expect(await screen.findByText('Z normal-low.')).toBeVisible();
   expect(within(screen.getByLabelText('Source')).getByText('drugz-genea-geneb · version not recorded')).toBeVisible();
-  expect(screen.getByText('Technical provenance')).toBeVisible();
+  expect(screen.getByText('Technical details')).toBeVisible();
   expect(screen.queryByRole('button', PANEL)).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Decision history' })).not.toBeInTheDocument();
   expect(screen.queryByText(/Decisions below document intent only/)).not.toBeInTheDocument();
@@ -125,17 +125,17 @@ it('held, no guideline and a guideline that gives no recommendation read differe
   expect(none.getByText('No guideline for this drug')).toBeVisible();
   expect(silent.getByText('The guideline gives no recommendation for this case')).toBeVisible();
   const cases = [
-    [held, 'drugheld', 'On hold: needs review', 'The guideline cell for this case is under dispute.'],
-    [none, 'drugnone', 'No guideline for this drug', 'No loaded guideline covers this drug.'],
-    [silent, 'drugsilent', 'The guideline gives no recommendation for this case', 'The guideline publishes no recommendation for this case.'],
+    [held, 'drugheld', 'On hold: needs review', 'The guideline entry for this case is under dispute.'],
+    [none, 'drugnone', 'No guideline for this drug', 'The guidelines available in this system do not cover this drug.'],
+    [silent, 'drugsilent', 'The guideline gives no recommendation for this case', 'This guideline provides no recommendation for this case.'],
   ] as const;
   for (const [section, drug, outcome, missing] of cases) {
     if (section !== held) openRow(drug, outcome); // the first current result is open already
-    expect(section.getByText('No recommendation is shown for this drug, so there is no decision to record.')).toBeVisible();
+    expect(section.getByText('A decision cannot be recorded here because no recommendation is shown for this drug.')).toBeVisible();
     expect(section.queryByRole('button', PANEL)).not.toBeInTheDocument();
     expect(section.queryByText('Recommendation')).not.toBeInTheDocument();
     // Each is a gap in the guidelines, not in the patient's report, and the evidence says which.
-    const gap = within(section.getByRole('region', { name: 'What is missing?' }));
+    const gap = within(section.getByRole('region', { name: 'Missing information and limitations' }));
     expect(gap.getByText(missing)).toBeVisible();
     expect(gap.getByText('From the guidelines and definitions')).toBeVisible();
     expect(gap.queryByText(/From the report/)).not.toBeInTheDocument();
@@ -156,19 +156,21 @@ it('says which gene results an assessment used, which it lacked and whose gap th
   auth.apiFetch.mockImplementation(async () => page(partial as never));
   show();
   const evidence = within(await screen.findByRole('complementary', { name: 'Evidence for drugheld' }));
-  const used = within(evidence.getByRole('region', { name: 'What the assessment used' }));
+  const used = within(evidence.getByRole('region', { name: 'Assessment inputs' }));
   expect(used.getByText(/GENEA: Poor Metabolizer/)).toBeVisible();
-  expect(used.getByText('(diplotype *2/*3, activity score 0.0)')).toBeVisible();
-  expect(used.getByText('GENEC: no state was recorded with this result. It is not assumed.')).toBeVisible();
-  expect(used.getByText('Not used by this assessment: the medication list and the demographics. They are recorded in the chart only.')).toBeVisible();
+  expect(used.getByText('(diplotype: *2/*3; activity score: 0.0)')).toBeVisible();
+  expect(used.getByText('GENEC: No result status was saved. No status has been assumed.')).toBeVisible();
+  expect(used.getByText('This assessment did not use the medication list or patient demographics. Both are recorded in the chart only.')).toBeVisible();
   expect(used.queryByText(/GENEB/)).not.toBeInTheDocument();
-  const gap = within(evidence.getByRole('region', { name: 'What is missing?' }));
+  const gap = within(evidence.getByRole('region', { name: 'Missing information and limitations' }));
   expect(gap.getByText('From the report · GENEB')).toBeVisible();
   // Said once: the result's own reason is the gene's reason.
-  expect(gap.getAllByText('The report has no result for a gene this guideline needs.')).toHaveLength(1);
-  expect(gap.getByText("A reviewer's next step: Obtain the missing gene result from the lab.")).toBeVisible();
+  expect(gap.getAllByText('A gene result required by this guideline is missing from the report.')).toHaveLength(1);
+  expect(gap.getByText('Reviewer next step: Request the missing gene result from the lab.')).toBeVisible();
   expect(evidence.queryByText(/Normal/)).not.toBeInTheDocument();
-  expect(within(evidence.getByRole('region', { name: 'Show the source' })).getByText('This outcome has no guideline wording, so there is no source to show.')).toBeVisible();
+  expect(
+    within(evidence.getByRole('region', { name: 'View source' })).getByText('No guideline text is associated with this outcome, so no guideline source is shown.'),
+  ).toBeVisible();
   // Nothing changed, so that part is not shown at all.
   expect(evidence.queryByRole('region', { name: 'What changed?' })).not.toBeInTheDocument();
 });
@@ -177,22 +179,22 @@ it('a reason this screen does not know is reported as unknown, with no next step
   const unknown = { ...evaluation, results: [other(0, 'drugheld', 'held', 'some-later-reason')] };
   auth.apiFetch.mockImplementation(async () => page(unknown as never));
   show();
-  const gap = within(await screen.findByRole('region', { name: 'What is missing?' }));
-  expect(gap.getByText(/The reason is not one this screen knows/)).toBeVisible();
-  expect(gap.getByText('Nothing can be done about this in the product yet.')).toBeVisible();
+  const gap = within(await screen.findByRole('region', { name: 'Missing information and limitations' }));
+  expect(gap.getByText(/This view cannot interpret the reason code/)).toBeVisible();
+  expect(gap.getByText('No reviewer action is specified for this status.')).toBeVisible();
 });
 
 it('a recommendation says why it applies, and "What changed?" appears only when the guidelines differ or cannot be confirmed', async () => {
   show();
   const evidence = within(await screen.findByRole('complementary', { name: 'Evidence for drugz' }));
   expect(evidence.getByRole('region', { name: 'Why this applies' })).toBeVisible();
-  expect(within(evidence.getByRole('region', { name: 'What is missing?' })).getByText('Nothing the assessment needed is recorded as missing.')).toBeVisible();
+  expect(within(evidence.getByRole('region', { name: 'Missing information and limitations' })).getByText('No required information was recorded as missing.')).toBeVisible();
   expect(evidence.queryByRole('region', { name: 'What changed?' })).not.toBeInTheDocument();
 });
 
 it.each([
-  ['changed', 'The guidelines loaded now are not the set this result was made with. That says only that they differ, not what differs.'],
-  ['unknown', 'It could not be confirmed that this result used the guidelines in use now.'],
+  ['changed', 'The current guideline set differs from the set used for this result. This comparison does not identify what changed.'],
+  ['unknown', 'Could not confirm whether this result used the current guideline set.'],
 ])('guidelines %s: "What changed?" says exactly that', async (status, message) => {
   const fixture = { ...evaluation, advisory: { ...evaluation.advisory, knowledge: { evaluatedWith: 'set', loadedNow: status === 'changed' ? 'next' : null, status } } };
   expect(() => evaluationSummaryDtoSchema.parse(fixture)).not.toThrow();
@@ -255,7 +257,7 @@ it('measures nothing for a result that is not current: its wording is folded, so
   auth.apiFetch.mockImplementation(async () => page(variant({ state: 'retracted', current: false })));
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'drugz: not current, Recommendation' }));
-  expect(screen.getByText('This is the evidence as it was stored with this earlier result.')).toBeVisible();
+  expect(screen.getByText('This evidence was saved with an earlier result.')).toBeVisible();
   expect(screen.queryByRole('region', { name: /^Recommendation summary/ })).not.toBeInTheDocument();
 });
 
@@ -278,7 +280,7 @@ it('an assessment on hold says so with each result, and its decision history sta
   auth.apiFetch.mockImplementation(async () => page(heldEvaluation as never));
   show();
   expect(await screen.findByText('Held: A needed gene result is missing. Ask the laboratory for it.')).toBeVisible();
-  expect(screen.getByText('This assessment is on hold, so no decision can be recorded on it.')).toBeVisible();
+  expect(screen.getByText('This assessment is on hold. You cannot record a decision for it.')).toBeVisible();
   expect(screen.queryByRole('button', PANEL)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Decision history' }));
   expect(screen.getByRole('button', PANEL)).toBeVisible();
@@ -293,7 +295,7 @@ const notCurrent = [
   ['active but not current', variant({ current: false }), 'Not the current result for this report.'],
 ] as const;
 
-it.each(notCurrent)('%s: a notice, and the wording only behind "Show the text anyway"', async (_name, fixture, notice) => {
+it.each(notCurrent)('%s: a notice, and the wording only behind "View result text (not current)"', async (_name, fixture, notice) => {
   expect(() => evaluationSummaryDtoSchema.parse(fixture)).not.toThrow();
   auth.apiFetch.mockImplementation(async () => page(fixture));
   show();
@@ -304,11 +306,11 @@ it.each(notCurrent)('%s: a notice, and the wording only behind "Show the text an
   openRow('drugz', 'not current, Recommendation');
   expect(screen.getByText('Z normal-low.')).not.toBeVisible();
   // Its evidence is labelled as what was stored then, and no decision can be recorded on it: only its history is offered.
-  expect(screen.getByText('This is the evidence as it was stored with this earlier result.')).toBeVisible();
-  expect(screen.getByText('This is not the current result, so no new decision can be recorded on it.')).toBeVisible();
+  expect(screen.getByText('This evidence was saved with an earlier result.')).toBeVisible();
+  expect(screen.getByText('This is not the current result. You cannot record a new decision for it.')).toBeVisible();
   expect(screen.queryByRole('button', PANEL)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Decision history' })).toBeVisible();
-  fireEvent.click(screen.getByText('Show the text anyway'));
+  fireEvent.click(screen.getByText('View result text (not current)'));
   expect(screen.getByText('Z normal-low.')).toBeVisible();
   expect(screen.queryByText('Current evaluation')).not.toBeInTheDocument();
 });
@@ -320,7 +322,7 @@ it('a current result made with other guidelines is a caution: the wording stays 
   show();
   expect(await screen.findByText('The guidelines have changed since this result was made. A pharmacist must check whether it still applies.')).toBeVisible();
   expect(screen.getByText('Z normal-low.')).toBeVisible();
-  expect(screen.queryByText('Show the text anyway')).not.toBeInTheDocument();
+  expect(screen.queryByText('View result text (not current)')).not.toBeInTheDocument();
 });
 
 it('an unverified patient link is a caution, not a withdrawal: the wording stays readable', async () => {
@@ -328,7 +330,7 @@ it('an unverified patient link is a caution, not a withdrawal: the wording stays
   show();
   expect(await screen.findByText('Not yet confirmed that this report belongs to this patient.')).toBeVisible();
   expect(screen.getByText('Z normal-low.')).toBeVisible();
-  expect(screen.queryByText('Show the text anyway')).not.toBeInTheDocument();
+  expect(screen.queryByText('View result text (not current)')).not.toBeInTheDocument();
 });
 
 it('control: a current result with a verified link has no notice and its wording is shown', async () => {
@@ -336,7 +338,7 @@ it('control: a current result with a verified link has no notice and its wording
   expect(await screen.findByText('Z normal-low.')).toBeVisible();
   expect(screen.getByText('Current evaluation')).toBeVisible();
   for (const [, , notice] of notCurrent) expect(screen.queryByText(notice)).not.toBeInTheDocument();
-  expect(screen.queryByText('Show the text anyway')).not.toBeInTheDocument();
+  expect(screen.queryByText('View result text (not current)')).not.toBeInTheDocument();
   expect(screen.getByText(/^Updated /)).toBeVisible();
 });
 

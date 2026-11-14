@@ -21,7 +21,7 @@ export interface MissingItem {
   about: 'report' | 'guideline' | 'assessment';
   gene: string | null;
   message: string;
-  /** What a reviewer does next, from the vocabulary or the API. Null when nothing can be done in the product yet. */
+  /** What a reviewer does next, from the vocabulary or the API. Null when no reviewer action is specified. */
   nextStep: string | null;
 }
 
@@ -67,7 +67,7 @@ function knownReason(code: string | null): ReasonCode | null {
   return RETIRED_REASON_CODES[code] ?? null;
 }
 
-const UNKNOWN_REASON = 'The assessment could not use this. The reason is not one this screen knows; its code is under Technical provenance.';
+const UNKNOWN_REASON = 'This item was not used. This view cannot interpret the reason code. See “Technical details”.';
 
 function missingFor(code: string | null, gene: string | null): MissingItem {
   const reason = knownReason(code);
@@ -76,9 +76,9 @@ function missingFor(code: string | null, gene: string | null): MissingItem {
 }
 
 const CORRECTION_WORDS: Readonly<Record<EvaluationSummaryDto['corrections'][number]['kind'], string>> = {
-  retraction: 'This result was withdrawn.',
-  supersession: 'This result was replaced by another.',
-  reinstatement: 'This result was reinstated after a withdrawal.',
+  retraction: 'Result withdrawn.',
+  supersession: 'Result replaced by another result.',
+  reinstatement: 'Result reinstated after withdrawal.',
 };
 
 export function resultEvidence(evaluation: Evaluation, result: Result): ResultEvidenceView {
@@ -89,7 +89,7 @@ export function resultEvidence(evaluation: Evaluation, result: Result): ResultEv
     missing.push({
       about: 'assessment',
       gene: null,
-      message: evaluation.hold?.message ?? 'The whole assessment is on hold.',
+      message: evaluation.hold?.message ?? 'The entire assessment is on hold.',
       nextStep: evaluation.hold?.reviewerAction ?? null,
     });
   const geneReasons = new Set<string>();
@@ -98,7 +98,7 @@ export function resultEvidence(evaluation: Evaluation, result: Result): ResultEv
     if (!state) {
       notRecorded.push(gene);
     } else if (state.state === 'canonical' && state.phenotype) {
-      const detail = [state.diplotype && `diplotype ${state.diplotype}`, state.activityScore && `activity score ${state.activityScore}`].filter(Boolean).join(', ');
+      const detail = [state.diplotype && `diplotype: ${state.diplotype}`, state.activityScore && `activity score: ${state.activityScore}`].filter(Boolean).join('; ');
       used.push({ gene, phenotype: state.phenotype, detail: detail || null });
     } else {
       // Absent, null, unresolved, or a state this screen does not know: never read as a normal result.
@@ -115,10 +115,10 @@ export function resultEvidence(evaluation: Evaluation, result: Result): ResultEv
       break;
     case 'changed':
       // The API says only that the two sets differ, not what differs (shared-types, `advisory.knowledge`).
-      changes.push({ message: 'The guidelines loaded now are not the set this result was made with. That says only that they differ, not what differs.', when: null });
+      changes.push({ message: 'The current guideline set differs from the set used for this result. This comparison does not identify what changed.', when: null });
       break;
     default:
-      changes.push({ message: 'It could not be confirmed that this result used the guidelines in use now.', when: null });
+      changes.push({ message: 'Could not confirm whether this result used the current guideline set.', when: null });
   }
   return { used, notRecorded, missing, changes };
 }

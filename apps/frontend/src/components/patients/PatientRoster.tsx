@@ -74,7 +74,7 @@ export function PatientRoster() {
           </label>
           {/* The API has no patient search, so the filter reaches only what this page has loaded, and says so (specs/038 D17). */}
           <p id="patient-roster-scope" className="text-xs text-muted-foreground">
-            {hasMore ? `This searches the ${patients.length} patients loaded so far, not the whole list. Load more to widen it.` : `This searches all ${patients.length} patients.`}
+            {hasMore ? `Search covers only the patients loaded so far (${patients.length}). Load more to expand it.` : `Search covers all patients (${patients.length}).`}
           </p>
         </div>
       )}

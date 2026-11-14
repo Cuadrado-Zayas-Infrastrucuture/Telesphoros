@@ -275,7 +275,7 @@ it('cancelling the follow-up step leaves the decision saved and says no reminder
   await deferDecision(result, { followup: true });
   const followup = await followupForm();
   await userEvent.click(followup.getByRole('button', { name: 'Cancel' }));
-  const line = await screen.findByText('Decision saved. No follow-up was scheduled, so no reminder exists for it.');
+  const line = await screen.findByText('Decision saved. No follow-up was scheduled, so no reminder was created.');
   expect(line).toBeVisible();
   await waitFor(() => expect(line).toHaveFocus());
   expect(await result.findByText('Current decision: Deferred')).toBeVisible();
@@ -338,7 +338,7 @@ it('where follow-up recording is paused, the decision form offers no second step
   const result = await openResult(stub);
   await userEvent.click(await result.findByRole('button', { name: 'Record decision' }));
   const form = within(result.getByRole('form', { name: 'Record decision' }));
-  expect(await form.findByText('Follow-up recording is not available in this environment, so no reminder can be created for this decision here.')).toBeVisible();
+  expect(await form.findByText('Follow-ups cannot be recorded here. A reminder cannot be created for this decision.')).toBeVisible();
   expect(form.queryByRole('checkbox', { name: 'Then schedule a linked follow-up (optional)' })).not.toBeInTheDocument();
 });
 
@@ -349,7 +349,7 @@ it('the decision form names its patient and drug, and says the review-by date cr
   const form = within(result.getByRole('form', { name: 'Record decision' }));
   expect(form.getByText('For patient SYN-FLOW · drugz')).toBeVisible();
   await userEvent.selectOptions(form.getByRole('combobox', { name: 'Decision' }), 'deferred');
-  expect(form.getByText('This records the intended review date only. It creates no reminder: only a linked follow-up does.')).toBeVisible();
+  expect(form.getByText('Saving this review date does not create a reminder. Use “Schedule linked follow-up” to create one.')).toBeVisible();
 });
 
 // An automated check finds only what a rule can detect. It is not a statement of conformance: contrast, focus order on a real screen,

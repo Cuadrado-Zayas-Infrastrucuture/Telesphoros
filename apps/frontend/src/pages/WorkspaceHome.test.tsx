@@ -63,9 +63,9 @@ it('lists the follow-ups assigned to the clinician: patient, medication, when it
   expect(home.getByText('Due today · 2026-11-12 (America/Puerto_Rico)')).not.toHaveClass('text-warning');
   // A starting point, not the list: three rows, and where the rest are.
   expect(home.getAllByRole('link')).toHaveLength(3);
-  expect(home.getByText('There are more. The full list, with its filters, is under Follow-ups in the sidebar.')).toBeVisible();
-  // An overdue reminder is a late task, and the section says it is not a clinical warning.
-  expect(home.getByText('Overdue means the reminder’s date has passed. It is not a clinical warning.')).toBeVisible();
+  expect(home.getByText('More follow-ups are available. Open “Follow-ups” in the sidebar to view the full list and filters.')).toBeVisible();
+  // An overdue reminder is a late task, and the section says it does not grade clinical urgency.
+  expect(home.getByText('Overdue means the reminder date has passed. It does not indicate the level of clinical urgency.')).toBeVisible();
   expect(fetchImpl.mock.calls.some(([url]) => String(url).includes('/api/v1/followups?') && String(url).includes('assignment=mine'))).toBe(true);
   expect(await axe(container)).toHaveNoViolations();
 });
@@ -82,7 +82,7 @@ it('a failed read lists nothing, says so, and can be retried', async () => {
   let down = true;
   open(['clinician'], () => (down ? json({ error: { code: 'UNAVAILABLE' } }, 503) : json(list([entry(1, 'today', '2026-11-12')]))));
   const home = await section();
-  expect(await home.findByText('Follow-ups could not be loaded, so none are listed here.')).toBeVisible();
+  expect(await home.findByText('Follow-ups could not be loaded.')).toBeVisible();
   expect(home.queryByText('No open follow-ups are assigned to you.')).not.toBeInTheDocument();
   down = false;
   await userEvent.click(home.getByRole('button', { name: 'Retry follow-ups' }));
