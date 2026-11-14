@@ -79,41 +79,43 @@ export const REASON_PRECEDENCE: readonly ReasonCode[] = [
   'association-abstained',
 ];
 
-/** What the reason means, in plain words. */
+/**
+ * What the reason means, in plain words. Messages and reviewer actions were reviewed and approved by the founder and the co-founder,
+ * both pharmacists, in the spec 038 D11 wording review (2026-11-14); `knowledge-gap` was first approved in audit T3 (2026-11-07).
+ */
 export const REASON_MESSAGES: Readonly<Record<ReasonCode, string>> = {
-  'duplicate-gene-conflict': 'The same gene appears more than once in the report with different values.',
-  'duplicate-identical': 'The same gene appears more than once in the report with identical values.',
-  'sentinel-literal-in-source': 'The report says "no result" (or similar) in place of a value for this gene.',
-  'other-gene-unresolved': 'The value reported for this gene is not a recognized phenotype (unfamiliar wording, or a genotype only).',
-  'out-of-review-scope': 'The guideline cell for this case exists but has not passed review.',
-  'cell-disputed': 'The guideline cell for this case is under dispute.',
-  'gene-absent': 'The report has no result for a gene this guideline needs.',
-  'malformed-diplotype': 'The diplotype in the report is not in the expected "allele/allele" form.',
-  'allele-not-in-definitions': 'An allele in the report is not in the allele definitions used by this system.',
-  'no-phenotype-mapping': 'The guideline tables define no phenotype for this combination of alleles.',
-  'no-gene-definition': 'This system has no definitions for this gene.',
-  // Wording approved by the founder as pharmacist (audit T3, 2026-11-07).
-  'knowledge-gap': 'The guideline file has no entry for this combination of results. A pharmacist must review it before any recommendation is given.',
-  'association-abstained': 'The report lists values with no key tying them to genes, so none were assigned.',
-  'no-published-recommendation': 'The guideline publishes no recommendation for this case.',
-  'no-guideline-for-drug': 'No loaded guideline covers this drug.',
+  'duplicate-gene-conflict': 'The report lists this gene more than once with different values.',
+  'duplicate-identical': 'The report lists this gene more than once with identical values.',
+  'sentinel-literal-in-source': 'The report lists “no result” or similar wording for this gene.',
+  'other-gene-unresolved': 'This system does not recognize the reported value as a phenotype. It may use unfamiliar wording or provide only a genotype.',
+  'out-of-review-scope': "The guideline entry for this case has not passed this system's review.",
+  'cell-disputed': 'The guideline entry for this case is under dispute.',
+  'gene-absent': 'A gene result required by this guideline is missing from the report.',
+  'malformed-diplotype': 'The reported diplotype does not match the allele/allele format expected by this system.',
+  'allele-not-in-definitions': 'An allele in this report is not included in the definitions available in this system.',
+  'no-phenotype-mapping': 'The available guideline tables do not define a phenotype for this allele combination.',
+  'no-gene-definition': 'This system has no definitions available for this gene.',
+  'knowledge-gap': 'The available guideline data have no entry for this result combination. A pharmacist must review the case before a recommendation can be provided.',
+  'association-abstained': 'The report does not clearly link values to genes. This system did not assign them.',
+  'no-published-recommendation': 'This guideline provides no recommendation for this case.',
+  'no-guideline-for-drug': 'The guidelines available in this system do not cover this drug.',
 };
 
-/** What a reviewer does next. `null` means nothing can be done in the product yet. */
+/** What a reviewer does next. `null` means no reviewer action is specified for the reason, and the screen says so. */
 export const REVIEWER_ACTIONS: Readonly<Record<ReasonCode, string | null>> = {
-  'duplicate-gene-conflict': 'Obtain ordering or supersession evidence, or a corrected report.',
-  'duplicate-identical': 'Confirm it is a repeated summary line.',
-  'sentinel-literal-in-source': 'Ask the lab whether the test failed.',
-  'other-gene-unresolved': 'Obtain the phenotype from the lab.',
+  'duplicate-gene-conflict': 'Obtain documentation confirming which result should be used, or request a corrected report.',
+  'duplicate-identical': 'Confirm that the duplicate is a repeated summary entry.',
+  'sentinel-literal-in-source': 'Ask the lab to clarify why no result was reported.',
+  'other-gene-unresolved': 'Request the phenotype from the lab.',
   'out-of-review-scope': null,
-  'cell-disputed': 'Resolve the dispute through the cell review process; an independent second person is required.',
-  'gene-absent': 'Obtain the missing gene result from the lab.',
-  'malformed-diplotype': 'Obtain a correctly formatted result from the lab.',
-  'allele-not-in-definitions': 'Obtain the phenotype from the lab, or add the allele through the reviewed definition process.',
-  'no-phenotype-mapping': 'Obtain the phenotype from the lab.',
-  'no-gene-definition': 'Obtain the phenotype from the lab; the gene needs a reviewed definition.',
-  'knowledge-gap': 'Add the missing cell, or sign it as not covered, through the reviewed knowledge process.',
-  'association-abstained': 'Request a corrected or differently laid out report.',
+  'cell-disputed': 'Resolve the dispute through the guidance review process. An independent second reviewer is required.',
+  'gene-absent': 'Request the missing gene result from the lab.',
+  'malformed-diplotype': 'Ask the lab to clarify the diplotype or provide it in the required format.',
+  'allele-not-in-definitions': 'Request the phenotype from the lab, or have the allele added through the definition review process.',
+  'no-phenotype-mapping': 'Request the phenotype from the lab.',
+  'no-gene-definition': 'Request the phenotype from the lab. A reviewed definition is also needed for this gene.',
+  'knowledge-gap': 'Use the knowledge review process to add an entry or sign off that this case is not covered.',
+  'association-abstained': 'Request a report that clearly links each value to its gene.',
   'no-published-recommendation': null,
   'no-guideline-for-drug': null,
 };

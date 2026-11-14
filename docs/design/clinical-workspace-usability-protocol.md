@@ -24,7 +24,7 @@ Read each task aloud once. Do not point at the screen. Stop a task after three m
 | --- | --- | --- | --- |
 | 1 | "Attach this report for SYN-2041." | The report is stored for SYN-2041, and the participant says which patient before sending | Sending for SYN-204; not noticing that no patient was chosen |
 | 2 | "Can you ask this screen what the result means?" | The participant says it does not answer questions, without typing one first | Typing a question and expecting an answer |
-| 3 | "For SYN-204, what does the system recommend for the first drug, and where does that come from?" | Names the wording, the guideline and its version, and where in it | Reading "Assessment completed" as "safe"; opening Technical provenance to find the source |
+| 3 | "For SYN-204, what does the system recommend for the first drug, and where does that come from?" | Names the wording, the guideline and its version, and where in it | Reading "Assessment complete" as "safe"; opening Technical details to find the source |
 | 4 | "Which gene results did that assessment use? Did it use the medication list?" | Names the gene results; says the medication list was not used | Assuming the medication list or age was used |
 | 5 | "One drug has no recommendation. Why, and what happens next?" | Tells a hold from "no guideline"; names the reviewer's next step, or says none exists | Treating "no guideline" as "no problem"; expecting an owner or a due date |
 | 6 | "Is the withdrawn result something you would act on?" | Says no, and why | Opening it and reading its wording as current |

@@ -34,10 +34,10 @@ export function decisionStanding(
   evaluation: Pick<EvaluationSummaryDto, 'current' | 'state' | 'disposition' | 'advisory'>,
   result: { outcome: string },
 ): { open: true; reason: null } | { open: false; reason: string } {
-  if (!evaluation.current || evaluation.state !== 'active') return { open: false, reason: 'This is not the current result, so no new decision can be recorded on it.' };
-  if (evaluation.disposition !== 'evaluated') return { open: false, reason: 'This assessment is on hold, so no decision can be recorded on it.' };
-  if (result.outcome !== 'shown') return { open: false, reason: 'No recommendation is shown for this drug, so there is no decision to record.' };
-  if (evaluation.advisory.activeDisputes > 0) return { open: false, reason: 'The evidence is in dispute, so no new decision can be recorded.' };
+  if (!evaluation.current || evaluation.state !== 'active') return { open: false, reason: 'This is not the current result. You cannot record a new decision for it.' };
+  if (evaluation.disposition !== 'evaluated') return { open: false, reason: 'This assessment is on hold. You cannot record a decision for it.' };
+  if (result.outcome !== 'shown') return { open: false, reason: 'A decision cannot be recorded here because no recommendation is shown for this drug.' };
+  if (evaluation.advisory.activeDisputes > 0) return { open: false, reason: 'The evidence is under dispute. You cannot record a new decision for this result.' };
   return { open: true, reason: null };
 }
 const path = (result: string) => `/api/v1/evaluation-results/${encodeURIComponent(result)}/clinician-decisions`;

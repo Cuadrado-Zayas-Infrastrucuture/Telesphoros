@@ -32,11 +32,11 @@ export function ResultEvidence({
   const worded = showsWording(result);
   return (
     <aside aria-label={`Evidence for ${result.drug}`} className={`flex flex-col gap-4 rounded-md border border-divider p-3 ${className ?? ''}`}>
-      {historical && <p className="text-sm text-muted-foreground">This is the evidence as it was stored with this earlier result.</p>}
-      <EvidenceBlock title={worded ? 'Why this applies' : 'What the assessment used'}>
+      {historical && <p className="text-sm text-muted-foreground">This evidence was saved with an earlier result.</p>}
+      <EvidenceBlock title={worded ? 'Why this applies' : 'Assessment inputs'}>
         {view.used.length > 0 ? (
           <>
-            <p className="text-muted-foreground">Gene results used, from the report assessed {when(evaluation.createdAt)}:</p>
+            <p className="text-muted-foreground">Gene results used (report assessed {when(evaluation.createdAt)}):</p>
             <ul className="flex flex-col gap-1">
               {view.used.map((input) => (
                 <li key={input.gene} className="wrap-anywhere">
@@ -47,25 +47,25 @@ export function ResultEvidence({
             </ul>
           </>
         ) : (
-          <p>No gene result was used for this drug.</p>
+          <p>No gene results were used to assess this drug.</p>
         )}
         {view.notRecorded.map((gene) => (
           <p key={gene} className="text-warning">
-            {gene}: no state was recorded with this result. It is not assumed.
+            {gene}: No result status was saved. No status has been assumed.
           </p>
         ))}
-        <p className="text-muted-foreground">Not used by this assessment: the medication list and the demographics. They are recorded in the chart only.</p>
+        <p className="text-muted-foreground">This assessment did not use the medication list or patient demographics. Both are recorded in the chart only.</p>
       </EvidenceBlock>
-      <EvidenceBlock title="Show the source">
+      <EvidenceBlock title="View source">
         {worded && result.citation ? (
           <ResultSource citation={result.citation} strength={result.strength} />
         ) : (
-          <p>{worded ? 'No citation was stored with this result.' : 'This outcome has no guideline wording, so there is no source to show.'}</p>
+          <p>{worded ? 'No source citation was saved with this result.' : 'No guideline text is associated with this outcome, so no guideline source is shown.'}</p>
         )}
       </EvidenceBlock>
-      <EvidenceBlock title="What is missing?">
+      <EvidenceBlock title="Missing information and limitations">
         {view.missing.length === 0 ? (
-          <p>Nothing the assessment needed is recorded as missing.</p>
+          <p>No required information was recorded as missing.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {view.missing.map((item, index) => (
@@ -75,7 +75,7 @@ export function ResultEvidence({
                   {item.gene ? ` · ${item.gene}` : ''}
                 </span>
                 <span>{item.message}</span>
-                <span>{item.nextStep ? `A reviewer's next step: ${item.nextStep}` : 'Nothing can be done about this in the product yet.'}</span>
+                <span>{item.nextStep ? `Reviewer next step: ${item.nextStep}` : 'No reviewer action is specified for this status.'}</span>
               </li>
             ))}
           </ul>

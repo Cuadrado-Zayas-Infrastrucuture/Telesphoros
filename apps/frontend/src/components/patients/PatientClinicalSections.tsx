@@ -47,7 +47,7 @@ export function PatientClinicalSections({ patientId }: { patientId: string }) {
           patientId={patientId}
           decision={waiting ? undefined : (decision ?? undefined)}
           onDecisionClose={(saved) => {
-            if (decision?.guided) setOutcome(saved ? 'Decision saved. Follow-up saved.' : 'Decision saved. No follow-up was scheduled, so no reminder exists for it.');
+            if (decision?.guided) setOutcome(saved ? 'Decision saved. Follow-up saved.' : 'Decision saved. No follow-up was scheduled, so no reminder was created.');
             setDecision(null);
           }}
           onEditingChange={setEditing}

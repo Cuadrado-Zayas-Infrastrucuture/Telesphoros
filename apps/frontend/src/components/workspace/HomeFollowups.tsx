@@ -22,7 +22,7 @@ export function HomeFollowups() {
       <h2 className="font-medium">Follow-ups assigned to you</h2>
       {error ? (
         <>
-          <p>Follow-ups could not be loaded, so none are listed here.</p>
+          <p>Follow-ups could not be loaded.</p>
           <Button variant="outline" size="sm" className="self-start" onClick={reload}>
             Retry follow-ups
           </Button>
@@ -52,9 +52,11 @@ export function HomeFollowups() {
               );
             })}
           </ul>
-          {(more > 0 || data.hasMore) && <p className="text-muted-foreground">There are more. The full list, with its filters, is under Follow-ups in the sidebar.</p>}
+          {(more > 0 || data.hasMore) && (
+            <p className="text-muted-foreground">More follow-ups are available. Open “Follow-ups” in the sidebar to view the full list and filters.</p>
+          )}
           {shown.some((entry) => entry.dueState === 'overdue') && (
-            <p className="text-xs text-muted-foreground">Overdue means the reminder’s date has passed. It is not a clinical warning.</p>
+            <p className="text-xs text-muted-foreground">Overdue means the reminder date has passed. It does not indicate the level of clinical urgency.</p>
           )}
         </>
       )}

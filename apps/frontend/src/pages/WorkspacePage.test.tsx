@@ -315,7 +315,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.click(details.getByRole('button', { name: 'More patients' }));
     expect(await details.findByRole('alert')).toHaveTextContent(/patients/i);
     expect(details.getByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
-    expect(details.getByText('This report will be stored for SYN-004.')).toBeVisible();
+    expect(details.getByText('This report will be saved in the record for SYN-004.')).toBeVisible();
     fail = false;
     await userEvent.click(details.getByRole('button', { name: 'Retry loading patients' }));
     expect(await details.findByRole('option', { name: 'SYN-LATER' })).toBeInTheDocument();
@@ -638,13 +638,13 @@ describe('the chat-first home in every build (specs/024)', () => {
     const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
     await details.findByRole('option', { name: 'SYN-0041' });
     expect(details.getByRole('combobox', { name: 'Patient' })).toHaveValue('');
-    expect(details.getByText('No patient is chosen yet.')).toBeVisible();
+    expect(details.getByText('No patient selected.')).toBeVisible();
     await userEvent.click(details.getByRole('checkbox', CONFIRM));
     await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
     expect(details.getByText('Choose the patient first.')).toBeVisible();
     expect(submitReport).not.toHaveBeenCalled();
     await choosePatient(TWIN.id);
-    expect(details.getByText('This report will be stored for SYN-0041.')).toBeVisible();
+    expect(details.getByText('This report will be saved in the record for SYN-0041.')).toBeVisible();
     await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
     await waitFor(() => expect(submitReport).toHaveBeenCalledTimes(1));
     expect(vi.mocked(submitReport).mock.calls[0]![0].patientId).toBe(TWIN.id);
@@ -667,7 +667,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await thread.findByText('Received');
     await userEvent.upload(file(), new File(['{"synthetic":true}'], 'SYN-0041-next.json'));
     await choosePatient(TWIN.id);
-    expect(screen.getByText('This report will be stored for SYN-0041.')).toBeVisible();
+    expect(screen.getByText('This report will be saved in the record for SYN-0041.')).toBeVisible();
     expect(thread.getByText('SYN-004-cyp2c19.json · SYN-004')).toBeVisible();
     expect(vi.mocked(submitReport).mock.calls[0]![0].patientId).toBe(PATIENT.id);
     expect(submitReport).toHaveBeenCalledTimes(1);
@@ -677,7 +677,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     open(['clinician']);
     const box = await screen.findByRole('textbox', { name: 'Question' });
     await screen.findByRole('button', { name: 'Attach a report' });
-    expect(box).toHaveAttribute('placeholder', 'Attach a report. Typed questions are not answered here.');
+    expect(box).toHaveAttribute('placeholder', 'Attach a report. Questions cannot be answered here.');
     const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
     expect(tasks.getByText(/Attach a synthetic report/)).toBeVisible();
     const patients = tasks.getByRole('link', { name: 'Open a patient' });
@@ -685,13 +685,13 @@ describe('the chat-first home in every build (specs/024)', () => {
     // The 44px target is measured in a real browser (e2e/foundation.spec.ts), which caught this link at 17px. jsdom has no layout, so
     // the nearest check here is that the link carries the control-height utility.
     expect(patients).toHaveClass('min-h-control');
-    expect(tasks.getByText(/Typed questions are not answered here\. They stay in this chat and are not saved\./)).toBeVisible();
+    expect(tasks.getByText('Typed questions appear in this chat but are not answered or saved.')).toBeVisible();
     expect(screen.queryByText(/ask a question/i)).toBeNull();
   });
 
   it('a member with no role is told the same, and is offered neither attaching nor a patient record', async () => {
     open([]);
-    expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveAttribute('placeholder', 'Typed questions are not answered here.');
+    expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveAttribute('placeholder', 'Questions cannot be answered here.');
     const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
     expect(tasks.getAllByRole('listitem')).toHaveLength(1);
     expect(tasks.queryByRole('link')).toBeNull();

@@ -28,7 +28,7 @@ export function ResultSource({ citation, strength }: { citation: unknown; streng
       </div>
       {strength && (
         <div className="flex flex-wrap gap-x-2">
-          <dt className="text-muted-foreground">Strength, as the source states it</dt>
+          <dt className="text-muted-foreground">Strength reported by the source</dt>
           <dd className="wrap-anywhere">{strength}</dd>
         </div>
       )}

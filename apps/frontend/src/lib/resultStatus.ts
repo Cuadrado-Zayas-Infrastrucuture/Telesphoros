@@ -114,7 +114,7 @@ export function evaluationLine(results: readonly Result[]): { tone: 'neutral' | 
   if (total > 0 && held === total) return { tone: 'warning', message: `No drug could be evaluated. ${held} on hold.` };
   if (total === 0) return { tone: 'warning', message: 'No drug could be evaluated.' };
   if (missing > 0) return { tone: 'warning', message: `${missing} of ${total} drugs ${missing === 1 ? 'has' : 'have'} no recommendation.` };
-  return { tone: 'neutral', message: total === 1 ? 'Assessment completed. 1 drug evaluated.' : `Assessment completed. All ${total} drugs evaluated.` };
+  return { tone: 'neutral', message: total === 1 ? 'Assessment complete. 1 drug assessed.' : `Assessment complete. All ${total} drugs assessed.` };
 }
 
 function unreachable(value: never): never {
