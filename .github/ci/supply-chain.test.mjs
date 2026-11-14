@@ -7,7 +7,7 @@
 //   - the scheduled rescan quietly becoming a merge gate, or quietly stopping.
 // `supplyChainProblems` returns what is wrong with copies of the files (empty when nothing is); the controls run it on deliberately broken copies.
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const dir = new URL('../workflows/', import.meta.url);
@@ -17,21 +17,46 @@ const real = {
   requirementsIn: read('./requirements.in'),
   requirementsTxt: read('./requirements.txt'),
   dependabot: read('../dependabot.yml'),
+  privateWorkflows: existsSync(new URL('./private-workflows.json', import.meta.url)) ? read('./private-workflows.json') : null,
 };
 
 /** The only workflow files allowed on main. Adding one means changing this line, in review. */
 export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml', 'staging-frontend.yml'];
 
+/**
+ * A repository built on this one may add its own workflows by naming them, in its own review, in a file private-workflows.json
+ * beside this one, as { "workflows": ["name.yml", ...] }. This repository has no such file, so its list is exactly WORKFLOWS. A listed workflow must exist, may not repeat a name above, and meets every rule below like any other.
+ */
+export function privateWorkflowNames(text) {
+  if (text === null || text === undefined) return { names: [], problems: [] };
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { names: [], problems: ['.github/ci/private-workflows.json must be JSON'] };
+  }
+  const names = value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).join() === 'workflows' && Array.isArray(value.workflows) ? value.workflows : null;
+  if (!names || names.length < 1 || names.length > 10 || !names.every((name) => typeof name === 'string' && /^[a-z0-9][a-z0-9-]*\.yml$/.test(name)) || new Set(names).size !== names.length) {
+    return { names: [], problems: ['.github/ci/private-workflows.json must be exactly { "workflows": [one to ten distinct "name.yml"] }'] };
+  }
+  const repeated = names.filter((name) => WORKFLOWS.includes(name));
+  if (repeated.length > 0) return { names: [], problems: [`.github/ci/private-workflows.json may not name a workflow already listed here: ${repeated.join(', ')}`] };
+  return { names, problems: [] };
+}
+
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
 /** Each job of a workflow, as text starting with its id. */
 const jobsOf = (text) => (text.split(/^jobs:\s*$/m)[1] ?? '').split(/^ {2}(?=[a-z][a-z0-9_-]*:\s*$)/m).filter((j) => /\S/.test(j));
 
-export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt, dependabot }) {
+export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt, dependabot, privateWorkflows = null }) {
   const problems = [];
   const need = (ok, message) => { if (!ok) problems.push(message); };
 
-  // INF-17: exactly the reviewed workflows.
-  need(JSON.stringify(Object.keys(workflows).sort()) === JSON.stringify([...WORKFLOWS].sort()), `the workflows must be exactly ${WORKFLOWS.join(', ')} (found ${Object.keys(workflows).join(', ')})`);
+  // INF-17: exactly the reviewed workflows, and the ones a repository built on this one names in review (privateWorkflowNames).
+  const extra = privateWorkflowNames(privateWorkflows);
+  problems.push(...extra.problems);
+  const allowed = [...new Set([...WORKFLOWS, ...extra.names])];
+  need(JSON.stringify(Object.keys(workflows).sort()) === JSON.stringify([...allowed].sort()), `the workflows must be exactly ${allowed.join(', ')} (found ${Object.keys(workflows).join(', ')})`);
 
   for (const [name, raw] of Object.entries(workflows)) {
     const text = code(raw);
@@ -134,6 +159,24 @@ test('the supply-chain rules report each way the files could be weakened (contro
     ['the OIDC job installs packages', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('      - name: The downloaded bundle is the one build packed\n', '      - run: pnpm install --frozen-lockfile\n      - name: The downloaded bundle is the one build packed\n') } }],
     ['the OIDC job sets up pnpm', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('      - name: The downloaded bundle is the one build packed\n', '      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0\n      - name: The downloaded bundle is the one build packed\n') } }],
     ['an account id in a workflow', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('allowed-account-ids: ${{ vars.STAGING_FRONTEND_ACCOUNT_ID }}', "allowed-account-ids: '123456789012'") } }],
+    // A repository built on this one names its own workflows; each control holds whether or not this checkout has such a list.
+    ['a private list naming a workflow listed here', { privateWorkflows: '{"workflows":["ci.yml"]}' }],
+    ['a private list naming a workflow that is not there', { privateWorkflows: JSON.stringify({ workflows: [...privateWorkflowNames(real.privateWorkflows).names, 'never-here.yml'] }) }],
+    ['a private list of another shape', { privateWorkflows: '{"workflows":"never-here.yml"}' }],
+    ['a private list that is not JSON', { privateWorkflows: 'never-here.yml' }],
+    ['a private workflow that uses a repository secret', {
+      privateWorkflows: JSON.stringify({ workflows: [...privateWorkflowNames(real.privateWorkflows).names, 'never-here.yml'] }),
+      workflows: { ...real.workflows, 'never-here.yml': rescan.replace('permissions:\n  contents: read\n', 'permissions:\n  contents: read\nenv:\n  TOKEN: ${{ secrets.X }}\n') },
+    }],
+    // Each of these two is the only problem in its copy: the workflow exists and meets every rule.
+    ['a private list naming one workflow twice', {
+      privateWorkflows: JSON.stringify({ workflows: [...privateWorkflowNames(real.privateWorkflows).names, 'never-here.yml', 'never-here.yml'] }),
+      workflows: { ...real.workflows, 'never-here.yml': rescan },
+    }],
+    ['a private list naming a file that is not a plain workflow name', {
+      privateWorkflows: JSON.stringify({ workflows: [...privateWorkflowNames(real.privateWorkflows).names, 'Never-Here.yml'] }),
+      workflows: { ...real.workflows, 'Never-Here.yml': rescan },
+    }],
     ['Dependabot stops watching the Dockerfiles',{ dependabot: real.dependabot.replace(/  - package-ecosystem: docker\n/, '  - package-ecosystem: dockerx\n') }],
   ];
   for (const [name, change] of weakened) {
@@ -141,4 +184,14 @@ test('the supply-chain rules report each way the files could be weakened (contro
     assert.ok(Object.keys(change).every((k) => JSON.stringify(copy[k]) !== JSON.stringify(real[k])), `the control for "${name}" must change the real text (it does not: fix the control)`);
     assert.ok(supplyChainProblems(copy).length > 0, `a weakened copy must be reported: ${name}`);
   }
+});
+
+test('a workflow named in a private list is allowed, and meets every rule like any other', () => {
+  const rescan = real.workflows['rescan.yml'] ?? '';
+  const names = [...privateWorkflowNames(real.privateWorkflows).names, 'never-here.yml'];
+  const listed = { ...real, privateWorkflows: JSON.stringify({ workflows: names }), workflows: { ...real.workflows, 'never-here.yml': rescan } };
+  assert.ok(rescan.length > 100);
+  assert.deepEqual(supplyChainProblems(listed), []);
+  // This repository has no list, so its workflows are exactly WORKFLOWS (a repository built on it has its own list and workflows).
+  assert.deepEqual(privateWorkflowNames(null), { names: [], problems: [] });
 });
