@@ -383,7 +383,8 @@ const disabled = () => new Response(JSON.stringify({ error: { code: 'PIPELINE_DI
 it('says report processing is off as a status, offers no retry, and shows results once a re-read succeeds', async () => {
   auth.apiFetch.mockImplementation(async () => disabled());
   show();
-  expect(await screen.findByRole('status')).toHaveTextContent('Stored results are unavailable while report processing is disabled.');
+  // The loading placeholder is a status too, so the message is found by its text and then checked for its role.
+  expect(await screen.findByText('Stored results are unavailable while report processing is disabled.')).toHaveAttribute('role', 'status');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Retry stored results' })).not.toBeInTheDocument();
   auth.apiFetch.mockImplementation(async () => list());

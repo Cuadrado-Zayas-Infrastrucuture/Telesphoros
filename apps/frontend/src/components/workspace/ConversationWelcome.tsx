@@ -28,13 +28,13 @@ export function ConversationWelcome({
       <ul aria-label="What you can do here" className="mx-auto flex flex-col gap-1 text-sm text-muted-foreground">
         {canAttach && <li>Attach a synthetic report, select the patient it belongs to, and track its status here.</li>}
         {canReadRecords && (
-          // A wrapping row, not inline text: the link keeps its 44px target (e2e/foundation.spec.ts measures it) without stretching a
-          // line of text around it (specs/041 D5).
-          <li className="flex flex-wrap items-center gap-x-1">
-            <Link to="/patients" className="inline-flex min-h-control items-center underline">
+          <li>
+            {/* A link is a control: it gets the 44px target every other control has (e2e/foundation.spec.ts measures it). The negative
+                vertical margin keeps that target from stretching the line of text it sits in (specs/041 D5). */}
+            <Link to="/patients" className="-my-3 inline-flex min-h-control items-center underline">
               Open a patient
-            </Link>
-            <span>to read stored results and their sources.</span>
+            </Link>{' '}
+            to read stored results and their sources.
           </li>
         )}
         <li>Typed questions appear in this chat but are not answered or saved.</li>

@@ -48,9 +48,7 @@ export async function readPatientResults(apiFetch: ApiFetch, patient: string, pa
   if (!response.ok) {
     const failure = (await response.json().catch(() => null)) as { error?: { code?: unknown } } | null;
     throw new SubmitError(
-      response.status === 503 && failure?.error?.code === 'PIPELINE_DISABLED'
-        ? RESULTS_PROCESSING_OFF
-        : 'Stored results could not be loaded. Please retry.',
+      response.status === 503 && failure?.error?.code === 'PIPELINE_DISABLED' ? RESULTS_PROCESSING_OFF : 'Stored results could not be loaded. Please retry.',
       response.status,
     );
   }
