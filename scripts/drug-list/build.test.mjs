@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { build, brandTargets, candidates, ingredient, mapLimited, prescribableConcepts } from './build.mjs';
+import { build, brandTargets, candidates, createPacer, fetchWithRetry, ingredient, mapLimited, prescribableConcepts } from './build.mjs';
 // Invented codes and names: filter fixtures, never product drug data.
 test('CPIC candidates exclude other vocabularies, missing and malformed codes and deduplicate', () => {
   assert.deepEqual(candidates([{drugid:'RxNorm:991001'}, {drugid:'RxNorm:991001'}, {drugid:'ATC:N01'}, {drugid:'RxNorm:NA'}, {drugid:'RxNorm:12x'}, {drugid:'RxNorm:0'}, {}]), ['991001']);
@@ -41,9 +41,47 @@ test('the request pool keeps its limit and returns results in input order', asyn
     await new Promise((done) => setTimeout(done, n));
     active--;
     return n * 10;
-  }, 2, 0);
+  }, 2);
   assert.deepEqual(out, [50, 10, 40, 20, 30, 0]);
   assert.equal(peak, 2);
+});
+test('the pacer spaces starts across lanes, and a throttle pushes every lane back and slows it', async () => {
+  const pacer = createPacer(20, 200);
+  const begin = Date.now();
+  await Promise.all([pacer.turn(), pacer.turn(), pacer.turn()]);
+  assert.ok(Date.now() - begin >= 35, 'three starts at 20 ms spacing take at least two gaps');
+  pacer.slowDown(60);
+  assert.equal(pacer.spacingMs, 40);
+  const paused = Date.now();
+  await pacer.turn();
+  assert.ok(Date.now() - paused >= 55, 'the next start waits out the pause');
+  for (let i = 0; i < 5; i++) pacer.slowDown(0);
+  assert.equal(pacer.spacingMs, 200, 'spacing is capped');
+});
+const failing = (status, retryAfterMs) => Object.assign(new Error(`Source request failed (${status}): fixture.invalid`), { status, retryAfterMs });
+test('a throttled source is retried with growing pauses, honouring Retry-After, then refuses after six tries', async () => {
+  const waits = [];
+  const throttles = [];
+  let calls = 0;
+  const value = await fetchWithRetry('https://fixture.invalid/a', {
+    send: async () => { if (++calls < 4) throw failing(429, calls === 2 ? 30_000 : undefined); return { ok: true }; },
+    pause: async (ms) => { waits.push(ms); },
+    onThrottle: (ms) => throttles.push(ms),
+  });
+  assert.deepEqual(value, { ok: true });
+  assert.deepEqual(waits, [5_000, 30_000, 20_000]);
+  assert.deepEqual(throttles, waits);
+  calls = 0;
+  await assert.rejects(fetchWithRetry('https://fixture.invalid/a', { send: async () => { calls++; throw failing(429); }, pause: async () => {} }), /\(429\)/);
+  assert.equal(calls, 6);
+});
+test('other failures get two quick retries, and every attempt waits for its pacer turn', async () => {
+  let calls = 0;
+  let turns = 0;
+  const pacer = { turn: async () => { turns++; }, slowDown: () => assert.fail('only a throttle slows the schedule') };
+  await assert.rejects(fetchWithRetry('https://fixture.invalid/a', { pacer, send: async () => { calls++; throw failing(500); }, pause: async () => {} }), /\(500\)/);
+  assert.equal(calls, 3);
+  assert.equal(turns, 3);
 });
 /** A synthetic source set: one CPIC ingredient, two prescribable ingredients, one combination and three brands. */
 function sources({ versions = () => 'fixture', cpicName = 'synthetic alpha', brandRelated } = {}) {
@@ -69,7 +107,7 @@ function sources({ versions = () => 'fixture', cpicName = 'synthetic alpha', bra
 }
 test('the list keeps every CPIC ingredient, adds prescribable ingredients and maps brands as aliases only', async () => {
   const { get } = sources();
-  const list = await build(get, new Date('2026-11-14T00:00:00.000Z'), { spacingMs: 0 });
+  const list = await build(get, new Date('2026-11-14T00:00:00.000Z'));
   assert.equal(list.prescribableSource, 'https://rxnav.nlm.nih.gov/REST/Prescribe/allconcepts.json');
   assert.deepEqual(list.entries.map((entry) => entry.rxcui), ['991003', '991001', '991010', '991002', '991009']);
   assert.deepEqual(list.sourceProperties.map((p) => p.rxcui), ['991001', '991002', '991003', '991009', '991010']);
@@ -87,9 +125,9 @@ test('the list keeps every CPIC ingredient, adds prescribable ingredients and ma
 test('network failure, release drift, source disagreement and a failed brand lookup refuse the whole artifact', async () => {
   await assert.rejects(build(async () => { throw new Error('source unavailable'); }), /source unavailable/);
   let versions = 0;
-  await assert.rejects(build(sources({ versions: () => (++versions === 1 ? 'fixture-a' : 'fixture-b') }).get, new Date(), { spacingMs: 0 }), /changed during generation/);
-  await assert.rejects(build(sources({ cpicName: 'synthetic renamed' }).get, new Date(), { spacingMs: 0 }), /sources disagree/);
-  await assert.rejects(build(sources({ brandRelated: () => { throw new Error('brand lookup failed'); } }).get, new Date(), { spacingMs: 0 }), /brand lookup failed/);
+  await assert.rejects(build(sources({ versions: () => (++versions === 1 ? 'fixture-a' : 'fixture-b') }).get, new Date()), /changed during generation/);
+  await assert.rejects(build(sources({ cpicName: 'synthetic renamed' }).get, new Date()), /sources disagree/);
+  await assert.rejects(build(sources({ brandRelated: () => { throw new Error('brand lookup failed'); } }).get, new Date()), /brand-to-ingredient mapping: brand lookup failed/);
 });
 test('a listed name stays canonical while only its display name uses Tall Man', () => {
   const entry = ingredient('991001', {rxcui:'991001',tty:'IN',name:'hydroxyzine'}, 'synthetic-fixture');
