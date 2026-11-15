@@ -1,6 +1,8 @@
 # Typography in clinical software: what others use, and what to change here
 
-Date: 2026-11-15. Asked by the founder: "check what fonts are used on clinical softwares so we can replicate and offer a better user experience". Research and recommendation only: no token, font file or branding-policy change. Any change needs the founder's approval and a reviewed update to `apps/frontend/scripts/branding-policy.json` ([branding.md](branding.md)).
+Date: 2026-11-15. Asked by the founder: "check what fonts are used on clinical softwares so we can replicate and offer a better user experience". Any change needs the founder's approval and a reviewed update to `apps/frontend/scripts/branding-policy.json` ([branding.md](branding.md)).
+
+**Decision, 2026-11-15:** the founder approved recommendation 2 ("Yes, switch them on"). Done on this branch: a locked token `--font-feature-ui: "ss04"` in `tokens.css` and in the branding policy, applied to the signed-in app (`.workspace-shell`) and not to the landing page; tabular numbers in every `table`; and the slashed zero (Tailwind `slashed-zero`) on patient codes in the patient list, the chat home's follow-ups and a follow-up entry. The Follow-ups list gets it when the navigation branch, which rewrites that file, is merged. No font file changed. Recommendations 3 to 5 are not started.
 
 **Labels.** **V**: re-read by the author of this note on the page, repository file or PubMed record on 2026-11-15. **S**: read by the research subagent only. **M**: measured here in the app's own font file.
 

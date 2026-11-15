@@ -104,7 +104,7 @@ export function PatientRoster() {
                 <Link
                   to={`/patients/${patient.id}`}
                   title={patient.label}
-                  className="flex min-h-control min-w-0 flex-1 items-center truncate font-medium text-foreground underline-offset-2 hover:underline"
+                  className="flex min-h-control min-w-0 flex-1 items-center truncate font-medium text-foreground slashed-zero underline-offset-2 hover:underline"
                 >
                   {patient.label}
                 </Link>

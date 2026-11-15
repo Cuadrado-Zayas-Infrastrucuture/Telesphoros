@@ -153,6 +153,14 @@
     color: var(--foreground);
     line-height: 1.6;
   }
+  /* Clinical type (docs/design/clinical-typography.md): disambiguated letters in the signed-in app, and numbers that line up in
+     every table. Codes add a slashed zero where they are shown (the `slashed-zero` utility). */
+  .workspace-shell {
+    font-feature-settings: var(--font-feature-ui);
+  }
+  table {
+    font-variant-numeric: tabular-nums;
+  }
   h1, h2, h3 {
     text-wrap: balance;
     font-family: var(--font-family-heading);
