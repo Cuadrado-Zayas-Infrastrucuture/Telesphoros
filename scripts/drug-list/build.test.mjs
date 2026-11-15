@@ -84,7 +84,7 @@ test('other failures get two quick retries, and every attempt waits for its pace
   assert.equal(turns, 3);
 });
 /** A synthetic source set: one CPIC ingredient, two prescribable ingredients, one combination and three brands. */
-function sources({ versions = () => 'fixture', cpicName = 'synthetic alpha', brandRelated } = {}) {
+function sources({ versions = () => 'fixture', cpicName = 'synthetic alpha', brandRelated, longName } = {}) {
   const calls = [];
   const get = async (url) => {
     calls.push(url);
@@ -94,8 +94,10 @@ function sources({ versions = () => 'fixture', cpicName = 'synthetic alpha', bra
     if (url.endsWith('/rxcui/991001/properties.json')) return {properties:{rxcui:'991001',tty:'IN',name:'synthetic alpha'}};
     if (url.endsWith('/rxcui/991009/properties.json')) return {properties:{rxcui:'991009',tty:'IN',name:'synthetic cpic only'}};
     if (url.endsWith('allconcepts.json?tty=IN')) return group([{rxcui:'991001',name:cpicName,tty:'IN'}, {rxcui:'991002',name:'synthetic beta',tty:'IN'}, {rxcui:'991003',name:'hydroxyzine',tty:'IN'}]);
-    if (url.endsWith('allconcepts.json?tty=MIN')) return group([{rxcui:'991010',name:'synthetic alpha / synthetic beta',tty:'MIN'}]);
-    if (url.endsWith('allconcepts.json?tty=BN')) return group([{rxcui:'992001',name:'Synthabrand',tty:'BN'}, {rxcui:'992002',name:'Combobrand',tty:'BN'}, {rxcui:'992003',name:'Puzzlebrand',tty:'BN'}]);
+    if (url.endsWith('allconcepts.json?tty=MIN')) return group([{rxcui:'991010',name:'synthetic alpha / synthetic beta',tty:'MIN'}, ...(longName ? [{rxcui:'991020',name:longName,tty:'MIN'}] : [])]);
+    if (url.endsWith('allconcepts.json?tty=BN')) return group([{rxcui:'992001',name:'Synthabrand',tty:'BN'}, {rxcui:'992002',name:'Combobrand',tty:'BN'}, {rxcui:'992003',name:'Puzzlebrand',tty:'BN'}, ...(longName ? [{rxcui:'992004',name:'Longbrand',tty:'BN'}, {rxcui:'992005',name:'B'.repeat(301),tty:'BN'}] : [])]);
+    if (url.endsWith('/rxcui/992004/related.json?tty=IN+MIN')) return related({ IN: ['991001', '991002'], MIN: ['991020'] });
+    if (url.endsWith('/rxcui/992005/related.json?tty=IN+MIN')) throw new Error('a brand name over the limit is never looked up');
     const brand = /\/Prescribe\/rxcui\/(\d+)\/related\.json\?tty=IN\+MIN$/.exec(url)?.[1];
     if (brand && brandRelated) return brandRelated(brand);
     if (brand === '992001') return related({ IN: ['991001'] });
@@ -121,6 +123,19 @@ test('the list keeps every CPIC ingredient, adds prescribable ingredients and ma
     { rxcui: '992002', name: 'Combobrand', tty: 'BN', ingredients: ['991010'] },
   ]);
   assert.ok(list.citations.some((citation) => citation.includes('prescribe.html')));
+});
+test('a name longer than a record can store is left out, reported, and takes its only brand with it', async () => {
+  const lines = [];
+  const atLimit = 'n'.repeat(300);
+  const list = await build(sources({ longName: 'synthetic '.repeat(31) }).get, new Date('2026-11-14T00:00:00.000Z'), { log: (line) => lines.push(line) });
+  assert.equal(list.entries.some((entry) => entry.rxcui === '991020'), false);
+  assert.equal(list.brandProperties.some((brand) => ['992004', '992005'].includes(brand.rxcui)), false);
+  assert.ok(lines.some((line) => line.startsWith('1 prescribable names over 300 characters left out')));
+  assert.ok(lines.some((line) => line.includes('991020 (310 characters)')));
+  assert.ok(lines.some((line) => line.startsWith('1 brand names over 300 characters left out')));
+  // Exactly 300 characters still fits.
+  const kept = await build(sources({ longName: atLimit }).get, new Date('2026-11-14T00:00:00.000Z'));
+  assert.equal(kept.entries.find((entry) => entry.rxcui === '991020')?.name, atLimit);
 });
 test('network failure, release drift, source disagreement and a failed brand lookup refuse the whole artifact', async () => {
   await assert.rejects(build(async () => { throw new Error('source unavailable'); }), /source unavailable/);

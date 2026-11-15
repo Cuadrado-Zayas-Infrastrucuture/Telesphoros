@@ -11,6 +11,12 @@ const fda = JSON.parse(await readFile(new URL('packages/shared-types/src/drug-li
 const RXNAV = 'https://rxnav.nlm.nih.gov/REST';
 // RxNorm Current Prescribable Content: SAB=RXNORM and MTHSPL only, published by NLM without licensing restrictions.
 export const PRESCRIBABLE_SOURCE = `${RXNAV}/Prescribe/allconcepts.json`;
+/**
+ * The longest name a record can store: the shared schema and the `patient_medications.drug_name` CHECK both cap it at 300. On
+ * 2026-11-14 the only longer prescribable names were 17 multi-antigen vaccines (308 to 2,115 characters); the founder chose to leave
+ * them out rather than widen the column. They and any brand that points only to them are printed, never shortened.
+ */
+export const MAX_NAME = 300;
 export function candidates(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('CPIC returned no drug rows.');
   return [...new Set(rows.map((row) => /^RxNorm:([1-9][0-9]*)$/.exec(row.drugid ?? '')?.[1]).filter(Boolean))].sort();
@@ -168,17 +174,26 @@ export async function build(get = sourceGetter(), now = new Date(), { log = () =
   });
   const fromCpic = listed.size;
   log(`${fromCpic} of ${cpicCodes.length} CPIC codes verified as ingredients.`);
+  const tooLong = [];
   await phase('prescribable ingredients', async () => {
     for (const tty of ['IN', 'MIN']) {
       for (const concept of prescribableConcepts(await get(`${PRESCRIBABLE_SOURCE}?tty=${tty}`), tty)) {
         const known = listed.get(concept.rxcui);
         if (known && (known.name !== concept.name || known.tty !== concept.tty)) throw new Error('RxNav sources disagree on an ingredient name or type; retry.');
-        if (!known) listed.set(concept.rxcui, concept);
+        if (known) continue;
+        if (concept.name.length > MAX_NAME) tooLong.push(concept);
+        else listed.set(concept.rxcui, concept);
       }
     }
   });
   if (listed.size === 0) throw new Error('No verified ingredients; refusing to replace the bundled list.');
-  const brands = await phase('prescribable brand names', async () => prescribableConcepts(await get(`${PRESCRIBABLE_SOURCE}?tty=BN`), 'BN'));
+  if (tooLong.length) {
+    log(`${tooLong.length} prescribable names over ${MAX_NAME} characters left out:`);
+    for (const concept of tooLong.sort(byCode)) log(`  ${concept.rxcui} (${concept.name.length} characters) ${concept.name.slice(0, 60)}...`);
+  }
+  const allBrands = await phase('prescribable brand names', async () => prescribableConcepts(await get(`${PRESCRIBABLE_SOURCE}?tty=BN`), 'BN'));
+  const brands = allBrands.filter((brand) => brand.name.length <= MAX_NAME);
+  if (brands.length < allBrands.length) log(`${allBrands.length - brands.length} brand names over ${MAX_NAME} characters left out.`);
   log(`${listed.size} ingredients listed; mapping ${brands.length} brand names (one RxNav request each).`);
   let done = 0;
   const targets = await phase('brand-to-ingredient mapping', () =>
