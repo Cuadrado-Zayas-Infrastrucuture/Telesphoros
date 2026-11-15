@@ -154,11 +154,11 @@ describe('brand aliases', () => {
     expect(rankDrugs(entries, 'HYDROXY', 6).map((s) => s.entry.rxcui)).toEqual(['991001']);
     expect(rankDrugs(entries, 'synth', 1)).toHaveLength(1);
   });
-  it('puts an ingredient sold under a brand name before one without, at the same match level (specs/041 D1)', () => {
+  it('at one match level puts single ingredients before combinations, then branded before unbranded (specs/041 D1)', () => {
     const entries = drugListSchema.parse(withBrands).entries as DrugListEntry[];
     const unbranded: DrugListEntry = { rxcui: '991003', name: 'synthol', displayName: 'synthol', tty: 'IN', rxnormRelease: 'fixture' };
-    // Shorter, but unbranded: it follows both branded leading matches instead of leading them.
-    expect(rankDrugs([unbranded, ...entries], 'synth', 6).map((s) => s.entry.rxcui)).toEqual(['991002', '991010', '991003']);
+    // The shorter unbranded ingredient follows the branded one, and the branded combination comes after both single ingredients.
+    expect(rankDrugs([unbranded, ...entries], 'synth', 6).map((s) => s.entry.rxcui)).toEqual(['991002', '991003', '991010']);
     // The match level still comes first: a whole-name match without a brand beats a branded leading match.
     expect(rankDrugs([unbranded, ...entries], 'synthol', 6).map((s) => s.entry.rxcui)).toEqual(['991003']);
   });
@@ -174,5 +174,16 @@ describe('brand aliases', () => {
         rankDrugs(entries, search, 6).map((s) => s.entry.name),
         `${search} should offer ${name}`,
       ).toContain(name);
+  });
+  it('never puts a combination above its own ingredient on the bundled list: Enter on the first suggestion records the ingredient', () => {
+    const entries = BUNDLED_DRUG_LIST!.entries as DrugListEntry[];
+    // hydralazine has no brand alias and hydralazine / isosorbide dinitrate has one; a brand-first order put the combination first.
+    for (const [search, name] of [
+      ['hydrala', 'hydralazine'],
+      ['glimep', 'glimepiride'],
+      ['codei', 'codeine'],
+      ['amlo', 'amlodipine'],
+    ])
+      expect(rankDrugs(entries, search, 6)[0]?.entry.name, `${search} should offer ${name} first`).toBe(name);
   });
 });
