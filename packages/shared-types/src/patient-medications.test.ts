@@ -122,7 +122,20 @@ describe('brand aliases', () => {
       { ...withBrands, entries: [plain, { ...single, brands: [{ rxcui: '992001', name: 'Renamed' }] }, combination] },
       { ...withBrands, entries: [{ ...plain, brands: [{ rxcui: '992001', name: 'Synthabrand' }] }, { ...single, brands: undefined }, combination] },
       { ...withBrands, entries: [plain, { ...single, brands: undefined }, combination] },
-      { ...withBrands, entries: [plain, { ...single, brands: [{ rxcui: '992001', name: 'Synthabrand' }, { rxcui: '992001', name: 'Synthabrand' }] }, combination] },
+      {
+        ...withBrands,
+        entries: [
+          plain,
+          {
+            ...single,
+            brands: [
+              { rxcui: '992001', name: 'Synthabrand' },
+              { rxcui: '992001', name: 'Synthabrand' },
+            ],
+          },
+          combination,
+        ],
+      },
       { ...withBrands, brandProperties: [...withBrands.brandProperties, withBrands.brandProperties[0]] },
     ])
       expect(drugListSchema.safeParse(variant).success).toBe(false);

@@ -21,7 +21,8 @@ export const drugListEntrySchema = z
   .superRefine((entry, ctx) => {
     if (fda.names.includes(entry.name) && entry.name !== entry.name.toLowerCase()) ctx.addIssue({ code: 'custom', message: 'Canonical names must be plain RxNorm names.' });
     if (entry.displayName !== tallMan(entry.name)) ctx.addIssue({ code: 'custom', message: 'Display names must follow the cited FDA list.' });
-    if (entry.brands && new Set(entry.brands.map((brand) => brand.rxcui)).size !== entry.brands.length) ctx.addIssue({ code: 'custom', message: 'A brand is listed once per ingredient.' });
+    if (entry.brands && new Set(entry.brands.map((brand) => brand.rxcui)).size !== entry.brands.length)
+      ctx.addIssue({ code: 'custom', message: 'A brand is listed once per ingredient.' });
   });
 export type DrugListEntry = z.infer<typeof drugListEntrySchema>;
 export const drugListSchema = z
