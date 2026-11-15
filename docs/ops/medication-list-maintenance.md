@@ -36,4 +36,9 @@ The initial shipped artifact was retrieved on 2026-11-01: 297 ingredients, CPIC 
 
 An ad hoc [2026-11-01 source review](../verification/medication-source-review.md) reran the generator against the public APIs: all 297 ingredients and source evidence were semantically unchanged, so the shipped artifact was retained. This does not replace the next scheduled monthly review or resolve the retired-ingredient compatibility requirement.
 
-Spec 029 Amendment 1 (2026-11-14) widens the generator to the prescribable subset and brand aliases. Until the founder runs it and the unedited artifact is committed, the shipped list is still the 297-ingredient baseline above; the code accepts both shapes.
+Spec 029 Amendment 1 (2026-11-14) widens the generator to the prescribable subset and brand aliases. Review record for that refresh:
+
+- **Run:** founder, 2026-11-15 03:46 UTC (third attempt; the first stopped on HTTP 429 before pacing covered every request, the second was refused for 17 names over 300 characters). Content version `cb19c1d20cc822757e7ae037baccd92d7bd60fc83fcc0d9f061a3d199ba281a3`, replacing `b67108bc…`.
+- **Releases:** CPIC v1.61.0 (unchanged); RxNorm 05-Oct-2026 to 02-Nov-2026.
+- **Semantic difference:** 297 CPIC ingredients kept with identical names, types and display forms; 6,565 added (5,918 IN and 944 MIN in all); 4,125 of 4,141 brand names mapped, 16 left out; 17 multi-antigen vaccines over 300 characters left out. No removals, so the retired-ingredient path was not exercised.
+- **Checks (sealed sandbox, on this artifact):** generator 12/12; shared-types 261/261; frontend 1,075/1,075 with typecheck, lint, branding and bundle-secret checks, build and chunk check (list only in the patient-page chunk, 344 kB gzip); backend typecheck and lint; medication specs on real PostgreSQL 49 passed, 1 skipped (browser-only). Not run: the storage-e2e browser suite (no browser in the job image).
