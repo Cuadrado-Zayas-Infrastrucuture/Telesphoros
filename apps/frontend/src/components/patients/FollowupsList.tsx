@@ -47,7 +47,7 @@ export function FollowupsList({
   const [saved, setSaved] = useState(initialSaved);
   // The section's how-to line opens on demand (specs/041 D7); the paused notice below always shows.
   const [about, setAbout] = useState(false);
-  const edit =(action: FollowupInput['action'], entry?: FollowupDto) => {
+  const edit = (action: FollowupInput['action'], entry?: FollowupDto) => {
     setSaved(false);
     setEditing({ action, entry });
   };
