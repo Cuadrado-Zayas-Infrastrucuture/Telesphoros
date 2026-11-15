@@ -7,10 +7,9 @@ import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, type Pe
 const NOTE = 'Interpretation is not available in the prototype yet.';
 const HEADING = 'Start with a synthetic report.';
 const primary = (page: Page) => page.getByRole('navigation', { name: 'Primary', exact: true });
-/** From a patient page the chat is one click away in the sidebar (specs/041 C4), not a "Back to chat" link. */
+/** Back to the conversation in progress: "New chat" in the sidebar would start a new one (specs/041 C4). */
 async function backToChat(page: Page) {
-  await openWorkspaceNavigation(page);
-  await primary(page).getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to chat' }).click();
 }
 
 /** Signs in from the sign-in page, as a person arriving at the home page would, and waits until the callback has moved on. */

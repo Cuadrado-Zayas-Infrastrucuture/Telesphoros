@@ -1,3 +1,4 @@
+import { BackToChatLink } from '@/components/layout/BackToChatLink';
 import { FollowupInbox } from '@/components/workspace/FollowupInbox';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
@@ -6,7 +7,10 @@ export default function FollowupsPage() {
   usePageTitle('Follow-ups');
   return (
     <div className="flex max-w-3xl flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Follow-ups</h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-4">
+        <h1 className="text-2xl font-semibold">Follow-ups</h1>
+        <BackToChatLink />
+      </div>
       <FollowupInbox />
     </div>
   );

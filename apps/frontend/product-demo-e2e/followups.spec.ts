@@ -9,8 +9,7 @@ async function openFollowups(page: Page) {
   return page.getByRole('main');
 }
 async function openChat(page: Page) {
-  await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
 }
 
 test('a treatment follow-up saves its reminder, opens from chat and survives retry and reload', async ({ page }) => {

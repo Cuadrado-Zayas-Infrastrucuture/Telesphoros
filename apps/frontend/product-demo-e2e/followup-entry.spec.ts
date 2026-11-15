@@ -101,8 +101,7 @@ test('a reminder opens its latest form beyond page one and saves only the select
   await expect(page.getByText('Follow-up saved.', { exact: true })).toBeVisible();
   const history = await page.request.get(`${f.api}/api/v1/patients/${f.patient}/followups?threadId=${f.target.threadId}`, { headers: f.headers });
   expect((await history.json()).items[0]).toMatchObject({ threadId: f.target.threadId, version: 3, note: 'Synthetic direct-entry documentation', next: null });
-  await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep the synthetic direct-entry discussion');
 });
 

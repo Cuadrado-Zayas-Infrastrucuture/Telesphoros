@@ -101,9 +101,9 @@ async function addPatientFromSidebar() {
   await userEvent.click(await screen.findByRole('link', { name: 'Add patient' }));
 }
 
-/** From a patient page the chat is one click away in the sidebar (specs/041 C4); New chat returns to the same conversation. */
+/** Back to the conversation in progress: "New chat" in the sidebar would start a new one (specs/041 C4). */
 async function backToChat() {
-  await userEvent.click(await within(screen.getByRole('navigation', { name: 'Primary' })).findByRole('link', { name: 'New chat' }));
+  await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
 }
 
 describe('the chat-first home in every build (specs/024)', () => {

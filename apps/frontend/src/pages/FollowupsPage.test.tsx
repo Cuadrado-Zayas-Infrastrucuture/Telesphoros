@@ -49,12 +49,12 @@ describe('one way to move around (specs/041 slice C)', () => {
     expect(screen.queryByRole('dialog', { name: 'Report history' })).not.toBeInTheDocument();
   });
 
-  it('puts a breadcrumb on a patient record and on the new-patient form instead of "Back to chat" (C4)', async () => {
+  it('puts a breadcrumb on a patient record, beside the link back to the conversation in progress (C4)', async () => {
     open(`/patients/${ID}`, ['clinician']);
     const crumbs = within(await screen.findByRole('navigation', { name: 'Breadcrumb' }));
     expect(crumbs.getByRole('link', { name: 'Patients' })).toHaveAttribute('href', '/patients');
     expect(crumbs.getByText('SYN-004')).toHaveAttribute('aria-current', 'page');
-    expect(screen.queryByRole('link', { name: 'Back to chat' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to chat' })).toHaveAttribute('href', '/workspace');
   });
 
   it('puts the same breadcrumb on the new-patient form', async () => {

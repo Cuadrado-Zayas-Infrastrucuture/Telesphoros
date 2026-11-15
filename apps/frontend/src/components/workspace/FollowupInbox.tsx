@@ -85,7 +85,10 @@ export function FollowupInbox() {
             <ul className="divide-y divide-border">
               {data.items.map((entry) => (
                 <li key={entry.id} className="flex flex-col gap-1 py-3">
-                  <Link className="inline-flex min-h-control items-center font-medium text-primary underline-offset-2 hover:underline" to={`/patients/${entry.patientId}#followups`}>
+                  <Link
+                    className="inline-flex min-h-control items-center font-medium text-primary underline-offset-2 hover:underline"
+                    to={`/patients/${entry.patientId}#followups`}
+                  >
                     {entry.patientLabel} · {entry.medicationName}
                   </Link>
                   <Button asChild size="sm" variant="outline" className="self-start">

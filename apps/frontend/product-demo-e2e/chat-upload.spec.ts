@@ -41,8 +41,7 @@ test('attach in chat, complete details, and upload into the conversation', async
   await medications.getByRole('button', { name: 'Save medication', exact: true }).click();
   await expect(medications.getByRole('heading', { name: 'hydralazine' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('patient-record.png') });
-  await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Draft kept while adding patient');
   await page.getByRole('button', { name: 'Report details', exact: true }).click();
   await expect(dialog.getByRole('combobox', { name: 'Patient', exact: true }).locator('option:checked')).toHaveText(label);
@@ -75,8 +74,7 @@ test('Reports opens as a page and the chat keeps the same draft', async ({ page 
   await expect(page.getByRole('dialog', { name: 'Report history', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('reports-page.png') });
-  await openWorkspaceNavigation(page);
-  await page.locator('header.workspace-navigation').getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Unsent synthetic question');
 });
 

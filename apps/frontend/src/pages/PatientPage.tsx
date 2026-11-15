@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
+import { BackToChatLink } from '@/components/layout/BackToChatLink';
 import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { DemographicsSection } from '@/components/patients/DemographicsSection';
 import { MedicationsSection } from '@/components/patients/MedicationsSection';
@@ -78,6 +79,9 @@ export default function PatientPage() {
           <Button asChild variant="ghost" size="sm">
             <Link to="/patients">Back to patients</Link>
           </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/workspace">Back to chat</Link>
+          </Button>
         </div>
       </div>
     );
@@ -91,7 +95,10 @@ export default function PatientPage() {
       <div className="flex max-w-5xl flex-col gap-6">
         <div className="flex max-w-3xl flex-col gap-6">
           <div className="flex flex-col gap-1">
-            <Breadcrumb trail={[{ to: '/patients', label: 'Patients' }]} current={patient.label} />
+            <div className="flex flex-wrap items-center justify-between gap-x-4">
+              <Breadcrumb trail={[{ to: '/patients', label: 'Patients' }]} current={patient.label} />
+              <BackToChatLink />
+            </div>
             <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
             <p className="text-sm text-muted-foreground">Synthetic patient · Added {when(patient.createdAt)}</p>
             {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}

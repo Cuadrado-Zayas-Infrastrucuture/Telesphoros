@@ -107,8 +107,7 @@ test('filtering resets pagination, keeps clinic totals, handles no matches and o
   await target.click();
   await expect(page.getByRole('form', { name: 'Document follow-up' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep the synthetic filtered reminder discussion');
 });
 

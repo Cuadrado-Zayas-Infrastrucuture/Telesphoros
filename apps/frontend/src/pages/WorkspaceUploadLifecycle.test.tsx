@@ -289,7 +289,7 @@ it('patient navigation keeps the owning conversation and its upload alive', asyn
     release.resolve(response(attempt('committed')));
   });
   await waitFor(() => expect(stored()).toBeNull());
-  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'New chat' }));
+  await userEvent.click(screen.getByRole('link', { name: 'Back to chat' }));
   expect(await within(screen.getByRole('region', { name: 'Conversation' })).findByText('Received')).toBeVisible();
   expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);
