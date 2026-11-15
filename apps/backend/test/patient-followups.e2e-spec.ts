@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from './helpers/database';
 import { LabPipeline, type Person } from './helpers/lab-pipeline';

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { BUNDLED_DRUG_LIST, type DrugList, type PatientMedicationDto, type PatientMedicationInput, type PatientMedicationsQuery } from '@telesphoros/shared-types';
+import { type DrugList, type PatientMedicationDto, type PatientMedicationInput, type PatientMedicationsQuery } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';

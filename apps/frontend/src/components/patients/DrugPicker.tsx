@@ -1,9 +1,17 @@
 import { useEffect, useId, useState } from 'react';
-import { BUNDLED_DRUG_LIST, drugPresentation, matchesDrug, type DrugListEntry } from '@telesphoros/shared-types';
+import { drugPresentation, rankDrugs, type DrugListEntry, type DrugSuggestion } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 
-/** Local type-ahead. Typing never selects a code; only an explicit option choice does. */
+const SHOWN = 6;
+/** A brand match shows the brand beside the ingredient it finds; the ingredient is what gets recorded. */
+function suggestionPresentation({ entry, brand }: DrugSuggestion): { displayName: string; ariaLabel: string } {
+  const display = drugPresentation(entry);
+  return brand ? { displayName: `${brand} (${display.displayName})`, ariaLabel: `${brand} (${display.ariaLabel})` } : display;
+}
+
+/** Local type-ahead over ingredient and brand names. Typing never selects a code; only an explicit option choice does. */
 export function DrugPicker({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (value: string) => void }) {
   const id = useId();
   const initial = BUNDLED_DRUG_LIST?.entries.find((entry) => entry.rxcui === value);
@@ -11,13 +19,9 @@ export function DrugPicker({ value, disabled, onChange }: { value: string; disab
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const needle = query.trim().toLowerCase();
-  const matches =
-    needle.length < 2
-      ? []
-      : (BUNDLED_DRUG_LIST?.entries.filter((entry) => matchesDrug(entry, needle)) ?? []).sort(
-          (a, b) => Number(!a.name.toLowerCase().startsWith(needle)) - Number(!b.name.toLowerCase().startsWith(needle)) || a.name.localeCompare(b.name),
-        );
-  const suggestions = matches.slice(0, 6);
+  // One more than shown, only to know whether to ask for more letters.
+  const matches = rankDrugs(BUNDLED_DRUG_LIST?.entries ?? [], needle, SHOWN + 1);
+  const suggestions = matches.slice(0, SHOWN);
   useEffect(() => {
     if (open && active >= 0) document.getElementById(`${id}-option-${active}`)?.scrollIntoView?.({ block: 'nearest' });
   }, [id, active, open]);
@@ -64,7 +68,7 @@ export function DrugPicker({ value, disabled, onChange }: { value: string; disab
             setActive((index) => (event.key === 'ArrowDown' ? Math.min(index + 1, suggestions.length - 1) : index <= 0 ? suggestions.length - 1 : index - 1));
           } else if (event.key === 'Enter' && open) {
             event.preventDefault();
-            if (suggestions[active]) choose(suggestions[active]);
+            if (suggestions[active]) choose(suggestions[active].entry);
           } else if (event.key === 'Escape' && open) {
             event.preventDefault();
             setOpen(false);
@@ -73,13 +77,14 @@ export function DrugPicker({ value, disabled, onChange }: { value: string; disab
         }}
       />
       <p id={`${id}-help`} className="text-sm text-muted-foreground">
-        Type at least two letters, then choose an ingredient. Search stays on this device.
+        Type at least two letters of an ingredient or brand name, then choose. The ingredient is recorded. Search stays on this device.
       </p>
       {open && (
         <>
           <ul id={`${id}-suggestions`} role="listbox" aria-label="Drug suggestions" className="max-h-64 overflow-y-auto rounded-md border border-border bg-panel">
-            {suggestions.map((entry, index) => {
-              const display = drugPresentation(entry);
+            {suggestions.map((suggestion, index) => {
+              const { entry } = suggestion;
+              const display = suggestionPresentation(suggestion);
               return (
                 <li
                   key={entry.rxcui}
@@ -108,7 +113,7 @@ export function DrugPicker({ value, disabled, onChange }: { value: string; disab
               ? 'Type two or more letters for suggestions.'
               : matches.length === 0
                 ? 'No matching drugs. Try another name.'
-                : `${suggestions.length} suggestion${suggestions.length === 1 ? '' : 's'}${matches.length > 6 ? '. Type more letters to narrow the list' : ''}.`}
+                : `${suggestions.length} suggestion${suggestions.length === 1 ? '' : 's'}${matches.length > SHOWN ? '. Type more letters to narrow the list' : ''}.`}
           </p>
         </>
       )}

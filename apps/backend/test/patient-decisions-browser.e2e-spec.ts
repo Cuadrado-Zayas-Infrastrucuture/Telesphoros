@@ -9,7 +9,7 @@ import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/datab
 import { fixturePdf, LabPipeline } from './helpers/lab-pipeline';
 import { CognitoTokenVerifier } from '../src/auth/cognito-token-verifier';
 import { bearer } from './helpers/tokens';
-import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { LedgerVerifier } from '../src/ledger/verifier';
 
 // Explicit browser tier. Uses the existing PostgreSQL fixture harness; the reader and recorded-text

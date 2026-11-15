@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { BUNDLED_DRUG_LIST, type PatientMedicationDto, type Role } from '@telesphoros/shared-types';
+import { type PatientMedicationDto, type Role } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
