@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { DemographicsSection } from '@/components/patients/DemographicsSection';
 import { MedicationsSection } from '@/components/patients/MedicationsSection';
 import { Button } from '@/components/ui/Button';
@@ -75,7 +76,7 @@ export default function PatientPage() {
             Retry
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/workspace">Back to chat</Link>
+            <Link to="/patients">Back to patients</Link>
           </Button>
         </div>
       </div>
@@ -90,9 +91,7 @@ export default function PatientPage() {
       <div className="flex max-w-5xl flex-col gap-6">
         <div className="flex max-w-3xl flex-col gap-6">
           <div className="flex flex-col gap-1">
-            <Link to="/workspace" className="inline-flex min-h-control items-center text-sm text-muted-foreground underline-offset-2 hover:underline">
-              Back to chat
-            </Link>
+            <Breadcrumb trail={[{ to: '/patients', label: 'Patients' }]} current={patient.label} />
             <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
             <p className="text-sm text-muted-foreground">Synthetic patient · Added {when(patient.createdAt)}</p>
             {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}

@@ -53,8 +53,9 @@ async function fixture(page: Page, earlier = 0) {
 }
 async function openInbox(page: Page) {
   await openWorkspaceNavigation(page);
-  await page.getByRole('button', { name: /^Follow-ups/ }).click();
-  const panel = page.getByRole('dialog', { name: 'Follow-ups', exact: true });
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: /^Follow-ups/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Follow-ups', exact: true })).toBeVisible();
+  const panel = page.getByRole('main');
   await expect(panel.getByText('Loading follow-ups…', { exact: true })).toHaveCount(0);
   return panel;
 }
@@ -106,7 +107,8 @@ test('filtering resets pagination, keeps clinic totals, handles no matches and o
   await target.click();
   await expect(page.getByRole('form', { name: 'Document follow-up' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openWorkspaceNavigation(page);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep the synthetic filtered reminder discussion');
 });
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
 
 const confirmation = 'I confirm this file contains synthetic data only';
 const fixture = (id: string) => new URL(`../../../data/fixtures/lab-reports/captures/${id}/source.pdf`, import.meta.url).pathname;
@@ -21,7 +21,8 @@ test('replacement, same-file reattachment and failed-upload retry stay clear in 
   await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(`SYN-RETRY-${crypto.randomUUID().slice(0, 8)}`);
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openWorkspaceNavigation(page);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
   await page.getByRole('button', { name: 'Report details', exact: true }).click();
   await details.getByRole('textbox', { name: 'Report note' }).fill('Discuss this synthetic report at the next visit.');
   await details.getByRole('checkbox', { name: confirmation }).check();
