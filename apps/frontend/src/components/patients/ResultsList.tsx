@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { EvaluationSummaryDto, Paginated } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
-import { readPatientResults, type DecisionLink } from '@/lib/clinicianDecisions';
+import { readPatientResults, RESULTS_PROCESSING_OFF, type DecisionLink } from '@/lib/clinicianDecisions';
 import { SubmitError } from '@/lib/api';
 import { evaluationStanding } from '@/lib/resultStatus';
 import { syntheticStagingMode } from '@/lib/storageMode';
@@ -48,6 +48,8 @@ export function ResultsList({
     readPatientResults(apiFetch, patientId, page, controller.signal).then(
       (value) => {
         if (controller.signal.aborted) return;
+        // A re-read on focus that now succeeds replaces an earlier error, such as processing having been off.
+        setError('');
         setData({ list: value, readAt: new Date() });
         setChosen((current) => (current === undefined ? firstToOpen(value.data, initialResultId) : current));
       },
@@ -75,6 +77,8 @@ export function ResultsList({
     setPage(next);
     setAttempt((value) => value + 1);
   }
+  // Processing off is how this environment is set up, not a failure: said once, with no retry that could not help (specs/041 D4).
+  if (error === RESULTS_PROCESSING_OFF) return <p role="status">{error}</p>;
   if (error)
     return (
       <div>

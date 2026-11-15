@@ -11,9 +11,10 @@ test('the storage prototype reports disabled processing without inventing stored
   await expect(page.getByRole('heading', { name: label, exact: true })).toBeVisible();
   // The results are read with the page (specs/038 D4): no button opens them.
   const results = page.getByRole('region', { name: 'Recorded results', exact: true });
-  await expect(results.getByRole('alert')).toHaveText('Stored results are unavailable while report processing is disabled.');
+  // Processing off is how this environment is set up: a status, not an alert, and no retry that could not help (specs/041 D4).
+  await expect(results.getByText('Stored results are unavailable while report processing is disabled.', { exact: true })).toBeVisible();
+  await expect(results.getByRole('alert')).toHaveCount(0);
+  await expect(results.getByRole('button', { name: 'Retry stored results', exact: true })).toHaveCount(0);
   await expect(results.getByRole('button', { name: 'Record decision', exact: true })).toHaveCount(0);
   await expect(results.getByText('No stored evaluations for this patient.', { exact: true })).toHaveCount(0);
-  await results.getByRole('button', { name: 'Retry stored results', exact: true }).click();
-  await expect(results.getByRole('alert')).toHaveText('Stored results are unavailable while report processing is disabled.');
 });

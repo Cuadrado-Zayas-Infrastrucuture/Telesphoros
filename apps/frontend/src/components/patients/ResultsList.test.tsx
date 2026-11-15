@@ -377,3 +377,24 @@ it('a hidden tab does not re-read the list (control for the visibility case)', a
   visibility.mockRestore();
   expect(auth.apiFetch).toHaveBeenCalledTimes(1);
 });
+
+// Specs/041 D4: processing off is a state of this environment, not a failure. It is said once, with no retry; any other failure keeps the retry.
+const disabled = () => new Response(JSON.stringify({ error: { code: 'PIPELINE_DISABLED' } }), { status: 503 });
+it('says report processing is off as a status, offers no retry, and shows results once a re-read succeeds', async () => {
+  auth.apiFetch.mockImplementation(async () => disabled());
+  show();
+  expect(await screen.findByRole('status')).toHaveTextContent('Stored results are unavailable while report processing is disabled.');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Retry stored results' })).not.toBeInTheDocument();
+  auth.apiFetch.mockImplementation(async () => list());
+  act(() => window.dispatchEvent(new Event('focus')));
+  expect(await screen.findByText('Z normal-low.')).toBeVisible();
+  expect(screen.queryByText(/report processing is disabled/)).not.toBeInTheDocument();
+});
+it('keeps the alert and the retry for any other failure', async () => {
+  auth.apiFetch.mockImplementationOnce(async () => new Response(JSON.stringify({ error: { code: 'UNAVAILABLE' } }), { status: 503 }));
+  show();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Stored results could not be loaded. Please retry.');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry stored results' }));
+  expect(await screen.findByText('Z normal-low.')).toBeVisible();
+});

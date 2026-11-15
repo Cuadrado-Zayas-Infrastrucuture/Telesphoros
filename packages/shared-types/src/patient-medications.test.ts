@@ -154,4 +154,25 @@ describe('brand aliases', () => {
     expect(rankDrugs(entries, 'HYDROXY', 6).map((s) => s.entry.rxcui)).toEqual(['991001']);
     expect(rankDrugs(entries, 'synth', 1)).toHaveLength(1);
   });
+  it('puts an ingredient sold under a brand name before one without, at the same match level (specs/041 D1)', () => {
+    const entries = drugListSchema.parse(withBrands).entries as DrugListEntry[];
+    const unbranded: DrugListEntry = { rxcui: '991003', name: 'synthol', displayName: 'synthol', tty: 'IN', rxnormRelease: 'fixture' };
+    // Shorter, but unbranded: it follows both branded leading matches instead of leading them.
+    expect(rankDrugs([unbranded, ...entries], 'synth', 6).map((s) => s.entry.rxcui)).toEqual(['991002', '991010', '991003']);
+    // The match level still comes first: a whole-name match without a brand beats a branded leading match.
+    expect(rankDrugs([unbranded, ...entries], 'synthol', 6).map((s) => s.entry.rxcui)).toEqual(['991003']);
+  });
+  it('offers commonly prescribed drugs within two letters on the bundled list (specs/041 D1)', () => {
+    const entries = BUNDLED_DRUG_LIST!.entries as DrugListEntry[];
+    for (const [search, name] of [
+      ['li', 'lisinopril'],
+      ['am', 'amlodipine'],
+      ['me', 'meloxicam'],
+      ['se', 'sertraline'],
+    ])
+      expect(
+        rankDrugs(entries, search, 6).map((s) => s.entry.name),
+        `${search} should offer ${name}`,
+      ).toContain(name);
+  });
 });
