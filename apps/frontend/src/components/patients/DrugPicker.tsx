@@ -42,6 +42,7 @@ export function DrugPicker({ value, disabled, onChange }: { value: string; disab
         aria-controls={open ? `${id}-suggestions` : undefined}
         aria-activedescendant={open && active >= 0 && suggestions[active] ? `${id}-option-${active}` : undefined}
         aria-describedby={`${id}-help`}
+        placeholder="Ingredient or brand name"
         value={query}
         disabled={disabled}
         autoComplete="off"
@@ -77,7 +78,9 @@ export function DrugPicker({ value, disabled, onChange }: { value: string; disab
         }}
       />
       <p id={`${id}-help`} className="text-sm text-muted-foreground">
-        Type at least two letters of an ingredient or brand name, then choose. The ingredient is recorded. Search stays on this device.
+        {/* The rest (a brand finds its ingredient, the record keeps the ingredient, search stays on this device) is in Drug list information
+            below the form (specs/041 D9). */}
+        At least two letters.
       </p>
       {open && (
         <>

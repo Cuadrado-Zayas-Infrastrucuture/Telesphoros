@@ -31,6 +31,15 @@ Checked and not a defect: the two Refresh controls on Reports do different thing
 - **D4, no retry where retrying cannot help:** when the results read answers 503 `PIPELINE_DISABLED`, the section says so as a status, not an alert, and offers no retry. Any other failure keeps the alert and "Retry stored results". The page already re-reads when it regains focus.
 - **D5, the chat home link keeps its 44 px target without stretching the line:** the "Open a patient" item becomes a wrapping row (link, then text), so the target stays and the text keeps its line height.
 
+## Decisions (slice D, a cleaner look)
+
+Founder, 2026-11-15: "chat and features look crowded with text, add buttons and use other methods for a cleaner look"; how-to text opens on demand ("Yes, on demand"). Founder direction 2026-11-01 already says secondary actions and history open on demand (`docs/design/branding.md`).
+
+- **D6, the chat home leads with actions:** the three-sentence list becomes two buttons, "Attach a synthetic report" (opens the same file chooser as the paperclip) and "Open a patient", and one line, "Typed questions are not answered or saved." That line is spec 038 D3, which requires the chat to say so before anyone types; it is kept, only shorter. Roles without the action see no button for it.
+- **D7, explanations open on demand:** a section's how-to text sits behind an "About …" info button beside its heading (`InfoButton`, `aria-expanded`, 44 px target), on the Follow-up section and the New patient page. Safety and scope statements stay visible and unchanged: "Synthetic data only", "Clinical use is not approved", "Decisions below document intent only", "This list does not change reports or provide drug–gene guidance", and every paused or unavailable notice.
+- **D8, refresh is an icon button with a name:** "Refresh medications" and "Refresh follow-ups" keep those names for assistive technology and as a tooltip, shown as the refresh icon (the pattern of the patient filter on Reports).
+- **D9, the drug field says less:** the hint becomes "At least two letters." with the placeholder "Ingredient or brand name"; "Search stays on this device" joins the existing "Drug list information", which already says that a brand finds its ingredient and the record keeps the ingredient. The add form drops "Record one ingredient. Dates are optional year-months." (the labels already say optional); the edit form keeps "This adds a version. Earlier versions stay readable."
+
 ## Out of scope
 
 Enabling medication or follow-up recording anywhere; the three earlier boundaries (follow-up writes refused in production, no clinician names stored, lists never decrypt identity); the marketing site; development-only pages; the report-reader launcher (`pnpm demo:review` sets `LAB_REPORT_PIPELINE=enabled` without the engine; separate fix).

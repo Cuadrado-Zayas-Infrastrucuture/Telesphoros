@@ -9,3 +9,11 @@ Slice A only. Front end and the shared ranking; no API, schema, setting or infra
 - [ ] T005 Chat home (D5): `ConversationWelcome` row layout; walked at 390 px.
 - [ ] T006 Checks in the sealed sandbox: shared-types and front-end typecheck, lint, format and tests; build and chunk check.
 - [ ] T007 Before/after screenshots in the staging-style build at 1280 and 390 px.
+
+Slice D (a cleaner look):
+
+- [ ] T008 Chat home (D6): `ConversationWelcome` buttons, `onAttach` from `WorkspaceConversation`; `WorkspacePage.test.tsx` (the attach button opens the file chooser; a member without roles sees no buttons). D5's inline link is replaced by the button.
+- [ ] T009 On demand (D7): `components/ui/InfoButton.tsx`; Follow-up section and New patient page; `FollowupsSection.test.tsx` (hidden by default, opens, paused notice unaffected).
+- [ ] T010 Refresh icons (D8) in `MedicationsSection` and `FollowupsList`, names unchanged.
+- [ ] T011 Drug field (D9): `DrugPicker` hint and placeholder, `MedicationForm` add preamble removed, `DrugListInformation` gains the search sentence.
+- [ ] T012 Checks in the sealed sandbox and before/after screenshots.

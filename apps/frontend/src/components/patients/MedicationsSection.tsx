@@ -1,4 +1,5 @@
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
+import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { matchesDrug, type PatientMedicationDto } from '@telesphoros/shared-types';
 import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
@@ -53,16 +54,20 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
         <h2 id="medications-heading" className="text-lg font-semibold">
           Medications
         </h2>
+        {/* An icon with its name for assistive technology and as a tooltip (specs/041 D8). */}
         <Button
           size="sm"
           variant="ghost"
+          className="px-0"
+          aria-label="Refresh medications"
+          title="Refresh medications"
           disabled={Boolean(editing) || items === null}
           onClick={() => {
             setSaved(false);
             reload();
           }}
         >
-          Refresh medications
+          <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">Recorded medications only. This list does not change reports or provide drug–gene guidance.</p>

@@ -678,23 +678,30 @@ describe('the chat-first home in every build (specs/024)', () => {
     const box = await screen.findByRole('textbox', { name: 'Question' });
     await screen.findByRole('button', { name: 'Attach a report' });
     expect(box).toHaveAttribute('placeholder', 'Attach a report. Questions cannot be answered here.');
-    const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
-    expect(tasks.getByText(/Attach a synthetic report/)).toBeVisible();
+    // The tasks are buttons, not sentences (specs/041 D6).
+    const tasks = within(screen.getByRole('group', { name: 'What you can do here' }));
     const patients = tasks.getByRole('link', { name: 'Open a patient' });
     expect(patients).toHaveAttribute('href', '/patients');
     // The 44px target is measured in a real browser (e2e/foundation.spec.ts), which caught this link at 17px. jsdom has no layout, so
     // the nearest check here is that the link carries the control-height utility.
     expect(patients).toHaveClass('min-h-control');
-    expect(tasks.getByText('Typed questions appear in this chat but are not answered or saved.')).toBeVisible();
+    // The welcome's attach button opens the same file chooser as the paperclip.
+    const chooser = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
+    await userEvent.click(tasks.getByRole('button', { name: 'Attach a synthetic report' }));
+    expect(chooser).toHaveBeenCalledTimes(1);
+    expect((chooser.mock.contexts[0] as HTMLInputElement).type).toBe('file');
+    chooser.mockRestore();
+    expect(screen.getByText('Typed questions are not answered or saved.')).toBeVisible();
     expect(screen.queryByText(/ask a question/i)).toBeNull();
   });
 
   it('a member with no role is told the same, and is offered neither attaching nor a patient record', async () => {
     open([]);
     expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveAttribute('placeholder', 'Questions cannot be answered here.');
-    const tasks = within(screen.getByRole('list', { name: 'What you can do here' }));
-    expect(tasks.getAllByRole('listitem')).toHaveLength(1);
-    expect(tasks.queryByRole('link')).toBeNull();
+    expect(screen.getByText('Typed questions are not answered or saved.')).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'What you can do here' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Attach a synthetic report' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open a patient' })).toBeNull();
   });
 
   it('"New chat" starts an empty conversation', async () => {
