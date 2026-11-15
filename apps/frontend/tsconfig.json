@@ -24,6 +24,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@telesphoros/shared-types/drug-list-data": [
+        "../../packages/shared-types/src/drug-list-data.ts"
+      ],
       "@telesphoros/shared-types": [
         "../../packages/shared-types/src/index.ts"
       ],

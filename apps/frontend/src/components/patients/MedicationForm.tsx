@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
-import { BUNDLED_DRUG_LIST, patientMedicationInputSchema, type PatientMedicationDto } from '@telesphoros/shared-types';
+import { patientMedicationInputSchema, type PatientMedicationDto } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { NotSignedInError, SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { DrugPicker } from '@/components/patients/DrugPicker';
 import { Button } from '@/components/ui/Button';

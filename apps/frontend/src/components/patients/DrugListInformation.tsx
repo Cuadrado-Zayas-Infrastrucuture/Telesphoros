@@ -1,4 +1,4 @@
-import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 
 /** Keep source attribution available without expanding every medication row. */
 export function DrugListInformation() {
@@ -11,7 +11,10 @@ export function DrugListInformation() {
         <p>{list.attribution}</p>
         <p>{list.currencyNotice}</p>
         <p>
-          Ingredient names: RxNorm {list.rxnormRelease}. CPIC drug subset {list.cpicRelease}. Snapshot accessed {list.accessedAt.slice(0, 10)}.
+          {list.prescribableSource
+            ? `Ingredient and brand names: RxNorm ${list.rxnormRelease}, current prescribable content, plus the CPIC drug subset ${list.cpicRelease}. A brand name finds its ingredient; the record keeps the ingredient.`
+            : `Ingredient names: RxNorm ${list.rxnormRelease}. CPIC drug subset ${list.cpicRelease}.`}{' '}
+          Snapshot accessed {list.accessedAt.slice(0, 10)}.
         </p>
       </div>
     </details>

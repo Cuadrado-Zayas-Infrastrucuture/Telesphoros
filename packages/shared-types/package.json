@@ -17,6 +17,16 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./drug-list-data": {
+      "import": {
+        "types": "./dist/drug-list-data.d.ts",
+        "default": "./dist/drug-list-data.js"
+      },
+      "require": {
+        "types": "./dist/drug-list-data.d.cts",
+        "default": "./dist/drug-list-data.cjs"
+      }
     }
   },
   "files": [

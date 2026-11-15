@@ -10,7 +10,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      // The shared contract is consumed from source, so no build step is needed first.
+      // The shared contract is consumed from source, so no build step is needed first. The bundled medication list is a separate
+      // entry, listed first so the package alias below does not swallow it; only the patient screen's chunk imports it.
+      '@telesphoros/shared-types/drug-list-data': fileURLToPath(new URL('../../packages/shared-types/src/drug-list-data.ts', import.meta.url)),
       '@telesphoros/shared-types': fileURLToPath(new URL('../../packages/shared-types/src/index.ts', import.meta.url)),
       // Only the outcome and reason vocabulary: the package index would also pull in the engine's guideline data.
       '@telesphoros/cpic-schema/vocabulary': fileURLToPath(new URL('../../packages/cpic-schema/src/vocabulary.ts', import.meta.url)),

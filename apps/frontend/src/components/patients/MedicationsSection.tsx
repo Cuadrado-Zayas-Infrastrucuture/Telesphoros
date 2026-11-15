@@ -1,6 +1,7 @@
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
-import { BUNDLED_DRUG_LIST, matchesDrug, type PatientMedicationDto } from '@telesphoros/shared-types';
+import { matchesDrug, type PatientMedicationDto } from '@telesphoros/shared-types';
+import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { useAuth } from '@/auth/AuthProvider';
 import { DrugListInformation } from '@/components/patients/DrugListInformation';
 import { MedicationForm } from '@/components/patients/MedicationForm';
