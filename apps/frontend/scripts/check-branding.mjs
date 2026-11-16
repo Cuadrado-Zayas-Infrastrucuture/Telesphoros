@@ -48,7 +48,9 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
   const parse = css => Object.fromEntries([...css.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(match => [match[1].slice(2), match[2].trim()]));
   // The dark block is read on its own; read with the rest, its values would silently replace the light ones.
   const darkBlocks = [...tokens.matchAll(/:root\[data-theme=(['"])dark\1\]\s*\{([^}]*)\}/g)];
-  const definitions = parse(darkBlocks.reduce((css, match) => css.replace(match[0], ''), tokens));
+  // The night surface (the sign-in flow) is a third set, read on its own for the same reason.
+  const nightBlocks = [...tokens.matchAll(/:root\[data-surface=(['"])night\1\]\s*\{([^}]*)\}/g)];
+  const definitions = parse([...darkBlocks, ...nightBlocks].reduce((css, match) => css.replace(match[0], ''), tokens));
   for (const [name, expected] of Object.entries(policy.tokens)) {
     if (definitions[name] !== expected) errors.push(`${tokenPath}: --${name} must be ${expected}`);
   }
@@ -60,6 +62,15 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
   }
   for (const name of Object.keys(dark)) {
     if (!Object.hasOwn(policy.darkTokens, name)) errors.push(`${tokenPath}: dark theme may not set --${name}`);
+  }
+  if (nightBlocks.length !== 1) errors.push(`${tokenPath}: exactly one :root[data-surface='night'] block is required`);
+  const night = parse(nightBlocks[0]?.[2] ?? '');
+  for (const [name, expected] of Object.entries(policy.nightTokens ?? {})) {
+    if (!Object.hasOwn(policy.tokens, name)) errors.push(`${policyPath}: night --${name} has no light token`);
+    if (night[name] !== expected) errors.push(`${tokenPath}: night --${name} must be ${expected}`);
+  }
+  for (const name of Object.keys(night)) {
+    if (!Object.hasOwn(policy.nightTokens ?? {}, name)) errors.push(`${tokenPath}: night surface may not set --${name}`);
   }
   // The Appearance setting's fixed preview colors must be copies of the real tokens, never their own palette.
   for (const [name, value] of Object.entries(definitions)) {
@@ -90,8 +101,9 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
   for (const [family, weight, asset] of [['Inter', '100 900', 'InterVariable.woff2'], ['Poppins', '600', 'Poppins-SemiBold.ttf'], ['Poppins', '400', 'Poppins-Regular.ttf']]) {
     if (!allFaces.some(face => face.includes(`'${family}'`) && face.includes(`url('../assets/fonts/${asset}')`) && face.includes(`font-weight: ${weight};`))) errors.push(`${tokenPath}: missing shared ${family} ${weight} font face`);
   }
-  for (const [theme, values] of [['light', definitions], ['dark', { ...definitions, ...dark }]]) {
-    const label = theme === 'light' ? 'contrast' : 'contrast (dark)';
+  // The night surface sits on top of the dark theme, so its pairs are checked with the dark values it does not replace.
+  for (const [theme, values] of [['light', definitions], ['dark', { ...definitions, ...dark }], ['night', { ...definitions, ...dark, ...night }]]) {
+    const label = theme === 'light' ? 'contrast' : `contrast (${theme})`;
     for (const pair of policy.contrast) {
       const foreground = values[pair.foreground], background = values[pair.background];
       if (!/^#[\da-f]{6}$/i.test(foreground ?? '') || !/^#[\da-f]{6}$/i.test(background ?? '')) { errors.push(`${label}: ${pair.foreground}/${pair.background} must be opaque hex tokens`); continue; }

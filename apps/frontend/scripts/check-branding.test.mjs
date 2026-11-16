@@ -176,6 +176,24 @@ test('rejects a missing or duplicated dark block', () => {
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace(":root[data-theme='dark']", ':root[data-theme="dim"]'); }, /exactly one :root\[data-theme='dark'\] block/);
   rejects(input => { input.textFiles[tokenPath] += "\n:root[data-theme='dark'] { --panel: #222628; }"; }, /exactly one/);
 });
+test('rejects a changed night color without touching the light or dark one', () => rejects(input => {
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--panel: #0D2830;', '--panel: #1a2b2f;');
+}, /night --panel must be #0D2830/));
+test('night values never replace the light or dark pins', () => {
+  const errors = findBrandViolations(copy());
+  assert.equal(errors.filter(error => /--background must be/.test(error)).length, 0);
+});
+test('rejects a missing or duplicated night block', () => {
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace(":root[data-surface='night']", ':root[data-surface="dusk"]'); }, /exactly one :root\[data-surface='night'\] block/);
+  rejects(input => { input.textFiles[tokenPath] += "\n:root[data-surface='night'] { --panel: #0D2830; }"; }, /exactly one :root\[data-surface='night'\]/);
+});
+test('rejects a night token the policy does not list, and low contrast on the night surface', () => {
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('  --mark-plate: #FFFFFF;\n}', '  --mark-plate: #FFFFFF;\n  --success: #8CC6A0;\n}'); }, /night surface may not set --success/);
+  rejects(input => {
+    input.policy.nightTokens['muted-foreground'] = '#22393E';
+    input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--muted-foreground: #C5DCD9;', '--muted-foreground: #22393E;');
+  }, /contrast \(night\): muted-foreground\/panel/);
+});
 test('rejects an Appearance preview color that drifts from its token', () => {
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--theme-preview-dark-panel: #222628;', '--theme-preview-dark-panel: #FFFFFF;'); }, /--theme-preview-dark-panel must equal the dark --panel/);
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--theme-preview-light-primary: #1F5A64;', '--theme-preview-light-primary: #74A9AB;'); }, /--theme-preview-light-primary must equal the light --primary/);

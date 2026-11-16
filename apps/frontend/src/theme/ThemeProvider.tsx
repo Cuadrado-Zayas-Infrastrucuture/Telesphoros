@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { preferenceStorage } from '@/lib/storageConsent';
-import { applyTheme, deviceQuery, readThemePreference, themeFor, type ThemePreference, writeThemePreference } from '@/lib/theme';
+import { applyRouteTheme, deviceQuery, readThemePreference, type ThemePreference, writeThemePreference } from '@/lib/theme';
 
 interface ThemeContextValue {
   preference: ThemePreference;
@@ -11,7 +11,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-/** Holds the theme preference and applies it to the page for the current route (the landing page always stays light). */
+/** Holds the theme preference and applies it to the page for the current route (the landing page always stays light, the sign-in flow always night). */
 export function ThemeProvider({ pathname, children }: { pathname: string; children: ReactNode }) {
   const [preference, setPreferenceState] = useState(readThemePreference);
   const [deviceDark, setDeviceDark] = useState(() => deviceQuery()?.matches ?? false);
@@ -27,7 +27,7 @@ export function ThemeProvider({ pathname, children }: { pathname: string; childr
   useEffect(() => preferenceStorage.subscribe(() => setPreferenceState(readThemePreference())), []);
 
   // Before paint, so a route change or a new choice never shows a frame in the old theme.
-  useLayoutEffect(() => applyTheme(themeFor(pathname, preference, deviceDark)), [pathname, preference, deviceDark]);
+  useLayoutEffect(() => applyRouteTheme(pathname, preference, deviceDark), [pathname, preference, deviceDark]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     writeThemePreference(next);

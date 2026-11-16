@@ -41,7 +41,7 @@ export default function AuthCallbackPage() {
   if (failure === 'account') {
     return (
       <div className="flex max-w-prose flex-col gap-4">
-        <h1 className="text-3xl leading-tight font-bold">Your account is not set up yet</h1>
+        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Your account is not set up yet</h1>
         <Alert variant="destructive">
           <AlertTitle>No organization is assigned to your account</AlertTitle>
           <AlertDescription>
@@ -54,7 +54,7 @@ export default function AuthCallbackPage() {
   if (failure === 'generic') {
     return (
       <div className="flex max-w-prose flex-col gap-4">
-        <h1 className="text-3xl leading-tight font-bold">Sign-in did not complete</h1>
+        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Sign-in did not complete</h1>
         <Alert variant="destructive">
           <AlertTitle>We could not sign you in</AlertTitle>
           <AlertDescription>The sign-in link may have expired or been used already. Please try again.</AlertDescription>
@@ -69,7 +69,7 @@ export default function AuthCallbackPage() {
   }
   return (
     <div className="flex max-w-prose flex-col gap-4">
-      <h1 className="text-3xl leading-tight font-bold">Signing you in</h1>
+      <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Signing you in</h1>
       <ContentSkeleton label="Please wait…" variant="detail" />
     </div>
   );
