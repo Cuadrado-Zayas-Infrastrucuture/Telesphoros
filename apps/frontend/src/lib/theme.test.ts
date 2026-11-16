@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { preferenceStorage } from './storageConsent';
-import { applyTheme, readThemePreference, themeFor, writeThemePreference } from './theme';
+import { applyRouteTheme, applyTheme, nightSurface, readThemePreference, themeFor, writeThemePreference } from './theme';
 
 beforeEach(() => preferenceStorage.choose(true));
 
@@ -49,6 +49,19 @@ describe('themeFor', () => {
   });
 });
 
+describe('the sign-in flow', () => {
+  it('is the night surface on its three pages, with or without a trailing slash, and nowhere else', () => {
+    for (const path of ['/signin', '/signin/', '/auth/callback', '/signed-out']) expect(nightSurface(path)).toBe(true);
+    for (const path of ['/', '/workspace', '/settings', '/signin/extra']) expect(nightSurface(path)).toBe(false);
+  });
+
+  it('is dark whatever the preference or the device', () => {
+    expect(themeFor('/signin', 'light', false)).toBe('dark');
+    expect(themeFor('/signed-out', 'system', false)).toBe('dark');
+    expect(themeFor('/auth/callback', 'dark', true)).toBe('dark');
+  });
+});
+
 describe('applyTheme', () => {
   it('marks the page dark, and removes the mark for light', () => {
     const root = document.createElement('html');
@@ -56,5 +69,25 @@ describe('applyTheme', () => {
     expect(root.dataset.theme).toBe('dark');
     applyTheme('light', root);
     expect(root.hasAttribute('data-theme')).toBe(false);
+  });
+
+  it('marks the night surface, and removes the mark on the next page', () => {
+    const root = document.createElement('html');
+    applyTheme('dark', root, true);
+    expect(root.dataset.theme).toBe('dark');
+    expect(root.dataset.surface).toBe('night');
+    applyTheme('dark', root);
+    expect(root.dataset.theme).toBe('dark');
+    expect(root.hasAttribute('data-surface')).toBe(false);
+  });
+
+  it('gives a route its whole look in one call: night on sign-in even when light is chosen, plain light elsewhere', () => {
+    const root = document.createElement('html');
+    applyRouteTheme('/signin', 'light', false, root);
+    expect(root.dataset.theme).toBe('dark');
+    expect(root.dataset.surface).toBe('night');
+    applyRouteTheme('/settings', 'light', false, root);
+    expect(root.hasAttribute('data-theme')).toBe(false);
+    expect(root.hasAttribute('data-surface')).toBe(false);
   });
 });

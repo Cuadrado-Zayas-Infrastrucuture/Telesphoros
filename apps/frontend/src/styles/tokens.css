@@ -179,6 +179,32 @@
   --skeleton-highlight: #ffffff14;
 }
 
+/*
+ * Night surface (founder decision 2026-11-16): the sign-in flow wears the public landing's dark teal look whatever the theme
+ * preference, so the step from telesphoros.app to signing in does not change colour. Colors only, like the dark theme.
+ * Set by src/lib/theme.ts as <html data-theme="dark" data-surface="night">, so every dark-theme rule still applies and these
+ * values replace the graphite ones. Tokens not named here keep their dark value. Every pair in branding-policy.json
+ * "contrast" is checked for this surface too.
+ */
+:root[data-surface='night'] {
+  --background: #081E25;
+  --panel: #0D2830;
+  --foreground: #F5F7F7;
+  --surface: #0D2830;
+  --muted: #12333D;
+  --muted-foreground: #C5DCD9;
+  --dashboard-foreground: #F5F7F7;
+  --dashboard-muted-foreground: #C5DCD9;
+  --border: #5F7B80;
+  --divider: #22393E;
+  --primary: #F5F7F7;
+  --primary-hover: #C5DCD9;
+  --primary-foreground: #081E25;
+  --ring: #F5F7F7;
+  --band: #081E25;
+  --mark-plate: #FFFFFF;
+}
+
 /* Product landing: decorative depth, kept separate from operational surfaces. */
 :root {
   --landing-night: #081e25;

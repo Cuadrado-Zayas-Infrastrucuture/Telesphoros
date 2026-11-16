@@ -122,7 +122,9 @@ test('landing sign-in works and returning home includes the brand header', async
   await page.goto('/');
   await page.getByRole('link', { name: 'Sign in to Telesphoros', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toHaveCSS('font-family', /Poppins/);
+  // The sign-in flow's headings use the shared UI font (specs/009 Amendment 1), not the brand heading font.
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toHaveCSS('font-family', /^Inter/);
+  await expect(page.locator('html')).toHaveAttribute('data-surface', 'night');
   await expect(page.locator('.landing-site-footer')).toHaveCount(0);
   await page.getByRole('link', { name: /Telesphoros shield and Rx logo/ }).click();
   await expect(page.getByRole('heading', { name: /PGx reports, interpreted/ })).toBeVisible();

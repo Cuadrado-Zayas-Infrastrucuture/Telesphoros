@@ -6,7 +6,7 @@ export default function SignedOutPage() {
   usePageTitle('Signed out');
   return (
     <div className="flex max-w-prose flex-col gap-4">
-      <h1 className="text-3xl leading-tight font-bold">You have been signed out</h1>
+      <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">You have been signed out</h1>
       <p className="text-muted-foreground">Close this window, or sign in again to continue.</p>
       <div>
         <Button asChild>

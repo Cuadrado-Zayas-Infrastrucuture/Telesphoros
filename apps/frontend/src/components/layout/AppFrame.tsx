@@ -8,9 +8,8 @@ import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SkipLink } from '@/components/layout/SkipLink';
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useRouteFocus } from '@/hooks/useRouteFocus';
+import { SIGN_IN_FLOW } from '@/lib/theme';
 import { ThemeProvider } from '@/theme/ThemeProvider';
-
-const SIGN_IN_FLOW = ['/signin', '/auth/callback', '/signed-out'];
 
 export function AppFrame() {
   const { pathname } = useLocation();

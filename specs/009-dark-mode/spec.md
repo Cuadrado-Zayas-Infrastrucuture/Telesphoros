@@ -37,3 +37,15 @@
 - **DRK-3** Light values stay pinned exactly as before.
 - **DRK-4** The theme is applied before the first render and before paint on every route change.
 - **DRK-5** Controls keep their 44 px targets; the choice is a native radio group with a legend.
+
+## Amendment 1 (2026-11-16): the sign-in flow is always the night surface
+
+Founder decision, after the public landing (telesphoros.app) became a dark teal page: the step from that page to signing in must not change colour. The three pages a signed-out person passes through (`/signin`, `/auth/callback`, `/signed-out`) are therefore shown on a **night surface** whatever the theme preference or the device setting. Every other page follows the preference as before, and the app's own overview at `/` stays light.
+
+- **How it is set.** `src/lib/theme.ts` marks those pages `<html data-theme="dark" data-surface="night">`. Every dark-theme rule still applies; the tokens in the `:root[data-surface='night']` block of `tokens.css` replace the graphite colours with the landing's dark teal. One function, `applyRouteTheme`, does this both before the first render and on every route change.
+- **DRK-6** The night block may set only the colours in `branding-policy.json` `nightTokens`, each to its approved value, and there is exactly one such block.
+- **DRK-7** Every pair in `contrast` passes on the night surface too, checked with the dark values the night block does not replace.
+- **Type.** Headings on those pages use the shared UI font at medium weight with tight spacing. The landing's heading face is not used here: its licence does not allow a public repository, and the site's content security policy serves fonts from the app only.
+- **Drawing.** The sign-in page shows a decorative drawing made in code (`components/signin/SignInArt.tsx`): a sphere of characters whose top comes loose and rises. No image or video file is loaded, it holds no data, it moves for under five seconds and then rests, and reduced-motion visitors get the resting picture.
+
+Not changed: the words on those pages, how sign-in works, the light and dark themes, and every signed-in page.

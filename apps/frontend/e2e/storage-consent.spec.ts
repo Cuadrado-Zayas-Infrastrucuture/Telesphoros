@@ -12,8 +12,16 @@ test('necessary-only consent permits sign-in and session appearance without opti
   expect(await page.evaluate(() => localStorage.getItem('telesphoros.theme'))).toBeNull();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
-  await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'dark');
   await expect(page.getByRole('button', { name: 'Allow preferences', exact: true })).toHaveCount(0);
+  // The sign-in page is dark for everyone (specs/009 Amendment 1), so it cannot show whether the choice was kept:
+  // sign in again (the provider still has the session) and read the theme on the page the choice was made on.
+  await expect(page.locator('html')).toHaveAttribute('data-surface', 'night');
+  expect(await page.evaluate(() => localStorage.getItem('telesphoros.theme'))).toBeNull();
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL('**/settings');
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-surface', 'night');
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'dark');
 });
 
 test('saved preferences can be withdrawn in Settings while current appearance and required session data remain usable', async ({ page }, info) => {
@@ -80,8 +88,12 @@ test('the first-visit bar leaves chat controls usable without deciding and gives
       return [...range.getClientRects()].every((rect) => rect.left >= box.left && rect.right <= box.right);
     })).toBe(true);
   }
-  const color = await reject.evaluate((element) => getComputedStyle(element).backgroundColor);
-  await expect(accept).toHaveCSS('background-color', color);
+  // The bar stays on screen from the night sign-in pages into the workspace and its buttons fade to the new colours,
+  // so both are read together and compared again until they have settled.
+  await expect(async () => {
+    const [rejectColor, acceptColor] = await Promise.all([reject, accept].map((button) => button.evaluate((element) => getComputedStyle(element).backgroundColor)));
+    expect(acceptColor).toBe(rejectColor);
+  }).toPass({ timeout: 5000 });
   const send = page.getByRole('button', { name: 'Send', exact: true });
   await send.scrollIntoViewIfNeeded();
   const sendBox = await send.boundingBox();
