@@ -7,6 +7,10 @@ import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, type Pe
 const NOTE = 'Interpretation is not available in the prototype yet.';
 const HEADING = 'Start with a synthetic report.';
 const primary = (page: Page) => page.getByRole('navigation', { name: 'Primary', exact: true });
+/** Back to the conversation in progress: "New chat" in the sidebar would start a new one (specs/041 C4). */
+async function backToChat(page: Page) {
+  await page.getByRole('link', { name: 'Back to chat' }).click();
+}
 
 /** Signs in from the sign-in page, as a person arriving at the home page would, and waits until the callback has moved on. */
 async function signInFromHome(page: Page, persona: Persona) {
@@ -82,7 +86,8 @@ test.describe('the feature panel (CH-2, specs/034 D1)', () => {
     expect(await page.evaluate(() => window.localStorage.getItem('telesphoros.sidebar'))).toBe('collapsed');
     await primary(page).getByRole('link', { name: 'Reports', exact: true }).click();
     await expect(page).toHaveURL(/\/reports$/);
-    await page.getByRole('button', { name: 'Close report history', exact: true }).click();
+    // Reports is a page (specs/041 C1), not a panel to close.
+    await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
     await expect(sidebar).toHaveClass(/is-collapsed/);
   });
 
@@ -144,7 +149,7 @@ test.describe('the conversation', () => {
     await newLabel.fill(label());
     await page.getByRole('button', { name: 'Create patient', exact: true }).click();
     await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-    await page.getByRole('link', { name: 'Back to chat' }).click();
+    await backToChat(page);
     await page.getByRole('button', { name: 'Report details' }).click();
     const choice = details.getByRole('combobox', { name: 'Patient' });
     const box = await choice.boundingBox();
@@ -249,7 +254,7 @@ test.describe('Add patient from chat (CH-9)', () => {
     await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
     await page.getByRole('button', { name: 'Create patient' }).click();
     await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-    await page.getByRole('link', { name: 'Back to chat' }).click();
+    await backToChat(page);
     await openPatients(page);
     await expect(section.getByRole('list', { name: 'Patients' }).getByText(created)).toBeVisible();
     // Back to the same conversation: the chat stays in memory while a page is open.
@@ -315,7 +320,7 @@ test('a lost patient-create response locks creation, then retries the same ident
   await expect(page.getByRole('alert').filter({ hasText: /patient/i })).toBeVisible();
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-  await page.getByRole('link', { name: 'Back to chat' }).click();
+  await backToChat(page);
   await page.getByRole('button', { name: 'Report details' }).click();
   await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();

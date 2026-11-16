@@ -101,6 +101,11 @@ async function addPatientFromSidebar() {
   await userEvent.click(await screen.findByRole('link', { name: 'Add patient' }));
 }
 
+/** Back to the conversation in progress: "New chat" in the sidebar would start a new one (specs/041 C4). */
+async function backToChat() {
+  await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
+}
+
 describe('the chat-first home in every build (specs/024)', () => {
   it('uses a preferred name set in account preferences for the chat welcome', async () => {
     open(['clinician']);
@@ -135,23 +140,29 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
     await addPatientFromSidebar();
     await screen.findByRole('heading', { name: 'New patient' });
-    await userEvent.click(screen.getByRole('link', { name: 'Back to chat' }));
+    await backToChat();
     expect(router.state.location.pathname).toBe('/workspace');
     expect(screen.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this draft');
     expect(screen.getByRole('button', { name: 'Report details' })).toHaveTextContent('SYN-004-cyp2c19.json');
     expect(submitReport).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['Reports', 'Report history'],
-    ['Settings', 'Account preferences'],
-  ])('opens %s over chat and keeps the draft when closed', async (link, title) => {
+  it('opens Settings over chat and keeps the draft when closed', async () => {
     open(['clinician']);
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep my draft');
-    if (link === 'Settings') await openSettings();
-    else await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: link }));
-    const panel = await screen.findByRole('dialog', { name: title });
-    await userEvent.click(within(panel).getByRole('button', { name: `Close ${title.toLowerCase()}` }));
+    await openSettings();
+    const panel = await screen.findByRole('dialog', { name: 'Account preferences' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Close account preferences' }));
+    expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveValue('Keep my draft');
+  });
+
+  it('opens Reports as a page, not a dialog, and keeps the chat draft when the clinician returns', async () => {
+    open(['clinician']);
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep my draft');
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Reports' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Report history' })).not.toBeInTheDocument();
+    await backToChat();
     expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveValue('Keep my draft');
   });
 
@@ -444,7 +455,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(requests[0]!.requestId).toMatch(/^[0-9a-f-]{36}$/);
     await act(async () => replies[1]!(new Response(JSON.stringify({ ...PATIENT, id: '1a8fad5b-d9cb-469f-a165-70867728950f', label: 'SYN-NEW' }), { status: 201 })));
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Synthetic patient label' })).toBeNull());
-    await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
+    await backToChat();
     await userEvent.click(await screen.findByRole('button', { name: 'Report details' }));
     expect(screen.getByRole('combobox', { name: 'Patient' })).toHaveValue('1a8fad5b-d9cb-469f-a165-70867728950f');
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
@@ -722,7 +733,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.type(await screen.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
     await userEvent.click(screen.getByRole('button', { name: 'Create patient' }));
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Synthetic patient label' })).toBeNull());
-    await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
+    await backToChat();
     await userEvent.click(await screen.findByRole('button', { name: 'Report details' }));
     expect(await within(screen.getByRole('combobox', { name: 'Patient' })).findByRole('option', { name: 'SYN-777' })).toBeInTheDocument();
   });

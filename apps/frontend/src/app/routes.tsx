@@ -2,7 +2,7 @@ import { ownedStorageMode, syntheticStagingMode } from '@/lib/storageMode';
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
-import { ADMIN_ROLES, CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
+import { ADMIN_ROLES, CLINICAL_READ_ROLES, FOLLOWUP_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RouteError } from '@/components/RouteError';
 import { RouteLoading } from '@/components/RouteLoading';
@@ -43,6 +43,11 @@ export const routes: RouteObject[] = [
               {
                 element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
                 children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }],
+              },
+              // Specs/041 C2: the clinic's follow-ups as a page, for the roles that read them (it was a sidebar drawer).
+              {
+                element: <RequireRole anyOf={FOLLOWUP_READ_ROLES} />,
+                children: [{ path: 'follow-ups', lazy: async () => ({ Component: (await import('@/pages/FollowupsPage')).default }) }],
               },
               {
                 element: <RequireRole anyOf={WRITER_ROLES} />,
