@@ -64,7 +64,7 @@ test('real report reads filter and paginate without retaining the previous selec
   await expect(page.getByLabel('Filter by patient')).toHaveValue(fixture.id);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.evaluate(() => document.fonts.ready);
-  // The Reports panel opens over the chat, whose welcome is also a level-1 heading: check the page's own.
+  // Reports is its own page (specs/041 C1); its level-1 heading is checked by name all the same.
   expect(await page.getByRole('heading', { level: 1, name: 'Reports' }).evaluate(element => getComputedStyle(element).fontFamily)).toContain('Inter');
   expect(await page.locator('body').evaluate(element => getComputedStyle(element).fontFamily)).toContain('Inter');
   expect(await page.locator('header .font-heading').evaluate(element => getComputedStyle(element).fontFamily)).toContain('Poppins');
