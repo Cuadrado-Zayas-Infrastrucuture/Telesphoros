@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react';
-import type { Role } from '@telesphoros/shared-types';
+import { followupListSchema, type Role } from '@telesphoros/shared-types';
 import { describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
@@ -8,13 +8,35 @@ const NOW = '2026-11-01T12:00:00.000Z';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const emptyPage = { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
 
-/** Signed in with `roles`; the follow-up list has one overdue and two due today. */
-function open(path: string, roles: Role[]) {
+/** One synthetic follow-up on patient ID, whose code has zeros to slash. */
+const followup = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa0',
+  threadId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb0',
+  patientId: ID,
+  patientLabel: 'SYN-0010',
+  medicationId: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd0',
+  medicationName: 'drug0',
+  decisionId: null,
+  version: 1,
+  action: 'schedule',
+  assessment: null,
+  note: 'Synthetic reminder.',
+  noteRedacted: false,
+  next: { date: '2026-11-01', timezone: 'America/Puerto_Rico', assignee: 'person-1' },
+  createdAt: NOW,
+  createdBy: 'person-1',
+  current: true,
+  dueState: 'overdue',
+  needsReassignment: false,
+};
+const followups = (items: unknown[]) => ({ currentActor: 'person-1', items, page: 1, hasMore: false, counts: { overdue: 1, today: 2, upcoming: 0, unassigned: 0 } });
+
+/** Signed in with `roles`; the follow-up list has one overdue and two due today, and lists `items`. */
+function open(path: string, roles: Role[], items: unknown[] = []) {
   const fetchImpl = vi.fn<typeof fetch>(async (input) => {
     const at = new URL(String(input), 'http://synthetic');
     if (at.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
-    if (at.pathname === '/api/v1/followups')
-      return json({ currentActor: 'person-1', items: [], page: 1, hasMore: false, counts: { overdue: 1, today: 2, upcoming: 0, unassigned: 0 } });
+    if (at.pathname === '/api/v1/followups') return json(followups(items));
     if (at.pathname === '/api/v1/followups/availability') return json({ recording: 'enabled' });
     if (at.pathname.endsWith('/demographics')) return json({ error: { details: [{ reason: 'no-demographics' }] } }, 404);
     if (at.pathname.endsWith('/medications')) return json({ items: [] });
@@ -35,6 +57,15 @@ describe('one way to move around (specs/041 slice C)', () => {
     expect(link).toHaveAttribute('href', '/follow-ups');
     expect(link).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByText('Clinic totals: 1 overdue · 2 due today · 0 upcoming')).toBeInTheDocument();
+  });
+
+  it('shows each patient code with a slashed zero, as the other follow-up lists do (clinical typography)', async () => {
+    expect(() => followupListSchema.parse(followups([followup]))).not.toThrow();
+    open('/follow-ups', ['clinician'], [followup]);
+    // The list's own row link; the chat home's list (also mounted) and the Open buttons are named "Open follow-up for …".
+    const row = await screen.findByRole('link', { name: 'SYN-0010 · drug0' });
+    expect(row).toHaveAttribute('href', `/patients/${ID}#followups`);
+    expect(within(row).getByText('SYN-0010')).toHaveClass('slashed-zero');
   });
 
   it('keeps Follow-ups for the roles that read them: a reader has no link and is refused the page', async () => {
