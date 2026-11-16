@@ -29,6 +29,7 @@
     "size-control": "2.75rem",
     "size-blur-edge": "3rem",
     "font-family-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+    "font-feature-ui": "\"ss04\"",
     "dashboard-foreground": "#263034",
     "dashboard-muted-foreground": "#4E5A61",
     "mark-plate": "transparent",

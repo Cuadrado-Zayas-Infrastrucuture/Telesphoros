@@ -67,7 +67,7 @@ export function FollowupEntry({ patientId, threadId, onClose, onSaved }: { patie
           <>
             <div className="flex flex-col gap-1">
               <p className="font-medium wrap-anywhere">
-                {entry.patientLabel} · {entry.medicationName}
+                <span className="slashed-zero">{entry.patientLabel}</span> · {entry.medicationName}
               </p>
               {entry.next ? (
                 <p className="text-sm">

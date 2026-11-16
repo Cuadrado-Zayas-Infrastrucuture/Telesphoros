@@ -43,7 +43,7 @@ export function HomeFollowups() {
                     to={`/patients/${entry.patientId}?followup=${entry.threadId}#followups`}
                     aria-label={`Open follow-up for ${entry.patientLabel}, ${drug.ariaLabel}`}
                   >
-                    {entry.patientLabel} · {drug.displayName}
+                    <span className="slashed-zero">{entry.patientLabel}</span> · {drug.displayName}
                   </Link>
                   <p className={entry.dueState === 'overdue' ? 'text-warning' : 'text-muted-foreground'}>
                     {DUE_WORDS[entry.dueState]} · {entry.next?.date} ({entry.next?.timezone})
