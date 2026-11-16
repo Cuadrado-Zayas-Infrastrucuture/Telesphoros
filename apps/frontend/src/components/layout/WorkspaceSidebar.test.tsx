@@ -62,7 +62,8 @@ afterEach(() => {
 describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () => {
   it('frames Settings with the sidebar, holding the feature panel for a clinician', async () => {
     open('/settings', ['clinician']);
-    expect(await linkNames()).toEqual(['New chat', 'Patients', 'Reports']);
+    // Follow-ups is a link to its page now (specs/041 C2), not a button that opened a drawer.
+    expect(await linkNames()).toEqual(['New chat', 'Patients', 'Reports', 'Follow-ups']);
     expect(sidebar()).not.toBeNull();
   });
 
@@ -71,7 +72,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     try {
       open('/settings', ['clinician']);
       const nav = await primary();
-      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['New chat', 'Workspace', 'Chat preview', 'Patients', 'Reports']);
+      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['New chat', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {
       vi.unstubAllGlobals();

@@ -6,6 +6,9 @@ export const WRITER_ROLES: readonly Role[] = ['clinician'];
 /** Roles that may read clinical records (the same set the API enforces). `admin` is deliberately absent. */
 export const CLINICAL_READ_ROLES: readonly Role[] = ['reader', 'clinician', 'reviewer'];
 
+/** Roles that read the clinic's follow-ups (the API's follow-up read roles). */
+export const FOLLOWUP_READ_ROLES: readonly Role[] = ['clinician', 'reviewer'];
+
 /** Administration only (members, the record log, usage). No clinical access comes with it. */
 export const ADMIN_ROLES: readonly Role[] = ['admin'];
 

@@ -36,7 +36,8 @@ test.describe('desktop collapse', () => {
       // The choice holds across in-page navigation, and expanding brings the names back.
       await primary(page).getByRole('link', { name: 'Reports', exact: true }).click();
       await expect(sidebar).toHaveClass(/is-collapsed/);
-      await page.getByRole('button', { name: 'Close report history', exact: true }).click();
+      // Reports is a page (specs/041 C1): the sidebar stays usable on it, with nothing to close first.
+      await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
       await page.getByRole('button', { name: 'Expand sidebar' }).click();
       await expect(primary(page).getByText('Reports', { exact: true })).toBeVisible();
     });

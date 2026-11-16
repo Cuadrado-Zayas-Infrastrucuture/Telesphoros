@@ -14,6 +14,7 @@ import { ReportDetails } from '@/components/ReportDetails';
 import { ReportStages } from '@/components/ReportStages';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { usePatientOptions } from '@/hooks/usePatientOptions';
+import { BackToChatLink } from '@/components/layout/BackToChatLink';
 import { useReportDownload } from '@/hooks/useReportDownload';
 import { useReportList } from '@/hooks/useReportList';
 import { ownedStorageMode } from '@/lib/storageMode';
@@ -102,6 +103,8 @@ export default function ReportsPage() {
     <div className="reports-workspace flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
+          {/* A page now, not a panel over the chat (specs/041 C1): this returns to the conversation in progress. */}
+          <BackToChatLink />
           <h1 className="text-3xl leading-tight tracking-tight">Reports</h1>
           <p className="mt-1 text-sm text-pretty text-muted-foreground">Report records and verified upload information.</p>
         </div>

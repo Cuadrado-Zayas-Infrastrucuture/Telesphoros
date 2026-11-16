@@ -4,7 +4,7 @@ import { ChartColumn, ChevronsUpDown, FileText, Menu, MessageSquare, PanelLeftCl
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
-import { FollowupInbox } from '@/components/workspace/FollowupInbox';
+import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
 import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
 import { preferenceStorage } from '@/lib/storageConsent';
@@ -230,8 +230,8 @@ export function WorkspaceSidebar() {
                   </NavLink>
                 </li>
               ) : (
-                <li key={item.kind} data-panel-item="Follow-ups">
-                  <FollowupInbox onNavigate={close} />
+                <li key={item.kind}>
+                  <FollowupsNavLink collapsed={collapsed} className={linkClass} onClick={close} onKeyDown={dismiss} />
                 </li>
               ),
             )}
