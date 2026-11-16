@@ -81,7 +81,7 @@ describe('reports page with real auth and route guards', () => {
       vi.stubGlobal('location', { hostname: '127.0.0.1' });
       const { container } = renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
-      expect(screen.getByRole('dialog', { name: 'Report history' })).toBeVisible();
+      expect(screen.queryByRole('dialog', { name: 'Report history' })).not.toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: 'Report details' })).not.toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Sample question' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Chat preview' })).toHaveAttribute('href', '/local-interpretation');

@@ -75,10 +75,11 @@ export async function selectReportsPatient(page: Page, fixture: { id: string; la
 
 /** Open the compact workspace menu before using a sidebar item on mobile. */
 export async function openWorkspaceNavigation(page: Page) {
-  // Workspace routes now open modal panels; a physician closes the panel before using the sidebar.
-  const panel = /^\/(reports(?:\/upload)?|settings)$/.test(new URL(page.url()).pathname);
+  // Only the short side tasks open as modal panels (specs/041 C5); a physician closes the panel before using the sidebar. Reports and
+  // Follow-ups are pages (C1, C2), so the sidebar is usable on them as on Patients.
+  const panel = /^\/(reports\/upload|settings)$/.test(new URL(page.url()).pathname);
   if (panel) {
-    const close = page.getByRole('button', { name: /^Close (report history|resume report upload|account preferences)$/ });
+    const close = page.getByRole('button', { name: /^Close (resume report upload|account preferences)$/ });
     await close.click();
     await expect(page).toHaveURL(/\/workspace$/);
   }

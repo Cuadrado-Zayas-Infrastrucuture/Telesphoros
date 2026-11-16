@@ -56,9 +56,9 @@ async function fixture(page: Page, count = 1) {
 }
 async function openTarget(page: Page, patient: string, thread: string, label: string) {
   await openWorkspaceNavigation(page);
-  await page.getByRole('button', { name: /^Follow-ups/ }).click();
-  const panel = page.getByRole('dialog', { name: 'Follow-ups', exact: true });
-  await expect(panel).toBeVisible();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: /^Follow-ups/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Follow-ups', exact: true })).toBeVisible();
+  const panel = page.getByRole('main');
   await expect(panel.getByText('Loading follow-ups…', { exact: true })).toHaveCount(0);
   const target = panel.getByRole('link', { name: `Open follow-up for ${label}`, exact: true }).and(page.locator(`[href="/patients/${patient}?followup=${thread}#followups"]`));
   for (let index = 0; index < 10 && !(await target.count()); index++) {
