@@ -89,7 +89,7 @@ export function FollowupInbox() {
                     className="inline-flex min-h-control items-center font-medium text-primary underline-offset-2 hover:underline"
                     to={`/patients/${entry.patientId}#followups`}
                   >
-                    {entry.patientLabel} · {entry.medicationName}
+                    <span className="slashed-zero">{entry.patientLabel}</span> · {entry.medicationName}
                   </Link>
                   <Button asChild size="sm" variant="outline" className="self-start">
                     <Link to={`/patients/${entry.patientId}?followup=${entry.threadId}#followups`} aria-label={`Open follow-up for ${entry.patientLabel}`}>
