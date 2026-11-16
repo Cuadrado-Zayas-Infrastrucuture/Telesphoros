@@ -1,9 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import type { PatientDemographicsDto, PatientDto } from '@telesphoros/shared-types';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PatientPicker } from '@/components/PatientPicker';
+import { onDate } from '@/lib/formatWhen';
 import { exactAge } from '@/lib/patientSummary';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
+import { DemographicsValues } from './DemographicsValues';
 import { PatientBanner } from './PatientBanner';
 
 const NOW = '2026-10-28T12:00:00.000Z';
@@ -41,11 +43,51 @@ describe('PatientBanner', () => {
     render(<PatientBanner value={VALUE} />);
     const banner = within(screen.getByRole('group', { name: 'Patient identity' }));
     expect(banner.getByText('Zzyzx-Synthetic Núñez-Testcase')).toBeInTheDocument();
-    expect(banner.getByText(`Born 1980-02-29 · ${exactAge('1980-02-29')} years · Female`)).toBeInTheDocument();
+    expect(banner.getByText(`Born ${onDate('1980-02-29')} · ${exactAge('1980-02-29')} years · Female`)).toBeInTheDocument();
   });
   it('leaves out what is not recorded', () => {
     render(<PatientBanner value={{ ...VALUE, sex: null }} />);
-    expect(screen.getByText(`Born 1980-02-29 · ${exactAge('1980-02-29')} years`)).toBeInTheDocument();
+    expect(screen.getByText(`Born ${onDate('1980-02-29')} · ${exactAge('1980-02-29')} years`)).toBeInTheDocument();
+  });
+});
+
+describe('DemographicsValues (specs/041 D2, D3)', () => {
+  afterEach(() => vi.useRealTimers());
+  it('shows the same exact age as the banner, the day before a birthday', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 3, 11, 12));
+    render(
+      <>
+        <PatientBanner value={{ ...VALUE, dateOfBirth: '1980-04-12' }} />
+        <DemographicsValues value={{ ...VALUE, dateOfBirth: '1980-04-12', ageYears: 46 }} />
+      </>,
+    );
+    // The year rule says 46; the calendar says 45 until tomorrow. Both places say 45.
+    expect(screen.getByText(`Born ${onDate('1980-04-12')} · 45 years · Female`)).toBeInTheDocument();
+    expect(screen.getByText('45 years')).toBeInTheDocument();
+    expect(screen.queryByText(/one year high/)).not.toBeInTheDocument();
+  });
+  it('falls back to the year-based age, with its caveat, when the date cannot be read', () => {
+    render(<DemographicsValues value={{ ...VALUE, dateOfBirth: 'not a date', ageYears: 46 }} />);
+    expect(screen.getByText('46 (from the birth year; can be one year high)')).toBeInTheDocument();
+  });
+});
+
+describe('onDate (specs/041 D3)', () => {
+  const zone = process.env.TZ;
+  afterEach(() => {
+    process.env.TZ = zone;
+  });
+  it('keeps the calendar day in a time zone behind UTC', () => {
+    process.env.TZ = 'Pacific/Honolulu';
+    const shown = onDate('1980-04-12');
+    expect(shown).toMatch(/12/);
+    expect(shown).toMatch(/1980/);
+    expect(shown).not.toMatch(/11/);
+  });
+  it('returns anything that is not a calendar date unchanged', () => {
+    expect(onDate('1980-02-30')).toBe('1980-02-30');
+    expect(onDate('')).toBe('');
   });
 });
 

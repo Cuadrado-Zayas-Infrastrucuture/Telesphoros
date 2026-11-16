@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { FollowupDto, FollowupInput } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { InfoButton } from '@/components/ui/InfoButton';
 import { useFollowups } from '@/hooks/useFollowups';
 import { FOLLOWUPS_PAUSED_MESSAGE } from '@/lib/patientFollowups';
 import { FollowupForm } from './FollowupForm';
@@ -43,6 +45,8 @@ export function FollowupsList({
   }, [editing, onEditingChange]);
   const [history, setHistory] = useState<string | null>(null);
   const [saved, setSaved] = useState(initialSaved);
+  // The section's how-to line opens on demand (specs/041 D7); the paused notice below always shows.
+  const [about, setAbout] = useState(false);
   const edit = (action: FollowupInput['action'], entry?: FollowupDto) => {
     setSaved(false);
     setEditing({ action, entry });
@@ -50,14 +54,22 @@ export function FollowupsList({
   return (
     <section id="followups" aria-labelledby="followups-heading" className="flex flex-col gap-4 border-t border-border pt-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 ref={heading} tabIndex={-1} id="followups-heading" className="text-lg font-semibold">
-          Follow-up
-        </h2>
-        <Button variant="ghost" size="sm" disabled={loading || !!editing} onClick={reload}>
-          Refresh follow-ups
+        <div className="flex items-center gap-1">
+          <h2 ref={heading} tabIndex={-1} id="followups-heading" className="text-lg font-semibold">
+            Follow-up
+          </h2>
+          <InfoButton label="About follow-up" open={about} controls="followups-about" onToggle={() => setAbout((value) => !value)} />
+        </div>
+        {/* An icon with its name for assistive technology and as a tooltip (specs/041 D8). */}
+        <Button variant="ghost" size="sm" className="px-0" aria-label="Refresh follow-ups" title="Refresh follow-ups" disabled={loading || !!editing} onClick={reload}>
+          <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground">Document response to a recorded treatment and choose when to follow up.</p>
+      {about && (
+        <p id="followups-about" className="text-sm text-muted-foreground">
+          Document response to a recorded treatment and choose when to follow up.
+        </p>
+      )}
       {saved && <p role="status">Follow-up saved.</p>}
       {paused && clinician && <p className="text-sm">{FOLLOWUPS_PAUSED_MESSAGE}</p>}
       {editing ? (

@@ -154,4 +154,36 @@ describe('brand aliases', () => {
     expect(rankDrugs(entries, 'HYDROXY', 6).map((s) => s.entry.rxcui)).toEqual(['991001']);
     expect(rankDrugs(entries, 'synth', 1)).toHaveLength(1);
   });
+  it('at one match level puts single ingredients before combinations, then branded before unbranded (specs/041 D1)', () => {
+    const entries = drugListSchema.parse(withBrands).entries as DrugListEntry[];
+    const unbranded: DrugListEntry = { rxcui: '991003', name: 'synthol', displayName: 'synthol', tty: 'IN', rxnormRelease: 'fixture' };
+    // The shorter unbranded ingredient follows the branded one, and the branded combination comes after both single ingredients.
+    expect(rankDrugs([unbranded, ...entries], 'synth', 6).map((s) => s.entry.rxcui)).toEqual(['991002', '991003', '991010']);
+    // The match level still comes first: a whole-name match without a brand beats a branded leading match.
+    expect(rankDrugs([unbranded, ...entries], 'synthol', 6).map((s) => s.entry.rxcui)).toEqual(['991003']);
+  });
+  it('offers commonly prescribed drugs within two letters on the bundled list (specs/041 D1)', () => {
+    const entries = BUNDLED_DRUG_LIST!.entries as DrugListEntry[];
+    for (const [search, name] of [
+      ['li', 'lisinopril'],
+      ['am', 'amlodipine'],
+      ['me', 'meloxicam'],
+      ['se', 'sertraline'],
+    ])
+      expect(
+        rankDrugs(entries, search, 6).map((s) => s.entry.name),
+        `${search} should offer ${name}`,
+      ).toContain(name);
+  });
+  it('never puts a combination above its own ingredient on the bundled list: Enter on the first suggestion records the ingredient', () => {
+    const entries = BUNDLED_DRUG_LIST!.entries as DrugListEntry[];
+    // hydralazine has no brand alias and hydralazine / isosorbide dinitrate has one; a brand-first order put the combination first.
+    for (const [search, name] of [
+      ['hydrala', 'hydralazine'],
+      ['glimep', 'glimepiride'],
+      ['codei', 'codeine'],
+      ['amlo', 'amlodipine'],
+    ])
+      expect(rankDrugs(entries, search, 6)[0]?.entry.name, `${search} should offer ${name} first`).toBe(name);
+  });
 });

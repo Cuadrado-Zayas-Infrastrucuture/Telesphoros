@@ -14,7 +14,7 @@ export function DrugListInformation() {
           {list.prescribableSource
             ? `Ingredient and brand names: RxNorm ${list.rxnormRelease}, current prescribable content, plus the CPIC drug subset ${list.cpicRelease}. A brand name finds its ingredient; the record keeps the ingredient.`
             : `Ingredient names: RxNorm ${list.rxnormRelease}. CPIC drug subset ${list.cpicRelease}.`}{' '}
-          Snapshot accessed {list.accessedAt.slice(0, 10)}.
+          Snapshot accessed {list.accessedAt.slice(0, 10)}. Search stays on this device.
         </p>
       </div>
     </details>

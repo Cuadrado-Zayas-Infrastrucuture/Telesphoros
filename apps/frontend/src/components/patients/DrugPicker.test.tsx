@@ -43,12 +43,14 @@ describe('drug picker', () => {
     await userEvent.type(screen.getByRole('combobox', { name: 'Drug' }), 'calma');
     expect(screen.getByRole('option', { name: 'Calmabrand (hydroxyzine)' })).toHaveTextContent('Calmabrand (hydrOXYzine)');
   });
-  it('lists ingredient-name matches before brand matches and asks for more letters past six', async () => {
+  it('lists ingredient-name matches before brand matches, single ingredients before combinations, and asks for more letters past six', async () => {
     render(<DrugPicker value="" disabled={false} onChange={vi.fn()} />);
     await userEvent.type(screen.getByRole('combobox', { name: 'Drug' }), 'synth');
     const names = screen.getAllByRole('option').map((option) => option.getAttribute('aria-label'));
     expect(names).toHaveLength(6);
+    // The branded single ingredient first, then the unbranded ones; the combination after them (specs/041 D1).
     expect(names.slice(0, 2)).toEqual(['synthetic alpha', 'synthetic gamma 0']);
+    expect(names).not.toContain('synthetic alpha / synthetic beta');
     expect(names).not.toContain('Synthabrand (synthetic alpha)');
     expect(screen.getByText('6 suggestions. Type more letters to narrow the list.')).toBeInTheDocument();
   });

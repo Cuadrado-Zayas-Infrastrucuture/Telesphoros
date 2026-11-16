@@ -1,5 +1,6 @@
 import type { PatientDemographicsDto } from '@telesphoros/shared-types';
 import { SEX_LABELS } from '@/lib/demographicsDraft';
+import { onDate } from '@/lib/formatWhen';
 import { exactAge } from '@/lib/patientSummary';
 
 /**
@@ -10,7 +11,7 @@ import { exactAge } from '@/lib/patientSummary';
 export function PatientBanner({ value }: { value: PatientDemographicsDto }) {
   const name = [value.givenName, value.familyName].filter(Boolean).join(' ');
   const age = exactAge(value.dateOfBirth);
-  const facts = [value.dateOfBirth ? `Born ${value.dateOfBirth}` : null, age === null ? null : `${age} years`, value.sex ? SEX_LABELS[value.sex] : null].filter(Boolean);
+  const facts = [value.dateOfBirth ? `Born ${onDate(value.dateOfBirth)}` : null, age === null ? null : `${age} years`, value.sex ? SEX_LABELS[value.sex] : null].filter(Boolean);
   if (!name && facts.length === 0) return null;
   return (
     <div role="group" aria-label="Patient identity" className="flex flex-col gap-1 border-l-2 border-primary pl-3">

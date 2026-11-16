@@ -88,7 +88,17 @@ function score(text: string, needle: string): number | null {
   if (lower.split(/[\s/,()-]+/).some((word) => word.startsWith(needle))) return 2;
   return lower.includes(needle) ? 3 : null;
 }
-/** Local type-ahead ranking over ingredient names and brand aliases. Nothing typed leaves the browser. */
+/** 0 for a single ingredient (IN), 1 for a combination (MIN): a combination never ranks above its own ingredient. */
+const combination = (entry: DrugListEntry): number => (entry.tty === 'IN' ? 0 : 1);
+/** 0 for an ingredient sold under at least one brand name, 1 otherwise. */
+const unbranded = (entry: DrugListEntry): number => (entry.brands?.length ? 0 : 1);
+/**
+ * Local type-ahead ranking over ingredient names and brand aliases. Nothing typed leaves the browser. Within one match
+ * level (specs/041 D1): single ingredients before combinations, so Enter on the first suggestion for "hydrala" records
+ * hydralazine and not hydralazine / isosorbide dinitrate; then ingredients sold under a brand name before those without
+ * one, because with 6,862 ingredients a short search otherwise fills with rarely prescribed names; then shorter names,
+ * then alphabetical.
+ */
 export function rankDrugs(entries: readonly DrugListEntry[], search: string, limit: number): DrugSuggestion[] {
   const needle = search.trim().toLowerCase();
   if (needle.length < 2) return [];
@@ -103,7 +113,14 @@ export function rankDrugs(entries: readonly DrugListEntry[], search: string, lim
     if (best) ranked.push({ suggestion: best.brand ? { entry, brand: best.brand } : { entry }, rank: best.rank });
   }
   return ranked
-    .sort((a, b) => a.rank - b.rank || a.suggestion.entry.name.length - b.suggestion.entry.name.length || a.suggestion.entry.name.localeCompare(b.suggestion.entry.name))
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        combination(a.suggestion.entry) - combination(b.suggestion.entry) ||
+        unbranded(a.suggestion.entry) - unbranded(b.suggestion.entry) ||
+        a.suggestion.entry.name.length - b.suggestion.entry.name.length ||
+        a.suggestion.entry.name.localeCompare(b.suggestion.entry.name),
+    )
     .slice(0, limit)
     .map((item) => item.suggestion);
 }

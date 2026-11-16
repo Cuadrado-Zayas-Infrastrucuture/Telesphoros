@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 import { FOLLOWUPS_PAUSED_MESSAGE } from '@/lib/patientFollowups';
@@ -43,6 +44,17 @@ describe('follow-up section, by whether this environment records follow-ups', ()
     expect(region.queryByRole('button', { name: 'Schedule follow-up' })).not.toBeInTheDocument();
     // Reading is untouched.
     expect(region.getByRole('button', { name: 'Refresh follow-ups' })).toBeInTheDocument();
+  });
+  it('keeps the how-to line behind "About follow-up", while the paused notice always shows (specs/041 D7)', async () => {
+    const { region } = await open(json({ recording: 'paused' }));
+    expect(await region.findByText(FOLLOWUPS_PAUSED_MESSAGE)).toBeVisible();
+    const about = region.getByRole('button', { name: 'About follow-up' });
+    expect(about).toHaveAttribute('aria-expanded', 'false');
+    expect(region.queryByText('Document response to a recorded treatment and choose when to follow up.')).not.toBeInTheDocument();
+    await userEvent.click(about);
+    expect(about).toHaveAttribute('aria-expanded', 'true');
+    expect(region.getByText('Document response to a recorded treatment and choose when to follow up.')).toHaveAttribute('id', about.getAttribute('aria-controls'));
+    expect(region.getByText(FOLLOWUPS_PAUSED_MESSAGE)).toBeVisible();
   });
   it('shows the list, not an entry form, when a link asks for one while paused', async () => {
     const { region } = await open(json({ recording: 'paused' }), `/patients/${ID}?followup=${THREAD}#followups`);

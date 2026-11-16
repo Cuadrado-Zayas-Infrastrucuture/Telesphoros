@@ -41,14 +41,14 @@ export function decisionStanding(
   return { open: true, reason: null };
 }
 const path = (result: string) => `/api/v1/evaluation-results/${encodeURIComponent(result)}/clinician-decisions`;
+/** Report processing is off in this environment: a state, not a failure, so nothing offers a retry (specs/041 D4). */
+export const RESULTS_PROCESSING_OFF = 'Stored results are unavailable while report processing is disabled.';
 export async function readPatientResults(apiFetch: ApiFetch, patient: string, page: number, signal: AbortSignal) {
   const response = await apiFetch(`/api/v1/evaluations?patientId=${encodeURIComponent(patient)}&page=${page}&pageSize=10`, { signal });
   if (!response.ok) {
     const failure = (await response.json().catch(() => null)) as { error?: { code?: unknown } } | null;
     throw new SubmitError(
-      response.status === 503 && failure?.error?.code === 'PIPELINE_DISABLED'
-        ? 'Stored results are unavailable while report processing is disabled.'
-        : 'Stored results could not be loaded. Please retry.',
+      response.status === 503 && failure?.error?.code === 'PIPELINE_DISABLED' ? RESULTS_PROCESSING_OFF : 'Stored results could not be loaded. Please retry.',
       response.status,
     );
   }

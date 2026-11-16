@@ -432,6 +432,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
           <ConversationWelcome
             preferredName={preferredName}
             canAttach={canAttach}
+            onAttach={() => picker.current?.click()}
             canReadRecords={roles.some((role) => CLINICAL_READ_ROLES.includes(role))}
             canFollowUp={roles.some((role) => role === 'clinician' || role === 'reviewer')}
           />

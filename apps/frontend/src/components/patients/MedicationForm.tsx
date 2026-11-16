@@ -69,9 +69,8 @@ export function MedicationForm(props: { patientId: string; initial?: PatientMedi
         void save();
       }}
     >
-      <p className="text-sm text-muted-foreground">
-        {props.initial ? 'This adds a version. Earlier versions stay readable.' : 'Record one ingredient. Dates are optional year-months.'}
-      </p>
+      {/* The add form needs no preamble: its labels say what is optional (specs/041 D9). A correction says what it does. */}
+      {props.initial && <p className="text-sm text-muted-foreground">This adds a version. Earlier versions stay readable.</p>}
       {retired ? (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-recorded-drug`}>Recorded drug</Label>
