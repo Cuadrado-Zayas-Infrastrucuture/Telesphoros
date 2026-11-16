@@ -65,6 +65,9 @@
   --font-family-sans: Inter, Arial, sans-serif;
   --font-family-ui-heading: var(--font-family-sans);
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Inter's "Disambiguation (no zero)" set: I gets serifs and l a tail, so Il1 cannot be misread in drug names and codes.
+     Applied to the signed-in app only; the landing page keeps its approved look (docs/design/clinical-typography.md). */
+  --font-feature-ui: "ss04";
 
   /* Spacing (Tailwind multiplies this base: p-4 = 4 * --space-unit) */
   --space-unit: 0.25rem;
