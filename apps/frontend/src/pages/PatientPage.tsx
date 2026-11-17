@@ -31,6 +31,14 @@ export default function PatientPage() {
   const [version, setVersion] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // A version number or an error belongs to one patient. Opening another chart (the same page, a new id) starts it at its current record, with its
+  // identity banner, and drops the previous patient's error; it is reset here, during render, so the read below never runs with the old values.
+  const [shownId, setShownId] = useState(id);
+  if (shownId !== id) {
+    setShownId(id);
+    setVersion(undefined);
+    setError(null);
+  }
   usePageTitle(patient ? `Patient ${patient.label}` : 'Patient');
 
   useEffect(() => {
