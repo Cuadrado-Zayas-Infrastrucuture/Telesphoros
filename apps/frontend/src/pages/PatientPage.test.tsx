@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -135,5 +135,160 @@ describe('the patient page (spec 025 T303, PD-5)', () => {
     await section.findByText(NAME);
     await userEvent.click(section.getByRole('button', { name: 'Correct' }));
     expect(await axe(view.container)).toHaveNoViolations();
+  });
+});
+
+// Moving from one chart to another never carries the first patient's state, or a late answer about them, onto the next.
+const B_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+const B_PATIENT = { ...PATIENT, id: B_ID, label: 'SYN-005' };
+const B_NAME = 'Qwyrtle-Other';
+const B_CURRENT = { ...CURRENT, patientId: B_ID, givenName: B_NAME, familyName: 'Second-Testcase' };
+const A_ONLY = 'Recommendation for the first patient only.';
+const evaluationFor = (patientId: string, text: string) => ({
+  id: '66666666-6666-4666-8666-666666666666',
+  reportId: '11111111-1111-4111-8111-111111111111',
+  patientId,
+  captureId: null,
+  acceptance: null,
+  disposition: 'evaluated',
+  holdCode: null,
+  hold: null,
+  knowledgeSetId: 'a'.repeat(64),
+  engineVersion: 'sha256-abcdef012345',
+  scope: 'synthetic-structured-assessment',
+  clinicalUse: 'not-approved',
+  state: 'active',
+  supersededBy: null,
+  results: [
+    {
+      id: '55555555-5555-4555-8555-555555555555',
+      ordinal: 0,
+      drug: 'drugz',
+      genes: ['GENEA'],
+      outcome: 'shown',
+      reasonCode: null,
+      strength: 'Strong',
+      citation: { guidelineId: 'drugz-genea' },
+      recommendationText: text,
+      implication: null,
+      geneEvidence: null,
+    },
+  ],
+  geneStates: [],
+  corrections: [],
+  current: true,
+  advisory: { activeDisputes: 0, patientLink: 'verified', knowledge: { evaluatedWith: 'set', loadedNow: 'set', status: 'same' } },
+  actionable: false,
+  createdAt: '2026-11-04T00:00:00Z',
+});
+
+/** Two patients. `hold` names first-patient reads that wait until `release()`, so a test can let them answer after the second chart has opened. */
+function twoPatients(roles: Role[], hold: { demographics?: boolean; results?: boolean; failPatient?: boolean } = {}) {
+  const waiting: Array<() => void> = [];
+  const held = (respond: () => Response) => new Promise<Response>((resolve) => waiting.push(() => resolve(respond())));
+  const impl = vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input), 'http://x');
+    if (url.pathname === `/api/v1/patients/${ID}/demographics`) {
+      const respond = () => json(200, url.searchParams.get('version') === '1' ? EARLIER : CURRENT);
+      return hold.demographics ? held(respond) : respond();
+    }
+    if (url.pathname === `/api/v1/patients/${B_ID}/demographics`) {
+      if (url.searchParams.has('version')) return refusal(404, 'no-such-version');
+      return json(200, B_CURRENT);
+    }
+    if (url.pathname === `/api/v1/patients/${ID}`) return hold.failPatient ? json(500, {}) : json(200, PATIENT);
+    if (url.pathname === `/api/v1/patients/${B_ID}`) return json(200, B_PATIENT);
+    if (url.pathname === '/api/v1/evaluations') {
+      const patientId = url.searchParams.get('patientId');
+      const respond = () =>
+        json(200, { data: patientId === ID ? [evaluationFor(ID, A_ONLY)] : [], meta: { page: 1, pageSize: 10, total: patientId === ID ? 1 : 0, totalPages: 1 } });
+      return patientId === ID && hold.results ? held(respond) : respond();
+    }
+    if (url.pathname.endsWith('/api/v1/me/recovery-scope')) return json(200, { recoveryScope: RECOVERY_SCOPE });
+    if (url.pathname.includes('/api/v1/patients') || url.pathname.includes('/api/v1/reports'))
+      return json(200, { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
+    return json(200, { roles });
+  });
+  const release = async () => {
+    await act(async () => {
+      for (const go of waiting.splice(0)) go();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+  const called = (path: string) => impl.mock.calls.some(([input]) => String(input).includes(path));
+  return { impl, release, called };
+}
+async function openSecondPatient(view: ReturnType<typeof renderApp>) {
+  await act(async () => {
+    await view.router.navigate(`/patients/${B_ID}`);
+  });
+  await screen.findByRole('heading', { level: 1, name: 'SYN-005' });
+}
+
+describe('moving to another patient', () => {
+  it('opens the next patient at their current record with their identity banner, even if an earlier version of the first was open', async () => {
+    const { impl, called } = twoPatients(['reader']);
+    const view = renderApp(`/patients/${ID}`, { signedInAs: ['reader'], fetchImpl: impl as unknown as typeof fetch });
+    const section = within(await screen.findByRole('region', { name: 'Demographics' }));
+    await section.findByText(NAME);
+    await userEvent.click(section.getByRole('button', { name: 'View' }));
+    expect(await section.findByText('Earlier-Testcase')).toBeVisible();
+
+    await openSecondPatient(view);
+    const banner = await screen.findByRole('group', { name: 'Patient identity' });
+    expect(banner).toHaveTextContent(B_NAME);
+    expect(called(`/patients/${B_ID}/demographics?version=`)).toBe(false);
+    expect(screen.queryByText(/Showing version 1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(NAME)).not.toBeInTheDocument();
+  });
+
+  it("does not carry the first patient's load error onto the next patient", async () => {
+    const { impl } = twoPatients(['reader'], { failPatient: true });
+    const view = renderApp(`/patients/${ID}`, { signedInAs: ['reader'], fetchImpl: impl as unknown as typeof fetch });
+    const failure = (await screen.findByRole('alert')).textContent ?? '';
+    expect(failure).toMatch(/could not be loaded/i);
+    await act(async () => {
+      await view.router.navigate(`/patients/${B_ID}`);
+    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'SYN-005' })).toBeVisible();
+    expect(screen.queryByText(failure)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
+  it('control: the held first-patient reads do show on that patient once they answer', async () => {
+    const { impl, release } = twoPatients(['clinician'], { results: true });
+    renderApp(`/patients/${ID}`, { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+    await screen.findByRole('heading', { level: 1, name: 'SYN-004' });
+    expect(screen.queryByText(A_ONLY)).not.toBeInTheDocument();
+    await release();
+    expect(await screen.findByText(A_ONLY)).toBeVisible();
+    expect(screen.getByRole('button', { name: /^drugz:/ })).toBeVisible();
+  });
+
+  it("never shows a late answer about the first patient's results on the next patient's page", async () => {
+    const { impl, release, called } = twoPatients(['clinician'], { results: true });
+    const view = renderApp(`/patients/${ID}`, { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+    await screen.findByRole('heading', { level: 1, name: 'SYN-004' });
+    await openSecondPatient(view);
+    await vi.waitFor(() => expect(called(`/api/v1/evaluations?patientId=${B_ID}`)).toBe(true));
+    await release();
+    expect(screen.getByRole('heading', { level: 1, name: 'SYN-005' })).toBeVisible();
+    // The row as well as its wording: a stale row could arrive closed, with its wording hidden until opened.
+    expect(screen.queryByRole('button', { name: /^drugz:/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(A_ONLY)).not.toBeInTheDocument();
+  });
+
+  it("never shows a late answer about the first patient's identity on the next patient's page", async () => {
+    const { impl, release } = twoPatients(['reader'], { demographics: true });
+    const view = renderApp(`/patients/${ID}`, { signedInAs: ['reader'], fetchImpl: impl as unknown as typeof fetch });
+    await vi.waitFor(() => expect(impl.mock.calls.some(([input]) => String(input).includes(`/patients/${ID}/demographics`))).toBe(true));
+    await act(async () => {
+      await view.router.navigate(`/patients/${B_ID}`);
+    });
+    expect(await screen.findByRole('group', { name: 'Patient identity' })).toHaveTextContent(B_NAME);
+    await release();
+    expect(screen.getByRole('heading', { level: 1, name: 'SYN-005' })).toBeVisible();
+    expect(screen.queryByText(NAME)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'SYN-004' })).not.toBeInTheDocument();
   });
 });
