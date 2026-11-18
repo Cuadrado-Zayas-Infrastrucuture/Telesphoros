@@ -6,4 +6,5 @@ real content has been fetched and reviewed. Never put test or invented content h
 
 Format, sign-off procedure and the rules the loader enforces: [docs/cpic-integration.md](../../docs/cpic-integration.md).
 A test loads this folder under the production rules, so anything unreviewed, edited after review, or
-synthetic fails the build.
+synthetic fails the build. Its signatures are checked wherever the signers' public keys are configured
+(`KNOWLEDGE_SIGNER_KEYS`); CI holds no keys, so there the test checks every rule but the signatures.
