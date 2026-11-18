@@ -10,6 +10,7 @@ import {
   REAL_KNOWLEDGE_DIR,
   reviewedCopyOf,
   signatureBy,
+  signerKeysJson,
   SYNTHETIC_DIR,
   tempDir,
   TEST_SIGNER_KEYS,
@@ -17,7 +18,7 @@ import {
   UNLISTED_SIGNER,
   writeJson,
 } from '../../../test/helpers/knowledge';
-import type { SignerKeys } from './signatures';
+import { parseSignerKeys, type SignerKeys } from './signatures';
 import { contentSha256 } from './content-hash';
 import type { GuidelineFile } from '@telesphoros/cpic-schema';
 
@@ -209,10 +210,58 @@ describe('loadKnowledge: production rules', () => {
   });
 
   it('the knowledge directory that ships always loads under the production rules', async () => {
-    // If someone commits unreviewed, edited or synthetic content under knowledge/cpic, this fails the build.
-    const set = await loadKnowledge({ directory: REAL_KNOWLEDGE_DIR, mode: 'production' });
-    expect(set.containsSynthetic).toBe(false);
-    expect(set.allReviewed).toBe(true);
+    // If someone commits unreviewed, edited or synthetic content under knowledge/cpic, this fails the build. Its signatures are checked
+    // wherever the signer keys are configured (below).
+    expect(await shippedKnowledgeProblems(REAL_KNOWLEDGE_DIR, process.env.KNOWLEDGE_SIGNER_KEYS)).toEqual([]);
+  });
+});
+
+const NO_KEYS = ': no signer keys are configured (KNOWLEDGE_SIGNER_KEYS), so its signatures cannot be checked.';
+
+/**
+ * What the knowledge directory that ships must pass. With the signers' public keys (KNOWLEDGE_SIGNER_KEYS), every production rule. Without
+ * them, as in CI, which holds no keys, every production rule but the signatures: the one problem allowed is that a signed file's signatures
+ * cannot be checked. They are checked wherever the keys are configured, and by `knowledge:verify --production` before a release.
+ */
+async function shippedKnowledgeProblems(directory: string, keysJson: string | undefined): Promise<string[]> {
+  const keys = parseSignerKeys(keysJson);
+  const problems = await problemsOf(directory, 'production', keys);
+  return keys.size > 0 ? problems : problems.filter((problem) => !problem.endsWith(NO_KEYS));
+}
+
+describe('the check of the knowledge directory that ships, with and without signer keys', () => {
+  it('passes a signed real directory without the keys, and with them; without them, the loader alone refuses it', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR);
+    const withoutKeys = await problemsOf(dir, 'production', new Map());
+    expect(withoutKeys.length).toBeGreaterThan(0);
+    expect(withoutKeys.every((problem) => problem.endsWith(NO_KEYS))).toBe(true);
+    expect(await shippedKnowledgeProblems(dir, undefined)).toEqual([]);
+    expect(await shippedKnowledgeProblems(dir, '')).toEqual([]);
+    expect(await shippedKnowledgeProblems(dir, signerKeysJson())).toEqual([]);
+  });
+
+  it.each<[string, () => Promise<string>, string | undefined]>([
+    ['an unreviewed, synthetic directory, without keys', () => copyOf(SYNTHETIC_DIR), undefined],
+    [
+      'a signed file changed after it was signed, without keys',
+      async () => {
+        const dir = await reviewedCopyOf(SYNTHETIC_DIR);
+        const path = join(dir, 'guidelines/drugx-genea.json');
+        const file = (await readJson(path)) as GuidelineFile;
+        file.recommendations[0]!.recommendationText = `${file.recommendations[0]!.recommendationText} (changed)`;
+        await writeJson(path, file);
+        return dir;
+      },
+      undefined,
+    ],
+    [
+      'a directory signed by a key the configured keys do not hold',
+      () => reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [TEST_SIGNERS[0]!, UNLISTED_SIGNER] }),
+      signerKeysJson(),
+    ],
+    ['a directory signed by both signers, checked against other keys', () => reviewedCopyOf(SYNTHETIC_DIR), signerKeysJson([UNLISTED_SIGNER])],
+  ])('refuses %s', async (_name, make, keys) => {
+    expect((await shippedKnowledgeProblems(await make(), keys)).length).toBeGreaterThan(0);
   });
 });
 
