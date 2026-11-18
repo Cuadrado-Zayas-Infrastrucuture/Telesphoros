@@ -9,9 +9,22 @@ import { pendingMigrations, MigrationError } from '../../src/db/migrator';
 
 const apps: NestExpressApplication[] = [];
 const dbs: EphemeralDatabase[] = [];
-afterAll(async () => {
+// DROP DATABASE forces an immediate checkpoint, which writes every dirty page in the cluster; a dropped database's own pages are
+// discarded unwritten. Kept until the end of the file, every earlier test's copy was still dirty at the file's first drop, so the
+// database-disappears test paid for all of them and ran past its deadline. Bound fixture lifetime to one test
+// (docs/verification/readiness-drop-checkpoint.md).
+async function releaseFixtures() {
   await Promise.all(apps.map((a) => a.close()));
+  apps.length = 0;
   await Promise.all(dbs.map((d) => d.drop()));
+  dbs.length = 0;
+}
+afterEach(releaseFixtures);
+afterAll(releaseFixtures); // retry cleanup if a test or its teardown failed
+beforeEach(() => {
+  // Regression guard: no test may inherit another test's live fixtures.
+  expect(apps.length).toBe(0);
+  expect(dbs.length).toBe(0);
 });
 const boot = async (db: EphemeralDatabase) => {
   const app = await createTestApp({ postgresUrl: db.appUrl });

@@ -17,3 +17,5 @@ All 27 focused observer, real-PostgreSQL readiness, dependency-timeout and healt
 ## Acceptance boundary
 
 Readiness callbacks/assertions, fixture lifetime/cleanup, default Jest deadline, production probe deadline, CI routing and shared budgets remain unchanged. No production source imports this helper. Required local checks and real-service profile results must be assessed at the actual candidate; this preparation-time note does not claim later results or hosted acceptance. No publication, CI rerun, engine/model execution or clinical approval is authorized by this record.
+
+Cause and repair (2026-11-18): [readiness drop checkpoint](readiness-drop-checkpoint.md).
