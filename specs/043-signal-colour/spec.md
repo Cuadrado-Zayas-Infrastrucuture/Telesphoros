@@ -19,7 +19,7 @@
   - the upload guide's progress bar and the line under its current step.
 
   Not changed: the spinner inside a button keeps the button's text colour, because it sits on the button's fill, where tangerine would be hard to see, and D5 keeps buttons free of it. Loading placeholders (the grey shapes) stay grey.
-- **D5, where it never goes:** results, recommendations, medications, follow-up due and overdue states, alerts and notices, small and body text, and button fills. The app already has a warning colour in the same family (`--warning`, brown in light, amber in dark); the signal colour must never sit where a reader could take it for one. A new use needs its own decision here.
+- **D5, where it never goes:** results, recommendations, medications, follow-up due and overdue states, alerts and notices, small and body text, and button fills. The app already has a warning colour in the same family (`--warning`, brown in light, amber in dark); the signal colour must never sit where a reader could take it for one, and colour is never the only difference between a signal mark and a warning, an error or a success (see "Colour vision": to a red-blind reader the light theme's signal and warning colours look the same). A new use needs its own decision here.
 - **D6, heading accent:** as the landing page's headline does, a large heading may carry the signal colour: the last words of the chat home's heading ("synthetic report.") and the sign-in page's heading ("Sign in"). Only at heading sizes, 24 px and up: on a light page the colour reaches 4.39:1, enough for large text (3:1) and not for small text (4.5:1). The words and the heading's accessible name do not change.
 
 ## Amendment 1 (2026-11-18)
@@ -30,6 +30,16 @@ After the first browser look the founder said "needs more orange". Four addition
 
 The landing page and the company page; any other screen of the app; the selected item in the sidebar (considered twice, left out: it is on every screen, beside the follow-up count); wording; API, schema, setting or infrastructure.
 
-## Not verified by this spec
+## Colour vision (checked 2026-11-19)
 
-Whether the signal colour and the warning colour stay easy to tell apart for people with a colour vision deficiency. In the dark theme they are closest (`#FF7A1A` beside `#DDB672`). D5 keeps them on different kinds of things, and a mark is never the only carrier of meaning, but nobody has looked at this through a simulator yet.
+Checked by simulation, not with people: the model of Machado, Oliveira and Fernandes (2009) at full strength, applied to the palette's own values and, as a filter, to the real marks in a browser. Differences are distances in OKLab times 100 (about 2 is the smallest difference an eye can see; the numbers are in tasks T015).
+
+- **Light theme, red-blind (protanopia): the signal colour and the warning colour look the same.** Their difference falls from 10.5 to 2.2 and their lightness is nearly equal (1.10:1). The success colour comes close too (5.1, equal lightness).
+- **Light theme, everyone:** the signal colour is nearer to the error colour (7.2) than to the warning colour (10.5). Green-blind (deuteranopia) leaves both about there (7.0 and 7.3).
+- **Dark theme and sign-in:** the signal colour stays apart from warning, error and success in every simulation (8.3 at the least).
+- **No colour vision at all:** in the dark theme the signal mark is the same grey as a plain mark. The decoration is lost and nothing else is.
+- The signal colour keeps at least 3:1 against the page in every simulation (3.85:1 at the least, light theme, green-blind).
+
+What follows from it, and is now part of D5: **colour is never the only difference between a signal mark and a warning, an error or a success.** Every use today passes: the progress marks sit beside a plain word ("In progress") and differ from done and failed steps by icon and word; the heading accents and the lines carry no state. A new use that would rely on the colour alone is refused by this.
+
+Not changed: the light value. `#C2500A` is the landing page's own colour, and a value a red-blind reader could tell from the warning brown would no longer match it. That trade is the founder's to make.
