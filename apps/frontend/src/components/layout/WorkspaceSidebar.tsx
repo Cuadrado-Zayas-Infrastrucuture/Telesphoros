@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { ChartColumn, ChevronsUpDown, FileText, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Sparkles, SquarePen, Users, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
 import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
@@ -28,6 +29,9 @@ export function WorkspaceSidebar() {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   const [width, setWidth] = useState(readSidebarWidth);
+  // Specs/042 D10: the collapse to icons applies only at the desktop width (`@media (min-width: 64rem)` in styles/workspace.css). Below it the
+  // sidebar is a menu that shows every name, so a stored collapse must not give its links a tooltip that repeats the visible word.
+  const iconsOnly = useMediaQuery('(min-width: 64rem)', true) && collapsed;
   useEffect(
     () =>
       preferenceStorage.subscribe(() => {
@@ -206,7 +210,7 @@ export function WorkspaceSidebar() {
             {status === 'signedIn' && (
               <li>
                 {/* Collapsed to icons, each destination shows its name in a tooltip beside it (specs/018 D3, specs/042 D6). */}
-                <LazyTooltip label={collapsed ? 'New chat' : undefined} side="right">
+                <LazyTooltip label={iconsOnly ? 'New chat' : undefined} side="right">
                   <SidebarLink
                     to={WORKSPACE_PATH}
                     end
@@ -229,7 +233,7 @@ export function WorkspaceSidebar() {
             {items.map((item) =>
               item.kind === 'link' ? (
                 <li key={item.to}>
-                  <LazyTooltip label={collapsed ? item.label : undefined} side="right">
+                  <LazyTooltip label={iconsOnly ? item.label : undefined} side="right">
                     <SidebarLink to={item.to} end data-panel-item={item.label} onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
                       <item.icon aria-hidden="true" className="size-4 shrink-0" />
                       <span className="workspace-link-label">{item.label}</span>
@@ -238,7 +242,7 @@ export function WorkspaceSidebar() {
                 </li>
               ) : (
                 <li key={item.kind}>
-                  <FollowupsNavLink collapsed={collapsed} className={linkClass} onClick={close} onKeyDown={dismiss} />
+                  <FollowupsNavLink iconsOnly={iconsOnly} className={linkClass} onClick={close} onKeyDown={dismiss} />
                 </li>
               ),
             )}
@@ -246,7 +250,7 @@ export function WorkspaceSidebar() {
           {lists && <SidebarReports onNavigate={close} />}
         </nav>
         <div className="workspace-account relative border-t border-divider pt-3">
-          <LazyTooltip label={collapsed ? `Account, ${role}` : undefined} side="right">
+          <LazyTooltip label={iconsOnly ? `Account, ${role}` : undefined} side="right">
             <button
               ref={accountToggle}
               type="button"

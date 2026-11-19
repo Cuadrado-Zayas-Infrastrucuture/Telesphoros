@@ -9,12 +9,13 @@ const allFilters: FollowupInboxFilters = { assignment: 'all', status: 'all' };
 
 /** The sidebar's Follow-ups destination: a link to the page (specs/041 C2), with the clinic's overdue and due-today count beside it. */
 export function FollowupsNavLink({
-  collapsed,
+  iconsOnly,
   className,
   onClick,
   onKeyDown,
 }: {
-  collapsed: boolean;
+  /** The sidebar shows icons only (collapsed, at the desktop width): the name then shows in a tooltip. */
+  iconsOnly: boolean;
   className: (state: { isActive: boolean }) => string;
   onClick: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
@@ -22,7 +23,7 @@ export function FollowupsNavLink({
   const { data, error } = useFollowups(undefined, undefined, allFilters);
   const label = `Follow-ups${data && !error ? ` (${data.counts.overdue + data.counts.today})` : ''}`;
   return (
-    <LazyTooltip label={collapsed ? label : undefined} side="right">
+    <LazyTooltip label={iconsOnly ? label : undefined} side="right">
       <SidebarLink to="/follow-ups" end data-panel-item="Follow-ups" onKeyDown={onKeyDown} onClick={onClick} styleFor={className}>
         <CalendarClock aria-hidden="true" className="size-4 shrink-0" />
         <span className="workspace-link-label">{label}</span>

@@ -115,6 +115,43 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     expect(window.localStorage.getItem('telesphoros.sidebar')).toBeNull();
   });
 
+  it('below the desktop width a stored collapse gives no tooltip, since the menu shows every name; widening brings it back (specs/042 D10)', async () => {
+    // Only the sidebar's width query follows `width`; any other query (the theme's dark setting) answers "no" and never changes.
+    const DESKTOP = '(min-width: 64rem)';
+    const width = { desktop: false };
+    const listeners = new Set<(event: MediaQueryListEvent) => void>();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        media: query,
+        get matches() {
+          return query === DESKTOP && width.desktop;
+        },
+        addEventListener: (_: string, fn: (event: MediaQueryListEvent) => void) => query === DESKTOP && listeners.add(fn),
+        removeEventListener: (_: string, fn: (event: MediaQueryListEvent) => void) => listeners.delete(fn),
+      })),
+    );
+    try {
+      preferenceStorage.choose(true);
+      window.localStorage.setItem('telesphoros.sidebar', 'collapsed');
+      open('/settings', ['clinician']);
+      const patients = (await primary()).getByRole('link', { name: 'Patients' });
+      expect(sidebar()).toHaveClass('is-collapsed');
+      act(() => patients.focus());
+      await expect(screen.findByRole('tooltip', {}, { timeout: 500 })).rejects.toThrow();
+      expect(patients).not.toHaveAttribute('aria-describedby');
+      expect(vi.mocked(window.matchMedia)).toHaveBeenCalledWith(DESKTOP);
+
+      act(() => patients.blur());
+      width.desktop = true;
+      act(() => listeners.forEach((fn) => fn({ matches: true, media: DESKTOP } as MediaQueryListEvent)));
+      act(() => (screen.getByRole('link', { name: 'Patients' }) as HTMLElement).focus());
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Patients');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('starts expanded, and still collapses, when browser storage is blocked', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('blocked', 'SecurityError');
