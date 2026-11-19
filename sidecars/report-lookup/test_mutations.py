@@ -9,41 +9,12 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULE = "apps/backend/src/services/report-lookup/"
+# The mutants live in mutants.json, which .github/ci/report-lookup-mutations.test.mjs also reads: an anchor that drifts fails on the
+# pull request that moves it, not only here.
+SPEC = json.loads((Path(__file__).resolve().parent / "mutants.json").read_text())
+MODULE = SPEC["module"]
 # (name, file, exact replacements, independently written oracle test name)
-MUTANTS = [
-    ("erase-unavailable-basis", "contracts.ts",
-     [("basis: z.literal('unavailable-token'),", "basis: z.literal('unavailable-token').optional(),")],
-     "erasing the unavailable basis"),
-    ("admit-empty-diplotype", "lookup.ts",
-     [("if (diagnostics.length > 0) return hold(diagnostics[0]!.stage, diagnostics[0]!.reasonCode);", "")],
-     "empty diplotype beside a canonical"),
-    ("ignore-diplotype-for-unavailable", "lookup.ts",
-     [("if (diplotype.state === 'present') {", "if (diplotype.state === 'present' && state.state !== 'approved-unavailable') {"),
-      ("record.type !== 'unavailable' || diplotype.state !== 'missing' ||", "record.type !== 'unavailable' ||")],
-     "unavailable beside"),
-    ("capture-scope-bypass", "lookup.ts",
-     [("!scoped(capture, scope.data) || !scoped(capture.acceptance, scope.data) ||", "")],
-     "capture is bound to"),
-    ("stale-capture-acceptance", "lookup.ts",
-     [("capture.acceptance.decision !== 'accepted'", "false"),
-      ("capture.acceptance.id !== shell.data.captureAcceptanceId", "false")],
-     "latest rejection cannot be bypassed"),
-    ("context-scope-bypass", "lookup.ts",
-     [(" || !scoped(contextReview, scope.data)", "")],
-     "external context targets"),
-    ("superseded-evidence-review", "lookup.ts",
-     [("latest[0]!.reviewId !== payload.review.id", "false")],
-     "record hash tampering and superseded"),
-    ("combined-falls-back", "routing.ts",
-     [("if (!policy.reviewedRows.some((s) => key(s) === key(selector))) return hold('out-of-review-scope');",
-       "if (!policy.reviewedRows.some((s) => key(s) === key(selector))) return routeAdmitted(states.map((s) => s.gene === 'CYP2B6' ? { gene: 'CYP2B6', state: 'absent', coverageRecordId: 'mutation' } : s), policy, knowledge);")],
-     "excluded combined cell never falls back"),
-    ("expose-clinical-wording", "routing.ts",
-     [("return { state: 'row-selected', selectedRow: selector };",
-       "return { state: 'row-selected', selectedRow: selector, recommendationText: row.recommendationText };")],
-     "canonical / canonical"),
-]
+MUTANTS = [(m["id"], m["file"], [tuple(r) for r in m["replacements"]], m["oracle"]) for m in SPEC["mutants"]]
 
 
 def digest(path):

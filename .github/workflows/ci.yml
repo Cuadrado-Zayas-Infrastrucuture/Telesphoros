@@ -103,15 +103,18 @@ jobs:
       # Unconditional: test:infra loads the backend's configuration loader (zod), so even a documentation-only run needs the install.
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+      # Not the frontend: its build below starts with the same `tsc --noEmit`, in this job and under this condition.
       - name: Typecheck
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
-        run: pnpm typecheck
+        run: node scripts/workspace-build/workspace.cjs run typecheck --except frontend
       - name: Lint
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm lint
+      # Not the backend and worker suites: service-memory and service-postgres-s3 run the backend's, and database-and-storage the worker's,
+      # under this same condition and with their database and S3. Here they could only run with those specs skipped.
       - name: Workspace tests
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
-        run: pnpm test
+        run: pnpm test:scripts && node scripts/workspace-build/workspace.cjs run test --except backend,worker
       - name: Production builds
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm build
