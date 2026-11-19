@@ -1,5 +1,5 @@
 import { preferenceStorage } from '@/lib/storageConsent';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -97,8 +97,14 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     expect(sidebar()).toHaveClass('is-collapsed');
     expect(window.localStorage.getItem('telesphoros.sidebar')).toBe('collapsed');
-    expect((await primary()).getByRole('link', { name: 'Patients' })).toHaveAttribute('title', 'Patients');
-    expect(screen.getByRole('button', { name: 'Account, clinician' })).toHaveAttribute('title', 'Account, clinician');
+    // Specs/042 D6: collapsed, each control shows its name in a tooltip on keyboard focus, not in a native title.
+    const patients = (await primary()).getByRole('link', { name: 'Patients' });
+    const account = screen.getByRole('button', { name: 'Account, clinician' });
+    for (const control of [patients, account]) expect(control).not.toHaveAttribute('title');
+    act(() => patients.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Patients');
+    act(() => account.focus());
+    await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Account, clinician'));
     unmount();
 
     open('/settings', ['clinician']);

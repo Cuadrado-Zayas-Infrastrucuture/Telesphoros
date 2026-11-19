@@ -18,9 +18,19 @@ Why a tooltip at all: several icon-only buttons name themselves with the browser
 - **D4, the app's own look:** the label is the page's text and background colours swapped (`--foreground` behind, `--background` in front), so its contrast is the body text's in every theme. Radius, shadow and size come from existing tokens. It fades in over 120 ms and leaves at once; with reduced motion it does not fade. The open state is styled in `styles/tooltip.css`, because the lint rule against one-off Tailwind values also covers `data-[state=…]` variants.
 - **D5, adapted from Arc UI, credited:** the shape (a provider, a trigger that keeps the child's own element, a portalled label, the 250 ms delay, the 8 px gap, the 15rem width) follows Arc UI's `tooltip.tsx` at commit `8302b52e` (MIT, Elia Kuratli). `components/arc/` keeps the licence and a README beside the component, as `components/bklit/` and `components/prompt-kit/` do. Not taken: Arc's `motion` text morph, its shared skip window, its CSS module and its token file. No animation library is added.
 
+## Amendment 1, 2026-11-18: the other icon-only controls
+
+Founder, the same day, after the first use passed its checks: "apply tooltips on other areas", then "Yes, first group". Every native `title` left in the app was listed and sorted into four groups; this amendment takes the first.
+
+- **D6, every icon-only control that names itself:** `Tooltip` replaces `title` on the Reports filter's "Refresh patient options" and "Clear patient filter", on the "About…" info button (`InfoButton`, so the Follow-up section and the New patient page), and in the sidebar: the collapse control always, and, while the sidebar is collapsed to icons, New chat, each destination, Follow-ups and the account button. Names, order and behaviour do not change. This is what specs/018 D3 and specs/034 D5 mean by a name shown "as a tooltip"; their `title` becomes this component.
+- **D7, no label, no tooltip:** `label` may be undefined, and then the child renders exactly as before. The expanded sidebar shows each name in words, so its links carry no tooltip. In the collapsed sidebar the label opens to the right of the icon; the collapse control opens to the right when collapsed and below when expanded.
+- **D8, `SidebarLink`:** the tooltip hands its child one merged set of properties and joins class names as text. A sidebar destination's class name is a function of whether it is the current page, which that join would turn into a string. `components/layout/SidebarLink.tsx` carries the function as `styleFor` and passes everything else through to the link.
+
+Left for later, each with its own decision: the full text of cut-off rows (Recents in the sidebar, file names and patient labels in the reports table, the patient list, the account email), which show record text and need keyboard reach first; and reasons or instructions (the Send button's blocked reason, the sidebar's resize hint, the usage calendar's day text), which D3 keeps out of a tooltip.
+
 ## Out of scope
 
-Every other use of `title` ("Clear patient filter", "Reset", the "About…" info buttons, the sidebar's collapsed links and Recents rows); the Send button's blocked reason, which is a reason and not a name (D3) and needs its own decision; popover, hover card and every other Arc UI part; any change to wording, API, schema, setting or infrastructure.
+The cut-off rows and the reasons named above; the development-only screens (the sample assistant, the local workspace and its bar); popover, hover card and every other Arc UI part; any change to wording, API, schema, setting or infrastructure.
 
 ## Not verified by this spec
 

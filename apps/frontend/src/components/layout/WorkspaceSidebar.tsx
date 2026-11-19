@@ -4,6 +4,8 @@ import { ChartColumn, ChevronsUpDown, FileText, Menu, MessageSquare, PanelLeftCl
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
+import { Tooltip } from '@/components/arc/Tooltip';
+import { SidebarLink } from '@/components/layout/SidebarLink';
 import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
 import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
@@ -173,16 +175,17 @@ export function WorkspaceSidebar() {
           <img src={productMark} alt="Telesphoros shield and Rx logo" width="64" height="66" loading="eager" className="brand-mark h-auto w-9 shrink-0" />
           <span className="workspace-brand-text min-w-0 truncate font-heading text-lg font-semibold tracking-tight">Telesphoros</span>
         </NavLink>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="workspace-collapse-toggle shrink-0 text-muted-foreground"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          onClick={toggleCollapsed}
-        >
-          {collapsed ? <PanelLeftOpen aria-hidden="true" className="size-4" /> : <PanelLeftClose aria-hidden="true" className="size-4" />}
-        </Button>
+        <Tooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} side={collapsed ? 'right' : 'bottom'}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="workspace-collapse-toggle shrink-0 text-muted-foreground"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={toggleCollapsed}
+          >
+            {collapsed ? <PanelLeftOpen aria-hidden="true" className="size-4" /> : <PanelLeftClose aria-hidden="true" className="size-4" />}
+          </Button>
+        </Tooltip>
         <Button
           onKeyDown={dismiss}
           ref={toggle}
@@ -202,32 +205,36 @@ export function WorkspaceSidebar() {
           <ul className="flex flex-col gap-0.5">
             {status === 'signedIn' && (
               <li>
-                <NavLink
-                  to={WORKSPACE_PATH}
-                  end
-                  data-panel-item="New chat"
-                  onKeyDown={dismiss}
-                  onClick={() => {
-                    announceNewChat();
-                    close();
-                  }}
-                  title={collapsed ? 'New chat' : undefined}
-                  className={({ isActive }) =>
-                    cn('workspace-new-chat flex min-h-control items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-primary hover:bg-muted', isActive && 'bg-muted')
-                  }
-                >
-                  <SquarePen aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="workspace-link-label">New chat</span>
-                </NavLink>
+                {/* Collapsed to icons, each destination shows its name in a tooltip beside it (specs/018 D3, specs/042 D6). */}
+                <Tooltip label={collapsed ? 'New chat' : undefined} side="right">
+                  <SidebarLink
+                    to={WORKSPACE_PATH}
+                    end
+                    data-panel-item="New chat"
+                    onKeyDown={dismiss}
+                    onClick={() => {
+                      announceNewChat();
+                      close();
+                    }}
+                    styleFor={({ isActive }) =>
+                      cn('workspace-new-chat flex min-h-control items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-primary hover:bg-muted', isActive && 'bg-muted')
+                    }
+                  >
+                    <SquarePen aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="workspace-link-label">New chat</span>
+                  </SidebarLink>
+                </Tooltip>
               </li>
             )}
             {items.map((item) =>
               item.kind === 'link' ? (
                 <li key={item.to}>
-                  <NavLink to={item.to} end data-panel-item={item.label} onKeyDown={dismiss} onClick={close} title={collapsed ? item.label : undefined} className={linkClass}>
-                    <item.icon aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="workspace-link-label">{item.label}</span>
-                  </NavLink>
+                  <Tooltip label={collapsed ? item.label : undefined} side="right">
+                    <SidebarLink to={item.to} end data-panel-item={item.label} onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
+                      <item.icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span className="workspace-link-label">{item.label}</span>
+                    </SidebarLink>
+                  </Tooltip>
                 </li>
               ) : (
                 <li key={item.kind}>
@@ -239,30 +246,31 @@ export function WorkspaceSidebar() {
           {lists && <SidebarReports onNavigate={close} />}
         </nav>
         <div className="workspace-account relative border-t border-divider pt-3">
-          <button
-            ref={accountToggle}
-            type="button"
-            onKeyDown={dismiss}
-            aria-label={`Account, ${role}`}
-            aria-expanded={accountOpen}
-            aria-controls="workspace-account-menu"
-            title={collapsed ? `Account, ${role}` : undefined}
-            onClick={() => setAccountOpen((current) => !current)}
-            className={cn(
-              'workspace-account-toggle flex min-h-control w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-muted',
-              (accountOpen || pathname === '/settings') && 'bg-muted',
-            )}
-          >
-            <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold text-foreground">
-              {(preferredName ?? role).charAt(0).toUpperCase()}
-            </span>
-            {/* The preferred name when set (Settings), with the role beside the environment, as a chat app shows the name and the plan. */}
-            <span className="workspace-link-label min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-foreground">{preferredName ?? role}</span>
-              <span className="block truncate text-xs text-muted-foreground">{preferredName ? `${role} · Synthetic` : 'Synthetic environment'}</span>
-            </span>
-            <ChevronsUpDown aria-hidden="true" className="workspace-link-label size-4 shrink-0 text-muted-foreground" />
-          </button>
+          <Tooltip label={collapsed ? `Account, ${role}` : undefined} side="right">
+            <button
+              ref={accountToggle}
+              type="button"
+              onKeyDown={dismiss}
+              aria-label={`Account, ${role}`}
+              aria-expanded={accountOpen}
+              aria-controls="workspace-account-menu"
+              onClick={() => setAccountOpen((current) => !current)}
+              className={cn(
+                'workspace-account-toggle flex min-h-control w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-muted',
+                (accountOpen || pathname === '/settings') && 'bg-muted',
+              )}
+            >
+              <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold text-foreground">
+                {(preferredName ?? role).charAt(0).toUpperCase()}
+              </span>
+              {/* The preferred name when set (Settings), with the role beside the environment, as a chat app shows the name and the plan. */}
+              <span className="workspace-link-label min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">{preferredName ?? role}</span>
+                <span className="block truncate text-xs text-muted-foreground">{preferredName ? `${role} · Synthetic` : 'Synthetic environment'}</span>
+              </span>
+              <ChevronsUpDown aria-hidden="true" className="workspace-link-label size-4 shrink-0 text-muted-foreground" />
+            </button>
+          </Tooltip>
           <div
             id="workspace-account-menu"
             hidden={!accountOpen}
