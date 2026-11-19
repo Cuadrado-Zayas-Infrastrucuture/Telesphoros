@@ -1,6 +1,7 @@
 import { RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import type { Paginated, PaginationMeta, PatientDto } from '@telesphoros/shared-types';
 import { PaginationControls } from '@/components/PaginationControls';
+import { Tooltip } from '@/components/arc/Tooltip';
 import { Button } from '@/components/ui/Button';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -46,23 +47,27 @@ export function PatientFilter({
             </option>
           ))}
         </NativeSelect>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label="Refresh patient options"
-          title="Refresh patient options"
-          aria-disabled={loading}
-          className="shrink-0 px-0"
-          onClick={() => {
-            if (!loading) onRefresh();
-          }}
-        >
-          <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
-        </Button>
-        {value && (
-          <Button variant="outline" size="sm" aria-label="Clear patient filter" title="Clear patient filter" className="shrink-0 px-0" onClick={onClear}>
-            <X aria-hidden="true" className="size-4 shrink-0" />
+        {/* Icon buttons, each with its name in a tooltip on hover and on keyboard focus (specs/042 D6). */}
+        <Tooltip label="Refresh patient options">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Refresh patient options"
+            aria-disabled={loading}
+            className="shrink-0 px-0"
+            onClick={() => {
+              if (!loading) onRefresh();
+            }}
+          >
+            <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
           </Button>
+        </Tooltip>
+        {value && (
+          <Tooltip label="Clear patient filter">
+            <Button variant="outline" size="sm" aria-label="Clear patient filter" className="shrink-0 px-0" onClick={onClear}>
+              <X aria-hidden="true" className="size-4 shrink-0" />
+            </Button>
+          </Tooltip>
         )}
       </div>
       {loading && <Skeleton className="h-10 w-full" />}

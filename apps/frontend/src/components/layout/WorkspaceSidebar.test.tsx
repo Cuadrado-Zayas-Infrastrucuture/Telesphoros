@@ -1,5 +1,5 @@
 import { preferenceStorage } from '@/lib/storageConsent';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -97,8 +97,14 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     expect(sidebar()).toHaveClass('is-collapsed');
     expect(window.localStorage.getItem('telesphoros.sidebar')).toBe('collapsed');
-    expect((await primary()).getByRole('link', { name: 'Patients' })).toHaveAttribute('title', 'Patients');
-    expect(screen.getByRole('button', { name: 'Account, clinician' })).toHaveAttribute('title', 'Account, clinician');
+    // Specs/042 D6: collapsed, each control shows its name in a tooltip on keyboard focus, not in a native title.
+    const patients = (await primary()).getByRole('link', { name: 'Patients' });
+    const account = screen.getByRole('button', { name: 'Account, clinician' });
+    for (const control of [patients, account]) expect(control).not.toHaveAttribute('title');
+    act(() => patients.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Patients');
+    act(() => account.focus());
+    await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Account, clinician'));
     unmount();
 
     open('/settings', ['clinician']);
@@ -107,6 +113,43 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     await userEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
     expect(sidebar()).not.toHaveClass('is-collapsed');
     expect(window.localStorage.getItem('telesphoros.sidebar')).toBeNull();
+  });
+
+  it('below the desktop width a stored collapse gives no tooltip, since the menu shows every name; widening brings it back (specs/042 D10)', async () => {
+    // Only the sidebar's width query follows `width`; any other query (the theme's dark setting) answers "no" and never changes.
+    const DESKTOP = '(min-width: 64rem)';
+    const width = { desktop: false };
+    const listeners = new Set<(event: MediaQueryListEvent) => void>();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        media: query,
+        get matches() {
+          return query === DESKTOP && width.desktop;
+        },
+        addEventListener: (_: string, fn: (event: MediaQueryListEvent) => void) => query === DESKTOP && listeners.add(fn),
+        removeEventListener: (_: string, fn: (event: MediaQueryListEvent) => void) => listeners.delete(fn),
+      })),
+    );
+    try {
+      preferenceStorage.choose(true);
+      window.localStorage.setItem('telesphoros.sidebar', 'collapsed');
+      open('/settings', ['clinician']);
+      const patients = (await primary()).getByRole('link', { name: 'Patients' });
+      expect(sidebar()).toHaveClass('is-collapsed');
+      act(() => patients.focus());
+      await expect(screen.findByRole('tooltip', {}, { timeout: 500 })).rejects.toThrow();
+      expect(patients).not.toHaveAttribute('aria-describedby');
+      expect(vi.mocked(window.matchMedia)).toHaveBeenCalledWith(DESKTOP);
+
+      act(() => patients.blur());
+      width.desktop = true;
+      act(() => listeners.forEach((fn) => fn({ matches: true, media: DESKTOP } as MediaQueryListEvent)));
+      act(() => (screen.getByRole('link', { name: 'Patients' }) as HTMLElement).focus());
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Patients');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('starts expanded, and still collapses, when browser storage is blocked', async () => {

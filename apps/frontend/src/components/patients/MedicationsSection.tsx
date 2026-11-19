@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { matchesDrug, type PatientMedicationDto } from '@telesphoros/shared-types';
 import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import { useAuth } from '@/auth/AuthProvider';
+import { Tooltip } from '@/components/arc/Tooltip';
 import { DrugListInformation } from '@/components/patients/DrugListInformation';
 import { MedicationForm } from '@/components/patients/MedicationForm';
 import { MedicationHistory } from '@/components/patients/MedicationHistory';
@@ -54,21 +55,22 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
         <h2 id="medications-heading" className="text-lg font-semibold">
           Medications
         </h2>
-        {/* An icon with its name for assistive technology and as a tooltip (specs/041 D8). */}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="px-0"
-          aria-label="Refresh medications"
-          title="Refresh medications"
-          disabled={Boolean(editing) || items === null}
-          onClick={() => {
-            setSaved(false);
-            reload();
-          }}
-        >
-          <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
-        </Button>
+        {/* An icon with its name for assistive technology, and in a tooltip on hover and on keyboard focus (specs/041 D8, specs/042 D2). */}
+        <Tooltip label="Refresh medications">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="px-0"
+            aria-label="Refresh medications"
+            disabled={Boolean(editing) || items === null}
+            onClick={() => {
+              setSaved(false);
+              reload();
+            }}
+          >
+            <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
+          </Button>
+        </Tooltip>
       </div>
       <p className="text-sm text-muted-foreground">Recorded medications only. This list does not change reports or provide drug–gene guidance.</p>
       {items && items.length > 0 && (
