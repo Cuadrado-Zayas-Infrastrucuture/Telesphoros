@@ -25,6 +25,9 @@
 //   4. a completed run of THIS workflow on this repository (not a fork) exists for event pull_request with head_sha P and conclusion success;
 //   5. that run's latest attempt shows each required check as a job that completed with conclusion success. A skipped job does not count:
 //      a draft or documentation-only run reports every check as skipped, and a skipped check proves nothing about code.
+//      One exception: when what the merge brings in (B..M) changes nothing under infrastructure/, .tflint.hcl or .github/, this push would
+//      skip terraform and terraform-lint itself (rule 3). Their skip in the pull-request run is then the same decision, not a gap, so those two
+//      may be success OR skipped; every other required check must still be success. A diff that cannot be read keeps the strict rule.
 // docs/ops/ci-cd.md ("Skipping work: what is proved") states the same list for people.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
@@ -33,6 +36,8 @@ import { pathToFileURL } from 'node:url';
 
 /** The six checks the ruleset requires. guard tests pin this list to .github/rulesets/main.json. */
 export const requiredChecks = ['verify', 'database-and-storage', 'browser', 'terraform', 'terraform-lint', 'secret-scan', 'image'];
+/** The required checks that rule 3 skips when no infrastructure path changed (see the exception to reuse condition 5). */
+export const terraformChecks = ['terraform', 'terraform-lint'];
 
 const sha40 = /^[a-f0-9]{40}$/;
 const everything = reason => ({ heavy: true, guards: true, terraform: true, postgres: true, archive: true, reason });
@@ -81,12 +86,16 @@ export function parentsOf(git, sha) {
   return parents;
 }
 
-/** True when every required check is a completed, successful job of the run (a skipped or missing one is not). */
-export function allRequiredPassed(jobs, names = requiredChecks) {
+/**
+ * True when every required check is a completed, successful job of the run (a skipped or missing one is not). The names in `skippable` may
+ * instead be skipped, but must still be there and completed: a missing, failed or cancelled one never passes.
+ */
+export function allRequiredPassed(jobs, names = requiredChecks, skippable = []) {
   if (!Array.isArray(jobs)) return false;
   return names.every(name => {
     const same = jobs.filter(j => j?.name === name);
-    return same.length > 0 && same.every(j => j.status === 'completed' && j.conclusion === 'success');
+    const ok = skippable.includes(name) ? ['success', 'skipped'] : ['success'];
+    return same.length > 0 && same.every(j => j.status === 'completed' && ok.includes(j.conclusion));
   });
 }
 
@@ -101,13 +110,18 @@ async function proveReuse(env, { git, api }) {
   const tree = git(['rev-parse', `${sha}^{tree}`]).trim();
   if (!sha40.test(tree) || git(['rev-parse', `${head}^{tree}`]).trim() !== tree) return { reason: 'the merge commit tree differs from the pull-request head tree' };
   try { git(['merge-base', '--is-ancestor', base, head]); } catch { return { reason: 'the pull-request head does not contain the previous main tip' }; }
-  const run = await findVerifiedRun(api, repository, { event: 'pull_request', head, required: requiredChecks });
-  if (run) return reused(env.RELEASE_ENABLED === 'true', `tree ${tree} was verified by pull-request run ${run.id} at head ${head}; all ${requiredChecks.length} required checks succeeded there`);
+  const brought = classify(git(['diff', '--name-only', '-z', '--no-renames', base, sha]).split('\0').filter(Boolean));
+  const skippable = brought && !brought.terraform ? terraformChecks : [];
+  const run = await findVerifiedRun(api, repository, { event: 'pull_request', head, required: requiredChecks, skippable });
+  const which = skippable.length
+    ? `the other ${requiredChecks.length - skippable.length} required checks succeeded there, and terraform and terraform-lint succeeded or were skipped as this push would skip them`
+    : `all ${requiredChecks.length} required checks succeeded there`;
+  if (run) return reused(env.RELEASE_ENABLED === 'true', `tree ${tree} was verified by pull-request run ${run.id} at head ${head}; ${which}`);
   return { reason: `no successful pull-request run with all required checks found for head ${head}` };
 }
 
 /** The newest completed, successful run of ci.yml in this repository for `event` at `head`, whose latest attempt shows every `required` job as success. */
-async function findVerifiedRun(api, repository, { event, head, required }) {
+async function findVerifiedRun(api, repository, { event, head, required, skippable = [] }) {
   const listed = await api(`/repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${head}&event=${event}&per_page=30`);
   const candidates = (listed?.workflow_runs ?? [])
     .filter(r => r?.head_sha === head && r.event === event && r.status === 'completed' && r.conclusion === 'success'
@@ -115,7 +129,7 @@ async function findVerifiedRun(api, repository, { event, head, required }) {
     .slice(0, 10);
   for (const run of candidates) {
     const jobs = await api(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`);
-    if (allRequiredPassed(jobs?.jobs, required)) return run;
+    if (allRequiredPassed(jobs?.jobs, required, skippable)) return run;
   }
   return null;
 }

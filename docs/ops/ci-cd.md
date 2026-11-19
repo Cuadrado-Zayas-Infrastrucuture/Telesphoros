@@ -53,7 +53,11 @@ skip or hang a required check.
 3. `tree(M)` equals `tree(P)`, and `P` contains `B` (`git merge-base --is-ancestor B P`);
 4. a completed run of `ci.yml` in this repository (not a fork) has event `pull_request`, `head_sha` `P` and conclusion success;
 5. that run's latest attempt shows each of the seven required checks as a job that completed with conclusion **success**. A skipped job
-   does not count: a draft or documentation-only run reports every check as skipped, which proves nothing about code.
+   does not count: a draft or documentation-only run reports every check as skipped, which proves nothing about code. One exception:
+   when what the merge brings in (`B..M`) changes nothing under `infrastructure/`, `.tflint.hcl` or `.github/`, this push would skip
+   `terraform` and `terraform-lint` itself, so those two may have succeeded **or** been skipped; they must still be there and completed, and
+   the other five must have succeeded. Before this (2026-11-19), every merge of a pull request that skipped them re-ran the whole suite on
+   `main`. A diff that cannot be read keeps the strict rule.
 
 When the proof holds, the push run still runs `secret-scan`, and `image` only while the release variables are set. The step
 summary of `changes` names the pull-request run that supplied the proof. When it does not hold (a stale branch merged by an

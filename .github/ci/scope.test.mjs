@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, requiredChecks } from './scope.mjs';
+import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, requiredChecks, terraformChecks } from './scope.mjs';
 import { archiveCondition, gateCondition, guardsCondition, heavyCondition, heavyStepCondition, jobOf, postgresCondition, terraformCondition } from './service-layout.mjs';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -53,9 +53,10 @@ function apiFor({ runs, jobs = jobsOf(), seen = [] } = {}) {
 const pushEnv = sha => ({ GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: sha, GITHUB_REPOSITORY: repository, RELEASE_ENABLED: 'false' });
 
 /** main with a pull request merged the way GitHub does it: the head contains main's tip, and the merge commit keeps the head's tree. */
-function mergedUpToDate(t) {
+function mergedUpToDate(t, featureFile) {
   const h = history(t);
   h.git(['checkout', '-q', 'feature']);
+  if (featureFile) h.commit(featureFile, 'x', 'feature change');
   h.git(['merge', '-q', '--no-edit', 'main']);
   const head = h.git(['rev-parse', 'HEAD']).trim();
   h.git(['checkout', '-q', 'main']);
@@ -92,12 +93,35 @@ test('reuse is refused: every missing proof runs everything (controls)', async t
     await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs }) }, /no successful pull-request run/);
   }
   for (const name of requiredChecks) for (const conclusion of ['skipped', 'failure', 'cancelled']) {
+    if (conclusion === 'skipped' && terraformChecks.includes(name)) continue; // this merge changes no infrastructure: see the next test
     await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs: green(h.head), jobs: jobsOf({ [name]: conclusion }) }) }, /no successful pull-request run/);
   }
   await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs: green(h.head), jobs: { jobs: jobsOf().jobs.filter(j => j.name !== 'browser') } }) }, /no successful pull-request run/);
   await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs: green(h.head), jobs: { jobs: 'nope' } }) }, /no successful pull-request run/);
   await refused(pushEnv(h.merge), { git: h.git, api: async () => { throw new Error('API answered 403'); } }, /could not prove a smaller scope \(API answered 403\)/);
   await refused(pushEnv(h.merge), { git: () => { throw new Error('no git'); }, api: apiFor({ runs: green(h.head) }) }, /could not prove a smaller scope/);
+});
+
+test('reuse: terraform and terraform-lint skipped in the pull-request run count only when this push would skip them too', async t => {
+  const skipped = jobsOf(Object.fromEntries(terraformChecks.map(name => [name, 'skipped'])));
+  const plain = mergedUpToDate(t);
+  const r = await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: skipped }) });
+  assert.equal(r.heavy, false, r.reason);
+  assert.match(r.reason, /terraform and terraform-lint succeeded or were skipped as this push would skip them/);
+  const gone = { jobs: jobsOf().jobs.filter(j => j.name !== 'terraform') };
+  assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: gone }) })).heavy, true, 'a missing terraform job is never proof');
+  for (const conclusion of ['failure', 'cancelled'])
+    assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: jobsOf({ terraform: conclusion }) }) })).heavy, true, conclusion);
+  for (const name of requiredChecks.filter(n => !terraformChecks.includes(n)))
+    assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: { jobs: skipped.jobs.map(j => (j.name === name ? { ...j, conclusion: 'skipped' } : j)) } }) })).heavy, true, `${name} skipped`);
+  // Controls: the merge brings in an infrastructure, lint-configuration or workflow change, so this push would run terraform: the skip is a gap.
+  for (const file of ['infrastructure/terraform/api.tf', '.tflint.hcl', '.github/workflows/ci.yml']) {
+    const infra = mergedUpToDate(t, file);
+    const refusedRun = await decide(pushEnv(infra.merge), { git: infra.git, api: apiFor({ runs: green(infra.head), jobs: skipped }) });
+    assert.equal(refusedRun.heavy, true, file);
+    assert.match(refusedRun.reason, /no successful pull-request run/, file);
+    assert.equal((await decide(pushEnv(infra.merge), { git: infra.git, api: apiFor({ runs: green(infra.head) }) })).heavy, false, `${file}: all seven succeeded is still proof`);
+  }
 });
 
 test('reuse is refused when the merge commit is not exactly the verified head (controls on real history)', async t => {
