@@ -7,8 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, outsideImagePath, requiredChecks, terraformChecks } from './scope.mjs';
-import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, postgresPath, requiredChecks } from './scope.mjs';
+import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, outsideImagePath, postgresPath, requiredChecks, terraformChecks } from './scope.mjs';
 import { archiveCondition, gateCondition, guardsCondition, heavyCondition, heavyStepCondition, jobOf, postgresCondition, terraformCondition } from './service-layout.mjs';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -384,8 +383,9 @@ test('every harness path that can change what the evaluation gate measures runs 
   for (const path of ['apps/ai-service/src/model-clients/port.ts', 'apps/ai-service/src/prompts/explain-v1.ts', 'apps/ai-service/src/evaluators/lexicons.ts', 'apps/ai-service/evals/golden/cases.ts',
     'apps/ai-service/evals/pinned.ts', 'apps/ai-service/package.json', 'pnpm-lock.yaml']) {
     assert.equal(docsPath(path), false, path);
-    assert.deepEqual([classify([path]).docsOnly, classify([path]).terraform], [false, false], path);
-    assert.deepEqual(classify([path]), { docsOnly: false, terraform: false, postgres: false }, path);
+    // image differs by path (ai-service is outside the image, the lockfile is not); the image test covers it.
+    const { docsOnly, terraform, postgres } = classify([path]);
+    assert.deepEqual({ docsOnly, terraform, postgres }, { docsOnly: false, terraform: false, postgres: false }, path);
   }
   // Control: the same change is skipped when it hides in a markdown file under docs/, which is why a model ID must never live there.
   assert.equal(docsPath('docs/config/model-id.md'), true);
@@ -393,14 +393,11 @@ test('every harness path that can change what the evaluation gate measures runs 
 });
 test('classify refuses a list it cannot trust, and separates documentation, code and infrastructure', () => {
   for (const bad of [null, undefined, 'docs/a.md', [], [''], [7], ['/etc/passwd'], ['docs/../apps/a.md'], ['../outside.md']]) assert.equal(classify(bad), null, JSON.stringify(bad));
-  assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false, image: false });
-  assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, image: true });
-  assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, image: true });
-  assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, image: false });
-  assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false, postgres: false });
-  assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, postgres: false });
-  assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, postgres: false });
-  assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, postgres: false });
+  assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false, postgres: false, image: false });
+  assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, postgres: false, image: true });
+  assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, postgres: false, image: true });
+  assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, postgres: false, image: false });
+  assert.deepEqual(classify(['apps/backend/migrations/0075_outbox_append_tenant_binding.up.sql']), { docsOnly: false, terraform: false, postgres: true, image: true });
   for (const infra of ['infrastructure/docker/api.Dockerfile', 'infrastructure/lambda/x/index.js', '.tflint.hcl', '.github/workflows/ci.yml', '.github/ci/guard.test.mjs']) {
     assert.equal(classify([infra]).terraform, true, infra);
   }
