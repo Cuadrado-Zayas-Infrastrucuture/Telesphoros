@@ -111,7 +111,10 @@ closed, and a public repository gets it on the Free plan. Until then: mark ready
 
 **Nightly (all three backend profiles).** The standalone `service-postgres` profile (PostgreSQL store, in-memory object store) no longer runs on pull
 requests: memory and PostgreSQL + S3 do, and between them they exercise the database specs, the PostgreSQL store and the S3 protocol; what
-only the standalone profile adds is that exact pairing. A `schedule` run (07:41 UTC, 03:41 in Puerto Rico) and a manual `workflow_dispatch`
+only the standalone profile adds is that exact pairing, plus three steps only it runs (the reader-engine re-measure, the demo seed and the
+fixture-lifecycle regressions). A pull request or push that changes an input of those steps (`postgresPath` in `.github/ci/scope.mjs`: the
+test-fixture and local-review scripts, `check-without-reader.sh`, the migrations, and the backend test helpers for fixtures, deadlines and the reader
+engine) runs the standalone profile too, so a break there is red on that pull request instead of in the next nightly. A `schedule` run (07:41 UTC, 03:41 in Puerto Rico) and a manual `workflow_dispatch`
 run execute the whole workflow with all three profiles, so `main` is still proved in full every day it changes. A scheduled run is skipped when an
 earlier scheduled run already passed all seven required checks and `service-postgres` at the same commit of `main`; a manual run is never skipped.
 The nightly shares the concurrency group of pushes to `main` (`cancel-in-progress` is false for it), and GitHub keeps one running and one
