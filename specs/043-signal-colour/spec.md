@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Direction approved by the founder 2026-11-18 ("there are no tangerine in the UI to match the landing page", then "Progress marks too"). After a first look at the three places the founder said "needs more orange" and chose three of four offered additions (Amendment 1, below). Built on this branch. This is a brand change: it is not final until the founder has looked at the places in light and dark and said so (task T008).
+**Status**: Direction approved by the founder 2026-11-18 ("there are no tangerine in the UI to match the landing page", then "Progress marks too"). After a first look at the three places the founder said "needs more orange" and chose three of four offered additions (Amendment 1, below). Built on this branch. This is a brand change; the founder looked at it after Amendment 1 and approved it on 2026-11-18 ("Approve it", task T008). Not pushed; the checks due before a PR are in task T009.
 
 **Input**: telesphoros.app took a signal colour on 2026-11-14, tangerine, the complement of the brand teal. The app's palette never received it, so the step from the landing page into the app loses the one vivid colour. The landing page's decision came with a caution that carries over unchanged: amber and orange read as "caution" on clinical screens, so the signal colour is for decoration and progress only, never for a result or a status.
 
