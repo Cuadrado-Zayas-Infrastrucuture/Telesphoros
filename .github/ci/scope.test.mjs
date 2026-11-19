@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, postgresPath, requiredChecks } from './scope.mjs';
+import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, outsideImagePath, postgresPath, requiredChecks, terraformChecks } from './scope.mjs';
 import { archiveCondition, gateCondition, guardsCondition, heavyCondition, heavyStepCondition, jobOf, postgresCondition, terraformCondition } from './service-layout.mjs';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -53,9 +53,10 @@ function apiFor({ runs, jobs = jobsOf(), seen = [] } = {}) {
 const pushEnv = sha => ({ GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: sha, GITHUB_REPOSITORY: repository, RELEASE_ENABLED: 'false' });
 
 /** main with a pull request merged the way GitHub does it: the head contains main's tip, and the merge commit keeps the head's tree. */
-function mergedUpToDate(t) {
+function mergedUpToDate(t, featureFile) {
   const h = history(t);
   h.git(['checkout', '-q', 'feature']);
+  if (featureFile) h.commit(featureFile, 'x', 'feature change');
   h.git(['merge', '-q', '--no-edit', 'main']);
   const head = h.git(['rev-parse', 'HEAD']).trim();
   h.git(['checkout', '-q', 'main']);
@@ -92,12 +93,75 @@ test('reuse is refused: every missing proof runs everything (controls)', async t
     await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs }) }, /no successful pull-request run/);
   }
   for (const name of requiredChecks) for (const conclusion of ['skipped', 'failure', 'cancelled']) {
+    if (conclusion === 'skipped' && terraformChecks.includes(name)) continue; // this merge changes no infrastructure: see the next test
     await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs: green(h.head), jobs: jobsOf({ [name]: conclusion }) }) }, /no successful pull-request run/);
   }
   await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs: green(h.head), jobs: { jobs: jobsOf().jobs.filter(j => j.name !== 'browser') } }) }, /no successful pull-request run/);
   await refused(pushEnv(h.merge), { git: h.git, api: apiFor({ runs: green(h.head), jobs: { jobs: 'nope' } }) }, /no successful pull-request run/);
   await refused(pushEnv(h.merge), { git: h.git, api: async () => { throw new Error('API answered 403'); } }, /could not prove a smaller scope \(API answered 403\)/);
   await refused(pushEnv(h.merge), { git: () => { throw new Error('no git'); }, api: apiFor({ runs: green(h.head) }) }, /could not prove a smaller scope/);
+});
+
+test('reuse: terraform and terraform-lint skipped in the pull-request run count only when this push would skip them too', async t => {
+  const skipped = jobsOf(Object.fromEntries(terraformChecks.map(name => [name, 'skipped'])));
+  const plain = mergedUpToDate(t);
+  const r = await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: skipped }) });
+  assert.equal(r.heavy, false, r.reason);
+  assert.match(r.reason, /terraform, terraform-lint succeeded or were skipped as this push would skip them/);
+  const gone = { jobs: jobsOf().jobs.filter(j => j.name !== 'terraform') };
+  assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: gone }) })).heavy, true, 'a missing terraform job is never proof');
+  for (const conclusion of ['failure', 'cancelled'])
+    assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: jobsOf({ terraform: conclusion }) }) })).heavy, true, conclusion);
+  for (const name of requiredChecks.filter(n => !terraformChecks.includes(n)))
+    assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: { jobs: skipped.jobs.map(j => (j.name === name ? { ...j, conclusion: 'skipped' } : j)) } }) })).heavy, true, `${name} skipped`);
+  // Controls: the merge brings in an infrastructure, lint-configuration or workflow change, so this push would run terraform: the skip is a gap.
+  for (const file of ['infrastructure/terraform/api.tf', '.tflint.hcl', '.github/workflows/ci.yml']) {
+    const infra = mergedUpToDate(t, file);
+    const refusedRun = await decide(pushEnv(infra.merge), { git: infra.git, api: apiFor({ runs: green(infra.head), jobs: skipped }) });
+    assert.equal(refusedRun.heavy, true, file);
+    assert.match(refusedRun.reason, /no successful pull-request run/, file);
+    assert.equal((await decide(pushEnv(infra.merge), { git: infra.git, api: apiFor({ runs: green(infra.head) }) })).heavy, false, `${file}: all seven succeeded is still proof`);
+  }
+});
+
+test('the image job is skipped only when every changed path is outside the image; a release, the lockfile or the workflow keeps it', async t => {
+  for (const p of ['apps/frontend/src/a.tsx', 'apps/ai-service/src/a.ts', 'packages/smart-pilot/src/a.ts', 'infrastructure/terraform/api.tf', 'infrastructure/lambda/x/index.js',
+    'specs/001-tenant-capability/spec.md', '.claude/skills/speckit-analyze/SKILL.md', 'docs/ops/ci-cd.md', 'README.md']) assert.equal(outsideImagePath(p), true, p);
+  for (const p of ['apps/backend/src/a.ts', 'apps/worker/src/a.ts', 'packages/shared-types/src/a.ts', 'packages/jobs/src/a.ts', 'packages/cpic-schema/a.json', 'packages/fake-idp/src/a.ts',
+    'infrastructure/docker/api.Dockerfile', 'pnpm-lock.yaml', 'package.json', 'pnpm-workspace.yaml', '.dockerignore', '.github/workflows/ci.yml', 'docs/clinical-validation/r.json',
+    'data/fixtures/knowledge/synthetic-structured/a.json', 'apps/frontendx/a.ts', 'knowledge/cpic/a.json']) assert.equal(outsideImagePath(p), false, p);
+  const front = pullRequest(t, { change: r => r.commit('apps/frontend/src/a.tsx', 'a', 'front') });
+  const r = await decide(prEnv(front), { git: front.git, ...noApi });
+  assert.deepEqual([r.heavy, r.archive], [true, false], r.reason);
+  assert.match(r.reason, /outside the image, so the image job is skipped/);
+  const back = pullRequest(t, { change: r2 => r2.commit('apps/backend/src/a.ts', 'a', 'back') });
+  assert.equal((await decide(prEnv(back), { git: back.git, ...noApi })).archive, true, 'a backend change builds the image');
+  const lock = pullRequest(t, { change: r2 => r2.commit('pnpm-lock.yaml', 'a', 'lock') });
+  assert.equal((await decide(prEnv(lock), { git: lock.git, ...noApi })).archive, true, 'a lockfile change builds the image');
+});
+
+test('reuse: an image skipped in the pull-request run counts only when nothing the merge brings in reaches the image', async t => {
+  const skipped = jobsOf(Object.fromEntries([...terraformChecks, 'image'].map(name => [name, 'skipped'])));
+  // Its own history, so the merge brings in nothing but the frontend file (the shared fixture's feature branch adds a root file).
+  const front = repo(t);
+  front.commit('apps/backend/a.ts', 'a', 'c0');
+  front.git(['checkout', '-q', '-b', 'feature']);
+  front.commit('apps/frontend/src/a.tsx', 'f', 'front');
+  front.git(['checkout', '-q', 'main']);
+  front.commit('apps/backend/b.ts', 'b', 'c1');
+  front.git(['checkout', '-q', 'feature']);
+  front.git(['merge', '-q', '--no-edit', 'main']);
+  front.head = front.git(['rev-parse', 'HEAD']).trim();
+  front.git(['checkout', '-q', 'main']);
+  front.git(['merge', '-q', '--no-ff', '-m', 'Merge pull request #3', 'feature']);
+  front.merge = front.git(['rev-parse', 'HEAD']).trim();
+  const ok = await decide(pushEnv(front.merge), { git: front.git, api: apiFor({ runs: green(front.head), jobs: skipped }) });
+  assert.equal(ok.heavy, false, ok.reason);
+  assert.match(ok.reason, /terraform, terraform-lint, image succeeded or were skipped/);
+  assert.equal((await decide({ ...pushEnv(front.merge), RELEASE_ENABLED: 'true' }, { git: front.git, api: apiFor({ runs: green(front.head), jobs: skipped }) })).archive, true, 'an armed release still builds the image on the push');
+  // Control: the plain fixture's merge brings in a root file, which is not outside the image, so a skipped image is a gap there.
+  const plain = mergedUpToDate(t);
+  assert.equal((await decide(pushEnv(plain.merge), { git: plain.git, api: apiFor({ runs: green(plain.head), jobs: skipped }) })).heavy, true);
 });
 
 test('reuse is refused when the merge commit is not exactly the verified head (controls on real history)', async t => {
@@ -319,7 +383,9 @@ test('every harness path that can change what the evaluation gate measures runs 
   for (const path of ['apps/ai-service/src/model-clients/port.ts', 'apps/ai-service/src/prompts/explain-v1.ts', 'apps/ai-service/src/evaluators/lexicons.ts', 'apps/ai-service/evals/golden/cases.ts',
     'apps/ai-service/evals/pinned.ts', 'apps/ai-service/package.json', 'pnpm-lock.yaml']) {
     assert.equal(docsPath(path), false, path);
-    assert.deepEqual(classify([path]), { docsOnly: false, terraform: false, postgres: false }, path);
+    // image differs by path (ai-service is outside the image, the lockfile is not); the image test covers it.
+    const { docsOnly, terraform, postgres } = classify([path]);
+    assert.deepEqual({ docsOnly, terraform, postgres }, { docsOnly: false, terraform: false, postgres: false }, path);
   }
   // Control: the same change is skipped when it hides in a markdown file under docs/, which is why a model ID must never live there.
   assert.equal(docsPath('docs/config/model-id.md'), true);
@@ -327,10 +393,11 @@ test('every harness path that can change what the evaluation gate measures runs 
 });
 test('classify refuses a list it cannot trust, and separates documentation, code and infrastructure', () => {
   for (const bad of [null, undefined, 'docs/a.md', [], [''], [7], ['/etc/passwd'], ['docs/../apps/a.md'], ['../outside.md']]) assert.equal(classify(bad), null, JSON.stringify(bad));
-  assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false, postgres: false });
-  assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, postgres: false });
-  assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, postgres: false });
-  assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, postgres: false });
+  assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false, postgres: false, image: false });
+  assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, postgres: false, image: true });
+  assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, postgres: false, image: true });
+  assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, postgres: false, image: false });
+  assert.deepEqual(classify(['apps/backend/migrations/0075_outbox_append_tenant_binding.up.sql']), { docsOnly: false, terraform: false, postgres: true, image: true });
   for (const infra of ['infrastructure/docker/api.Dockerfile', 'infrastructure/lambda/x/index.js', '.tflint.hcl', '.github/workflows/ci.yml', '.github/ci/guard.test.mjs']) {
     assert.equal(classify([infra]).terraform, true, infra);
   }
@@ -367,8 +434,9 @@ test('a pull request that changes only documentation runs only the docs guards; 
     'a docs JSON file': [r => r.commit('docs/clinical-validation/r.json', '{}', 'json'), [true, true, false, true]],
     'markdown outside docs that tests read': [r => r.commit('knowledge/lab-report-reader/v2-handoff/ORIGIN.md', 'o', 'md'), [true, true, false, true]],
     'a workflow change': [r => r.commit('.github/workflows/ci.yml', 'x', 'ci'), [true, true, true, true]],
-    'a terraform change': [r => r.commit('infrastructure/terraform/a.tf', 'x', 'tf'), [true, true, true, true]],
-    'an application-only change skips only terraform': [r => r.commit('apps/frontend/src/a.tsx', 'x', 'fe'), [true, true, false, true]],
+    'a terraform change (outside the image)': [r => r.commit('infrastructure/terraform/a.tf', 'x', 'tf'), [true, true, true, false]],
+    'a frontend-only change skips terraform and the image': [r => r.commit('apps/frontend/src/a.tsx', 'x', 'fe'), [true, true, false, false]],
+    'a backend change skips only terraform': [r => r.commit('apps/backend/src/a.ts', 'x', 'be'), [true, true, false, true]],
   };
   for (const [label, [change, expected]] of Object.entries(cases)) {
     const h = pullRequest(t, { change });

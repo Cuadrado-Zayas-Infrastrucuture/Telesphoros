@@ -5,16 +5,19 @@
 //   terraform 'true'  terraform and terraform-lint run
 //   postgres  'true'  the standalone PostgreSQL profile (service-postgres) runs, and the joining gate expects all three backend profiles; 'false' expects
 //                     memory and PostgreSQL + S3 only (service-profiles.mjs reads this output, only an explicit success of `changes` with 'false' narrows it)
-//   archive   'true'  the image job builds the OCI archive (it also feeds release-image, so it is kept whenever a release is armed)
+//   archive   'true'  the image job builds the OCI archive (it also feeds release-image, so it is kept whenever a release is armed); 'false' when
+//                     every changed path is outside the image (outsideImagePath)
 // Every doubt resolves to 'true'. A run that cannot prove it may skip, does everything.
 //
-// Three reasons a run may do less, in this order:
+// Reasons a run may do less, in this order:
 //   1. tree reuse after a merge (below): the same tree already passed all six required checks;
 //   2. documentation only: every changed file is docs/**/*.md or a *.md in the repository root (see docsPath for why that narrow);
 //   3. no infrastructure change: terraform and terraform-lint are skipped when nothing under infrastructure/, .tflint.hcl or .github/ changed;
 //   4. the standalone PostgreSQL profile runs in the nightly (event schedule), in a manual run (workflow_dispatch), in any run that could not be
 //      narrowed, and in a pull request or push that changes one of its own inputs (postgresPath). A nightly is itself skipped when an earlier nightly
 //      already passed everything, service-postgres included, at the same commit of main.
+//   5. nothing the image is built from changed: the image job is skipped when every changed path is outside it (outsideImagePath), unless a release
+//      is armed on a push.
 //
 // Tree reuse (post-merge push to main). The ruleset requires a pull request to be up to date with main before it merges, so the merged
 // head P contains main's previous tip B, and the merge commit M that lands on main has exactly P's tree. The pull-request run tested
@@ -26,6 +29,10 @@
 //   4. a completed run of THIS workflow on this repository (not a fork) exists for event pull_request with head_sha P and conclusion success;
 //   5. that run's latest attempt shows each required check as a job that completed with conclusion success. A skipped job does not count:
 //      a draft or documentation-only run reports every check as skipped, and a skipped check proves nothing about code.
+//      One exception: when what the merge brings in (B..M) changes nothing under infrastructure/, .tflint.hcl or .github/, this push would
+//      skip terraform and terraform-lint itself (rule 3). Their skip in the pull-request run is then the same decision, not a gap, so those two
+//      may be success OR skipped; every other required check must still be success. The same holds for image when every path the merge brings in
+//      is outside the image (rule 5). A diff that cannot be read keeps the strict rule.
 // docs/ops/ci-cd.md ("Skipping work: what is proved") states the same list for people.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
@@ -34,6 +41,8 @@ import { pathToFileURL } from 'node:url';
 
 /** The six checks the ruleset requires. guard tests pin this list to .github/rulesets/main.json. */
 export const requiredChecks = ['verify', 'database-and-storage', 'browser', 'terraform', 'terraform-lint', 'secret-scan', 'image'];
+/** The required checks that rule 3 skips when no infrastructure path changed (see the exception to reuse condition 5). */
+export const terraformChecks = ['terraform', 'terraform-lint'];
 
 const sha40 = /^[a-f0-9]{40}$/;
 const everything = reason => ({ heavy: true, guards: true, terraform: true, postgres: true, archive: true, reason });
@@ -51,6 +60,14 @@ export const docsPath = p => /^docs\/(?:[^/\0]+\/)*[^/\0]+\.md$/.test(p) || /^[^
 export const terraformPath = p => p.startsWith('infrastructure/') || p === '.tflint.hcl' || p.startsWith('.github/');
 
 /**
+ * A path that cannot change the API image or its rehearsal. The image builds only the backend and the worker and the four workspace packages they
+ * import (shared-types, cpic-schema, fake-idp, jobs; infrastructure/docker/api.Dockerfile), so these areas are outside it; anything else,
+ * including .github/, the lockfile, the root package files and docs/ files that are not markdown, runs the image job.
+ */
+export const outsideImagePath = p =>
+  docsPath(p) || /^(?:apps\/(?:frontend|ai-service)|packages\/(?:smart-pilot|fhir-utils)|infrastructure\/(?:terraform|terraform-state|lambda|k8s|monitoring)|sidecars|ml|specs|\.claude|\.agents)\//.test(p);
+
+/**
  * Inputs of the steps that only service-postgres runs: the reader-engine re-measure (check-without-reader.sh and its list), the demo seed
  * (scripts/local-review/, through the compiled migrator), and the fixture-lifecycle regressions (scripts/test-fixtures/ and the backend test
  * helpers they drive). A change to one of them used to go red only in the next nightly (audit 2026-11-19).
@@ -59,10 +76,10 @@ export const postgresPath = p =>
   p.startsWith('scripts/test-fixtures/') || p.startsWith('scripts/local-review/') || p === 'scripts/check-without-reader.sh' || p.startsWith('apps/backend/migrations/') ||
   /^apps\/backend\/test\/helpers\/(?:reader-engine|fixture-|spec-deadline\.)/.test(p);
 
-/** { docsOnly, terraform, postgres } for a list of changed paths, or null when the list cannot be trusted (empty, or not strings). */
+/** { docsOnly, terraform, postgres, image } for a list of changed paths, or null when the list cannot be trusted (empty, or not strings). */
 export function classify(files) {
   if (!Array.isArray(files) || files.length === 0 || files.some(f => typeof f !== 'string' || f === '' || f.startsWith('/') || f.split('/').includes('..'))) return null;
-  return { docsOnly: files.every(docsPath), terraform: files.some(terraformPath), postgres: files.some(postgresPath) };
+  return { docsOnly: files.every(docsPath), terraform: files.some(terraformPath), postgres: files.some(postgresPath), image: !files.every(outsideImagePath) };
 }
 
 /** The paths this run changes, or null when they cannot be read with certainty (the caller then runs everything). */
@@ -91,12 +108,16 @@ export function parentsOf(git, sha) {
   return parents;
 }
 
-/** True when every required check is a completed, successful job of the run (a skipped or missing one is not). */
-export function allRequiredPassed(jobs, names = requiredChecks) {
+/**
+ * True when every required check is a completed, successful job of the run (a skipped or missing one is not). The names in `skippable` may
+ * instead be skipped, but must still be there and completed: a missing, failed or cancelled one never passes.
+ */
+export function allRequiredPassed(jobs, names = requiredChecks, skippable = []) {
   if (!Array.isArray(jobs)) return false;
   return names.every(name => {
     const same = jobs.filter(j => j?.name === name);
-    return same.length > 0 && same.every(j => j.status === 'completed' && j.conclusion === 'success');
+    const ok = skippable.includes(name) ? ['success', 'skipped'] : ['success'];
+    return same.length > 0 && same.every(j => j.status === 'completed' && ok.includes(j.conclusion));
   });
 }
 
@@ -111,13 +132,18 @@ async function proveReuse(env, { git, api }) {
   const tree = git(['rev-parse', `${sha}^{tree}`]).trim();
   if (!sha40.test(tree) || git(['rev-parse', `${head}^{tree}`]).trim() !== tree) return { reason: 'the merge commit tree differs from the pull-request head tree' };
   try { git(['merge-base', '--is-ancestor', base, head]); } catch { return { reason: 'the pull-request head does not contain the previous main tip' }; }
-  const run = await findVerifiedRun(api, repository, { event: 'pull_request', head, required: requiredChecks });
-  if (run) return reused(env.RELEASE_ENABLED === 'true', `tree ${tree} was verified by pull-request run ${run.id} at head ${head}; all ${requiredChecks.length} required checks succeeded there`);
+  const brought = classify(git(['diff', '--name-only', '-z', '--no-renames', base, sha]).split('\0').filter(Boolean));
+  const skippable = [...(brought && !brought.terraform ? terraformChecks : []), ...(brought && !brought.image ? ['image'] : [])];
+  const run = await findVerifiedRun(api, repository, { event: 'pull_request', head, required: requiredChecks, skippable });
+  const which = skippable.length
+    ? `the other ${requiredChecks.length - skippable.length} required checks succeeded there, and ${skippable.join(', ')} succeeded or were skipped as this push would skip them`
+    : `all ${requiredChecks.length} required checks succeeded there`;
+  if (run) return reused(env.RELEASE_ENABLED === 'true', `tree ${tree} was verified by pull-request run ${run.id} at head ${head}; ${which}`);
   return { reason: `no successful pull-request run with all required checks found for head ${head}` };
 }
 
 /** The newest completed, successful run of ci.yml in this repository for `event` at `head`, whose latest attempt shows every `required` job as success. */
-async function findVerifiedRun(api, repository, { event, head, required }) {
+async function findVerifiedRun(api, repository, { event, head, required, skippable = [] }) {
   const listed = await api(`/repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${head}&event=${event}&per_page=30`);
   const candidates = (listed?.workflow_runs ?? [])
     .filter(r => r?.head_sha === head && r.event === event && r.status === 'completed' && r.conclusion === 'success'
@@ -125,7 +151,7 @@ async function findVerifiedRun(api, repository, { event, head, required }) {
     .slice(0, 10);
   for (const run of candidates) {
     const jobs = await api(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`);
-    if (allRequiredPassed(jobs?.jobs, required)) return run;
+    if (allRequiredPassed(jobs?.jobs, required, skippable)) return run;
   }
   return null;
 }
@@ -158,8 +184,9 @@ export async function decide(env, deps) {
     const releaseArmed = env.RELEASE_ENABLED === 'true' && env.GITHUB_EVENT_NAME === 'push';
     if (kind.docsOnly) return documentation(releaseArmed, `only documentation changed (${files.length} file${files.length === 1 ? '' : 's'}: docs/**/*.md or a root *.md); ${proof.reason}`);
     const area = kind.terraform ? 'infrastructure, the lint configuration or the workflow changed' : 'nothing under infrastructure/, .tflint.hcl or .github/ changed, so the terraform jobs are skipped';
+    const image = kind.image || releaseArmed ? '' : '; every changed path is outside the image, so the image job is skipped';
     const postgres = kind.postgres ? 'an input of the standalone PostgreSQL profile changed, so it runs' : 'the standalone PostgreSQL profile is left to the nightly';
-    return { ...everything(`${files.length} files changed; ${area}; ${postgres}; ${proof.reason}`), terraform: kind.terraform, postgres: kind.postgres };
+    return { ...everything(`${files.length} files changed; ${area}; ${postgres}${image}; ${proof.reason}`), terraform: kind.terraform, postgres: kind.postgres, archive: kind.image || releaseArmed };
   } catch (error) {
     return everything(`could not prove a smaller scope (${error?.message ?? 'error'})`);
   }
