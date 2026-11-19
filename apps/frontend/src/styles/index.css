@@ -26,6 +26,8 @@
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
   --color-ring: var(--ring);
+  /* Decoration and progress marks only (specs/043); never a status. */
+  --color-signal: var(--signal);
   --color-transparent: transparent;
   /* Usage calendar shades (tokens.css --usage-step-*). */
   --color-usage-1: var(--usage-step-1);

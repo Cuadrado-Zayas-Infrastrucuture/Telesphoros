@@ -58,6 +58,9 @@
 
   /* Brand graphics only: not body text, success, or warning. */
   --brand-accent: #2F7685;
+  /* Signal colour (specs/043): the tangerine telesphoros.app uses, for decoration and progress marks only. Never a result, a status
+     or a button fill: orange reads as caution on a clinical screen. This value is the mark colour on light surfaces. */
+  --signal: #C2500A;
 
   /* Type */
   --font-family-heading: Poppins, Arial, sans-serif;
@@ -174,6 +177,7 @@
   --warning-surface: #352C1C;
   --ring: #8FC2C4;
   --brand-accent: #6FAFBD;
+  --signal: #FF7A1A;
   --band: #151719;
   --mark-plate: #DCEBE7;
   --skeleton-highlight: #ffffff14;
@@ -202,6 +206,7 @@
   --primary-foreground: #081E25;
   --ring: #F5F7F7;
   --band: #081E25;
+  --signal: #FF7A1A;
   --mark-plate: #FFFFFF;
 }
 

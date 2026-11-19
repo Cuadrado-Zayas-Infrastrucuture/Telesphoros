@@ -22,6 +22,7 @@
     "ring": "#1F5A64",
     "band": "#EDF1F1",
     "brand-accent": "#2F7685",
+    "signal": "#C2500A",
     "font-family-heading": "Poppins, Arial, sans-serif",
     "font-family-landing": "Inter, Arial, sans-serif",
     "font-family-sans": "Inter, Arial, sans-serif",
@@ -58,6 +59,7 @@
     "warning-surface": "#352C1C",
     "ring": "#8FC2C4",
     "brand-accent": "#6FAFBD",
+    "signal": "#FF7A1A",
     "band": "#151719",
     "mark-plate": "#DCEBE7",
     "skeleton-highlight": "#ffffff14"
@@ -78,6 +80,7 @@
     "primary-foreground": "#081E25",
     "ring": "#F5F7F7",
     "band": "#081E25",
+    "signal": "#FF7A1A",
     "mark-plate": "#FFFFFF"
   },
   "allowedColorLiterals": [
@@ -120,6 +123,7 @@
     "#9ca4a8",
     "#a8b0b4",
     "#ae3a2e",
+    "#c2500a",
     "#c5dcd9",
     "#d4d9db",
     "#dce1e3",
@@ -134,6 +138,7 @@
     "#f5f7f7",
     "#f8efdc",
     "#fbeae7",
+    "#ff7a1a",
     "#ffffff",
     "#ffffff00",
     "#ffffff0d",
@@ -268,6 +273,16 @@
     {
       "foreground": "primary",
       "background": "band",
+      "minimum": 3
+    },
+    {
+      "foreground": "signal",
+      "background": "background",
+      "minimum": 3
+    },
+    {
+      "foreground": "signal",
+      "background": "panel",
       "minimum": 3
     }
   ],
