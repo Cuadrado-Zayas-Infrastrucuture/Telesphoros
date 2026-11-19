@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Plan approved by the founder 2026-11-18 ("tooltip", then "Patient page refresh"). Built on this branch; the checks wait on one new package and a rebuilt sandbox image (tasks T006 to T008).
+**Status**: Plan approved by the founder 2026-11-18 ("tooltip", then "Patient page refresh"). Built on this branch with Amendment 1 and D9 to D10; all checks and the full local loop pass (tasks T008, T017, T018). The founder looked at it in a browser and listened in VoiceOver on 2026-11-19 (task T010). Not pushed.
 
 **Input**: "Check ... tooltips, hover card, pop over ... Use this free components" (uiarc.dev). A read of Arc UI on 2026-11-18 against this app found that only the tooltip has a clear use here, and the founder chose it alone.
 
@@ -37,6 +37,6 @@ The cut-off rows and the reasons named above; the development-only screens (the 
 
 ## Not verified by this spec
 
-A screen-reader pass. Radix describes the control with the label while it is open, and here the label equals the name, so a screen reader may say the name twice. That needs a listen in VoiceOver before this pattern spreads to more buttons.
+A screen-reader pass beyond VoiceOver on macOS. Radix describes the control with the label while it is open, and here the label equals the name, so a screen reader could say the name twice. The founder listened in VoiceOver on 2026-11-19, on a collapsed sidebar icon: the name was read once. Other screen readers (NVDA, JAWS, TalkBack, iOS VoiceOver) were not tried.
 
 Known and accepted: the label is drawn at the end of the document, outside the page's landmarks, so that no scrolling or clipped container can cut it off. axe's best-practice `region` rule flags that (measured 2026-11-18; drawing it in place clears the rule). The rule is outside the set the app holds its pages to, WCAG 2 A and AA (`e2e/helpers.ts`), and the label is reached through the control it describes, not through landmark navigation. The unit test uses the app's set on the whole document.
