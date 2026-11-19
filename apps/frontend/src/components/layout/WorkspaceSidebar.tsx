@@ -4,7 +4,7 @@ import { ChartColumn, ChevronsUpDown, FileText, Menu, MessageSquare, PanelLeftCl
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
-import { Tooltip } from '@/components/arc/Tooltip';
+import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
 import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
@@ -175,7 +175,7 @@ export function WorkspaceSidebar() {
           <img src={productMark} alt="Telesphoros shield and Rx logo" width="64" height="66" loading="eager" className="brand-mark h-auto w-9 shrink-0" />
           <span className="workspace-brand-text min-w-0 truncate font-heading text-lg font-semibold tracking-tight">Telesphoros</span>
         </NavLink>
-        <Tooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} side={collapsed ? 'right' : 'bottom'}>
+        <LazyTooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} side={collapsed ? 'right' : 'bottom'}>
           <Button
             variant="ghost"
             size="sm"
@@ -185,7 +185,7 @@ export function WorkspaceSidebar() {
           >
             {collapsed ? <PanelLeftOpen aria-hidden="true" className="size-4" /> : <PanelLeftClose aria-hidden="true" className="size-4" />}
           </Button>
-        </Tooltip>
+        </LazyTooltip>
         <Button
           onKeyDown={dismiss}
           ref={toggle}
@@ -206,7 +206,7 @@ export function WorkspaceSidebar() {
             {status === 'signedIn' && (
               <li>
                 {/* Collapsed to icons, each destination shows its name in a tooltip beside it (specs/018 D3, specs/042 D6). */}
-                <Tooltip label={collapsed ? 'New chat' : undefined} side="right">
+                <LazyTooltip label={collapsed ? 'New chat' : undefined} side="right">
                   <SidebarLink
                     to={WORKSPACE_PATH}
                     end
@@ -223,18 +223,18 @@ export function WorkspaceSidebar() {
                     <SquarePen aria-hidden="true" className="size-4 shrink-0" />
                     <span className="workspace-link-label">New chat</span>
                   </SidebarLink>
-                </Tooltip>
+                </LazyTooltip>
               </li>
             )}
             {items.map((item) =>
               item.kind === 'link' ? (
                 <li key={item.to}>
-                  <Tooltip label={collapsed ? item.label : undefined} side="right">
+                  <LazyTooltip label={collapsed ? item.label : undefined} side="right">
                     <SidebarLink to={item.to} end data-panel-item={item.label} onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
                       <item.icon aria-hidden="true" className="size-4 shrink-0" />
                       <span className="workspace-link-label">{item.label}</span>
                     </SidebarLink>
-                  </Tooltip>
+                  </LazyTooltip>
                 </li>
               ) : (
                 <li key={item.kind}>
@@ -246,7 +246,7 @@ export function WorkspaceSidebar() {
           {lists && <SidebarReports onNavigate={close} />}
         </nav>
         <div className="workspace-account relative border-t border-divider pt-3">
-          <Tooltip label={collapsed ? `Account, ${role}` : undefined} side="right">
+          <LazyTooltip label={collapsed ? `Account, ${role}` : undefined} side="right">
             <button
               ref={accountToggle}
               type="button"
@@ -270,7 +270,7 @@ export function WorkspaceSidebar() {
               </span>
               <ChevronsUpDown aria-hidden="true" className="workspace-link-label size-4 shrink-0 text-muted-foreground" />
             </button>
-          </Tooltip>
+          </LazyTooltip>
           <div
             id="workspace-account-menu"
             hidden={!accountOpen}

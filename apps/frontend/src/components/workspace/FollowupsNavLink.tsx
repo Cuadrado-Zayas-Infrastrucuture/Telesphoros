@@ -1,6 +1,6 @@
 import { CalendarClock } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
-import { Tooltip } from '@/components/arc/Tooltip';
+import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
 import { useFollowups } from '@/hooks/useFollowups';
 import type { FollowupInboxFilters } from '@telesphoros/shared-types';
@@ -22,11 +22,11 @@ export function FollowupsNavLink({
   const { data, error } = useFollowups(undefined, undefined, allFilters);
   const label = `Follow-ups${data && !error ? ` (${data.counts.overdue + data.counts.today})` : ''}`;
   return (
-    <Tooltip label={collapsed ? label : undefined} side="right">
+    <LazyTooltip label={collapsed ? label : undefined} side="right">
       <SidebarLink to="/follow-ups" end data-panel-item="Follow-ups" onKeyDown={onKeyDown} onClick={onClick} styleFor={className}>
         <CalendarClock aria-hidden="true" className="size-4 shrink-0" />
         <span className="workspace-link-label">{label}</span>
       </SidebarLink>
-    </Tooltip>
+    </LazyTooltip>
   );
 }
