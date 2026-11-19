@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
@@ -55,6 +55,17 @@ describe('follow-up section, by whether this environment records follow-ups', ()
     expect(about).toHaveAttribute('aria-expanded', 'true');
     expect(region.getByText('Document response to a recorded treatment and choose when to follow up.')).toHaveAttribute('id', about.getAttribute('aria-controls'));
     expect(region.getByText(FOLLOWUPS_PAUSED_MESSAGE)).toBeVisible();
+  });
+  it('names both refresh icons in a tooltip on keyboard focus, not in a native title (specs/042 D2)', async () => {
+    const { region } = await open(json({ recording: 'paused' }));
+    const followups = region.getByRole('button', { name: 'Refresh follow-ups' });
+    const medications = within(screen.getByRole('region', { name: 'Medications' })).getByRole('button', { name: 'Refresh medications' });
+    for (const button of [followups, medications]) expect(button).not.toHaveAttribute('title');
+    await waitFor(() => expect(medications).toBeEnabled());
+    act(() => followups.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Refresh follow-ups');
+    act(() => medications.focus());
+    await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Refresh medications'));
   });
   it('shows the list, not an entry form, when a link asks for one while paused', async () => {
     const { region } = await open(json({ recording: 'paused' }), `/patients/${ID}?followup=${THREAD}#followups`);

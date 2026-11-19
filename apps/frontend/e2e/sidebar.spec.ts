@@ -25,7 +25,11 @@ test.describe('desktop collapse', () => {
       const sidebar = page.locator('header.workspace-navigation');
       await expect(sidebar).toHaveClass(/is-collapsed/);
       expect((await sidebar.boundingBox())!.width).toBeLessThanOrEqual(80);
-      await expect(primary(page).getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('title', 'Reports');
+      // Specs/042 D6: collapsed, a destination shows its name in a tooltip on hover, not in a native title.
+      const reports = primary(page).getByRole('link', { name: 'Reports', exact: true });
+      await expect(reports).not.toHaveAttribute('title');
+      await reports.hover();
+      await expect(page.getByRole('tooltip')).toHaveText('Reports');
       await expect(page.getByRole('slider', { name: 'Sidebar width' })).toHaveCount(0);
       // Specs/034 D4: collapsed, the account row is its initial, and its menu still holds Settings and Sign out.
       await openAccountMenu(page);

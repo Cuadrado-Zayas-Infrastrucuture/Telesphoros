@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import type { FollowupDto, FollowupInput } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { RefreshCw } from 'lucide-react';
+import { Tooltip } from '@/components/arc/Tooltip';
 import { Button } from '@/components/ui/Button';
 import { InfoButton } from '@/components/ui/InfoButton';
 import { useFollowups } from '@/hooks/useFollowups';
@@ -60,10 +61,12 @@ export function FollowupsList({
           </h2>
           <InfoButton label="About follow-up" open={about} controls="followups-about" onToggle={() => setAbout((value) => !value)} />
         </div>
-        {/* An icon with its name for assistive technology and as a tooltip (specs/041 D8). */}
-        <Button variant="ghost" size="sm" className="px-0" aria-label="Refresh follow-ups" title="Refresh follow-ups" disabled={loading || !!editing} onClick={reload}>
-          <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
-        </Button>
+        {/* An icon with its name for assistive technology, and in a tooltip on hover and on keyboard focus (specs/041 D8, specs/042 D2). */}
+        <Tooltip label="Refresh follow-ups">
+          <Button variant="ghost" size="sm" className="px-0" aria-label="Refresh follow-ups" disabled={loading || !!editing} onClick={reload}>
+            <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
+          </Button>
+        </Tooltip>
       </div>
       {about && (
         <p id="followups-about" className="text-sm text-muted-foreground">
