@@ -58,10 +58,13 @@ it('shows none for a disabled control, which takes no focus', async () => {
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
 
-it('has no accessibility violations while it shows', async () => {
+// The whole document, because the label is drawn outside the rendered container. The rule set is the one the browser suites
+// hold every page to (e2e/helpers.ts): WCAG 2 A and AA. axe's best-practice `region` rule is outside it, and would flag the
+// label for sitting outside the page's landmarks (specs/042, "Not verified").
+it('has no WCAG A or AA violations while it shows', async () => {
   const user = userEvent.setup();
   show();
   await user.tab();
   await screen.findByRole('tooltip');
-  expect(await axe(document.body)).toHaveNoViolations();
+  expect(await axe(document.body, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] })).toHaveNoViolations();
 });

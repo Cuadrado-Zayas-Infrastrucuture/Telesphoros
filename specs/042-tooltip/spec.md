@@ -25,3 +25,5 @@ Every other use of `title` ("Clear patient filter", "Reset", the "About…" info
 ## Not verified by this spec
 
 A screen-reader pass. Radix describes the control with the label while it is open, and here the label equals the name, so a screen reader may say the name twice. That needs a listen in VoiceOver before this pattern spreads to more buttons.
+
+Known and accepted: the label is drawn at the end of the document, outside the page's landmarks, so that no scrolling or clipped container can cut it off. axe's best-practice `region` rule flags that (measured 2026-11-18; drawing it in place clears the rule). The rule is outside the set the app holds its pages to, WCAG 2 A and AA (`e2e/helpers.ts`), and the label is reached through the control it describes, not through landmark navigation. The unit test uses the app's set on the whole document.
