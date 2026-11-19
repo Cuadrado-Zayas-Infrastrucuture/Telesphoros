@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
-import { REPORTS_BUCKET, TENANT_A, createFixture, s3Client, seedReport, startWorker, until, type Fixture, type WorkerProcess } from './support';
+import { REPORTS_BUCKET, TENANT_A, TENANT_B, createFixture, s3Client, seedReport, startWorker, until, type Fixture, type WorkerProcess } from './support';
 import type { S3Client } from '@aws-sdk/client-s3';
 import { holdSettlements } from './settlement-gate';
 import { disposeFixtures } from '../../backend/test/helpers/fixture-cleanup';
@@ -172,16 +172,42 @@ describe('the worker process with the consumers', () => {
 
   it("runs the scheduled sweep for every active organization from the migration's own schedule, once per slot", async () => {
     await f.admin.query(`INSERT INTO job_schedules (type, interval_seconds) VALUES ('uploads.sweep', 3600) ON CONFLICT DO NOTHING`);
+    // job_schedule_tick keys each sweep 'slot-' || floor(epoch / interval) by the worker's clock. Reading the database's own slot in the same
+    // statement as the jobs tells a slot boundary crossed during the test (a new slot, one sweep per organization) from a second enqueue in
+    // one slot. A bare count cannot: nightly run 43572345301 crossed 08:00 UTC during the wait and counted 4 sweeps where 2 were expected.
+    type Sweep = { id: string; tenant: string; key: string; by: string; state: string };
+    const snapshot = async () =>
+      (
+        await f.admin.query<{ slot: string; sweeps: Sweep[] }>(
+          `SELECT floor(extract(epoch FROM now()) / s.interval_seconds)::bigint::text AS slot,
+                  coalesce(json_agg(json_build_object('id', j.id, 'tenant', j.tenant_id, 'key', j.idempotency_key, 'by', j.requested_by, 'state', j.state)
+                    ORDER BY j.seq) FILTER (WHERE j.id IS NOT NULL), '[]') AS sweeps
+             FROM job_schedules s LEFT JOIN jobs j ON j.type = s.type
+            WHERE s.type = 'uploads.sweep'
+            GROUP BY s.interval_seconds`,
+        )
+      ).rows[0]!;
+    const slotOf = (key: string) => Number(/^slot-(\d+)$/.exec(key)?.[1] ?? Number.NaN);
     worker({ WORKER_ID: 'consumers-2' });
-    await until(
-      'the sweeps to succeed',
-      async () => (await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE type = 'uploads.sweep' AND state = 'succeeded'`)).rows[0].n >= 2,
-    );
-    const swept = (await f.admin.query(`SELECT tenant_id, requested_by FROM jobs WHERE type = 'uploads.sweep' ORDER BY tenant_id`)).rows;
-    expect(swept.map((r) => r.requested_by)).toEqual(swept.map(() => 'system:scheduler'));
-    expect(swept.map((r) => r.tenant_id)).not.toContain('worker-test-suspended');
-    await new Promise((r) => setTimeout(r, 6_500)); // another tick in the same slot adds nothing
-    expect((await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE type = 'uploads.sweep'`)).rows[0].n).toBe(swept.length);
+    // The earlier tests' sweeps are in the table too, perhaps for an earlier slot: wait for the slot the database is in now, and for its sweeps to run.
+    const settled = await until('the current slot to hold a succeeded sweep for each organization', async () => {
+      const s = await snapshot();
+      const current = s.sweeps.filter((j) => j.key === `slot-${s.slot}`);
+      return current.length > 0 && current.every((j) => j.state === 'succeeded') ? s : undefined;
+    });
+    await new Promise((r) => setTimeout(r, 6_500)); // at least one more tick of this worker (every 5 s)
+    const last = await snapshot();
+    // Every slot holds exactly one sweep per active organization (none for the suspended one), every sweep is the scheduler's, and every key names a slot that has begun.
+    const slots: Record<string, string[]> = {};
+    for (const j of last.sweeps) (slots[j.key] ??= []).push(j.tenant);
+    for (const tenants of Object.values(slots)) tenants.sort();
+    expect(slots).toEqual(Object.fromEntries(Object.keys(slots).map((key) => [key, [TENANT_A, TENANT_B].sort()])));
+    expect(last.sweeps.map((j) => j.by)).toEqual(last.sweeps.map(() => 'system:scheduler'));
+    expect(last.sweeps.map((j) => j.key).filter((key) => !(slotOf(key) <= Number(last.slot)))).toEqual([]);
+    // Another tick in the same slot adds nothing. A boundary crossed during the wait adds sweeps only for the slots after it.
+    const added = last.sweeps.filter((j) => !settled.sweeps.some((s) => s.id === j.id));
+    if (last.slot === settled.slot) expect(added).toEqual([]);
+    else expect(added.map((j) => j.key).filter((key) => !(slotOf(key) > Number(settled.slot)))).toEqual([]);
   }, 30_000);
 
   it('does not register the file jobs without a bucket (outside production), says so, and still runs the sweep', async () => {

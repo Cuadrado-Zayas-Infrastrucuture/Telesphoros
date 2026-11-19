@@ -17,6 +17,9 @@
 //      narrowed. A nightly is itself skipped when an earlier nightly already passed everything, service-postgres included, at the same commit of main.
 //   5. nothing the image is built from changed: the image job is skipped when every changed path is outside it (outsideImagePath), unless a release
 //      is armed on a push.
+//   4. the standalone PostgreSQL profile runs in the nightly (event schedule), in a manual run (workflow_dispatch), in any run that could not be
+//      narrowed, and in a pull request or push that changes one of its own inputs (postgresPath). A nightly is itself skipped when an earlier nightly
+//      already passed everything, service-postgres included, at the same commit of main.
 //
 // Tree reuse (post-merge push to main). The ruleset requires a pull request to be up to date with main before it merges, so the merged
 // head P contains main's previous tip B, and the merge commit M that lands on main has exactly P's tree. The pull-request run tested
@@ -70,6 +73,18 @@ export const outsideImagePath = p =>
 export function classify(files) {
   if (!Array.isArray(files) || files.length === 0 || files.some(f => typeof f !== 'string' || f === '' || f.startsWith('/') || f.split('/').includes('..'))) return null;
   return { docsOnly: files.every(docsPath), terraform: files.some(terraformPath), image: !files.every(outsideImagePath) };
+ * Inputs of the steps that only service-postgres runs: the reader-engine re-measure (check-without-reader.sh and its list), the demo seed
+ * (scripts/local-review/, through the compiled migrator), and the fixture-lifecycle regressions (scripts/test-fixtures/ and the backend test
+ * helpers they drive). A change to one of them used to go red only in the next nightly (audit 2026-11-19).
+ */
+export const postgresPath = p =>
+  p.startsWith('scripts/test-fixtures/') || p.startsWith('scripts/local-review/') || p === 'scripts/check-without-reader.sh' || p.startsWith('apps/backend/migrations/') ||
+  /^apps\/backend\/test\/helpers\/(?:reader-engine|fixture-|spec-deadline\.)/.test(p);
+
+/** { docsOnly, terraform, postgres } for a list of changed paths, or null when the list cannot be trusted (empty, or not strings). */
+export function classify(files) {
+  if (!Array.isArray(files) || files.length === 0 || files.some(f => typeof f !== 'string' || f === '' || f.startsWith('/') || f.split('/').includes('..'))) return null;
+  return { docsOnly: files.every(docsPath), terraform: files.some(terraformPath), postgres: files.some(postgresPath) };
 }
 
 /** The paths this run changes, or null when they cannot be read with certainty (the caller then runs everything). */
@@ -176,6 +191,8 @@ export async function decide(env, deps) {
     const area = kind.terraform ? 'infrastructure, the lint configuration or the workflow changed' : 'nothing under infrastructure/, .tflint.hcl or .github/ changed, so the terraform jobs are skipped';
     const image = kind.image || releaseArmed ? '' : '; every changed path is outside the image, so the image job is skipped';
     return { ...everything(`${files.length} files changed; ${area}; the standalone PostgreSQL profile is left to the nightly${image}; ${proof.reason}`), terraform: kind.terraform, postgres: false, archive: kind.image || releaseArmed };
+    const postgres = kind.postgres ? 'an input of the standalone PostgreSQL profile changed, so it runs' : 'the standalone PostgreSQL profile is left to the nightly';
+    return { ...everything(`${files.length} files changed; ${area}; ${postgres}; ${proof.reason}`), terraform: kind.terraform, postgres: kind.postgres };
   } catch (error) {
     return everything(`could not prove a smaller scope (${error?.message ?? 'error'})`);
   }

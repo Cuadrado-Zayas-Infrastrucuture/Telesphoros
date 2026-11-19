@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, outsideImagePath, requiredChecks, terraformChecks } from './scope.mjs';
+import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, postgresPath, requiredChecks } from './scope.mjs';
 import { archiveCondition, gateCondition, guardsCondition, heavyCondition, heavyStepCondition, jobOf, postgresCondition, terraformCondition } from './service-layout.mjs';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -384,6 +385,7 @@ test('every harness path that can change what the evaluation gate measures runs 
     'apps/ai-service/evals/pinned.ts', 'apps/ai-service/package.json', 'pnpm-lock.yaml']) {
     assert.equal(docsPath(path), false, path);
     assert.deepEqual([classify([path]).docsOnly, classify([path]).terraform], [false, false], path);
+    assert.deepEqual(classify([path]), { docsOnly: false, terraform: false, postgres: false }, path);
   }
   // Control: the same change is skipped when it hides in a markdown file under docs/, which is why a model ID must never live there.
   assert.equal(docsPath('docs/config/model-id.md'), true);
@@ -395,6 +397,10 @@ test('classify refuses a list it cannot trust, and separates documentation, code
   assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, image: true });
   assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, image: true });
   assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, image: false });
+  assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false, postgres: false });
+  assert.deepEqual(classify(['docs/a.md', 'apps/backend/src/a.ts']), { docsOnly: false, terraform: false, postgres: false });
+  assert.deepEqual(classify(['docs/clinical-validation/r.json']), { docsOnly: false, terraform: false, postgres: false });
+  assert.deepEqual(classify(['apps/frontend/src/a.tsx', 'infrastructure/terraform/api.tf']), { docsOnly: false, terraform: true, postgres: false });
   for (const infra of ['infrastructure/docker/api.Dockerfile', 'infrastructure/lambda/x/index.js', '.tflint.hcl', '.github/workflows/ci.yml', '.github/ci/guard.test.mjs']) {
     assert.equal(classify([infra]).terraform, true, infra);
   }
@@ -499,6 +505,17 @@ test('the only code that reads documentation is code the documentation-only run 
     'infrastructure/terraform/staging.guard.test.mjs', // docs/ops/staging-plan-review.md (pnpm test:infra)
     'scripts/status-index.mjs', // docs/status/ fragments (pnpm test:ci-config, status-fragments.test.mjs)
   ]);
+});
+
+test('a change to an input of the standalone PostgreSQL profile runs it on the pull request; a neighbouring path does not', async t => {
+  for (const p of ['scripts/test-fixtures/lifecycle.test.cjs', 'scripts/local-review/seed.cjs', 'scripts/check-without-reader.sh', 'apps/backend/migrations/0007_captures.up.sql',
+    'apps/backend/test/helpers/reader-engine-specs.json', 'apps/backend/test/helpers/fixture-cleanup.ts', 'apps/backend/test/helpers/spec-deadline.ts']) assert.equal(postgresPath(p), true, p);
+  for (const p of ['apps/backend/src/a.ts', 'apps/backend/test/helpers/app.ts', 'apps/backend/migrations', 'docs/scripts/test-fixtures/a.md', 'xscripts/local-review/a.cjs',
+    'scripts/workspace-build/workspace.cjs']) assert.equal(postgresPath(p), false, p);
+  const input = pullRequest(t, { change: r => r.commit('scripts/test-fixtures/lifecycle.test.cjs', 'a', 'fixture') });
+  const r = await decide(prEnv(input), { git: input.git, ...noApi });
+  assert.deepEqual([r.heavy, r.postgres], [true, true], r.reason);
+  assert.match(r.reason, /an input of the standalone PostgreSQL profile changed/);
 });
 
 test('pull requests and pushes leave the standalone PostgreSQL profile to the nightly; doubt, the nightly and a manual run keep it', async t => {

@@ -22,6 +22,7 @@ const LOCAL_ONLY_SCRIPTS = [
   { pkg: 'telesphoros-remastered', script: 'test:storage-recovery', why: 'Local regression for the foreground supervisor; it needs explicit local runtimes and has no service discovery.' },
   { pkg: 'telesphoros-remastered', script: 'test:product-demo', why: 'Runs only against an already-started, owned synthetic demo at a fixed loopback URL; CI has no such demo.' },
   { pkg: '@telesphoros/backend', script: 'test:db', why: 'Local shorthand for the command service-postgres runs as Tier 2, spelled there through pnpm --filter.' },
+  { pkg: 'telesphoros-remastered', script: 'test', why: 'The whole local run. CI runs its parts: test:scripts and the workspace suites in verify, the backend and worker suites in the service jobs.' },
   { pkg: '@telesphoros/smart-pilot', script: 'test:browser', why: 'Optional check through a locally installed browser driver against dedicated synthetic localhost pages.' },
   { pkg: '@telesphoros/smart-pilot', script: 'test:ehr-guard', why: 'Exercises the seed predicate on the local MariaDB of an OpenEMR install; CI has no EHR.' },
   { pkg: '@telesphoros/smart-pilot', script: 'test:workflow', why: 'Opt-in workflow against a real local EHR; it fails rather than skips when the services are missing.' },
@@ -82,8 +83,12 @@ function calledScripts(text, from, packages) {
   for (const [, filters, script] of text.matchAll(/\bpnpm((?:\s+--filter[= ]\S+)+)\s+(?:run\s+)?([\w:.-]+)/g))
     for (const [, name] of filters.matchAll(/--filter[= ](\S+)/g)) calls.push([name, script]);
   for (const [, script] of text.matchAll(/\bpnpm\s+(?:run\s+)?([a-z][\w:.-]*)/g)) calls.push([from, script]);
-  // scripts/workspace-build/workspace.cjs ends in `pnpm -r --if-present <command>`, which runs in every workspace package and not in the root.
-  for (const [, command] of text.matchAll(/workspace\.cjs run (\w+)/g)) for (const p of packages) if (p.dir) calls.push([p.name, command]);
+  // scripts/workspace-build/workspace.cjs ends in `pnpm -r --if-present <command>`, which runs in every workspace package and not in the root,
+  // minus the packages named by `--except a,b` (@telesphoros/a, ...).
+  for (const [, command, except = ''] of text.matchAll(/workspace\.cjs run (\w+)(?: --except ([\w,-]+))?/g)) {
+    const left = new Set(except.split(',').filter(Boolean).map(name => `@telesphoros/${name}`));
+    for (const p of packages) if (p.dir && !left.has(p.name)) calls.push([p.name, command]);
+  }
   return calls.filter(([name, script]) => byName.get(name)?.scripts[script] !== undefined);
 }
 
