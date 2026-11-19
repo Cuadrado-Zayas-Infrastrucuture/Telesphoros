@@ -56,7 +56,7 @@ skip or hang a required check.
    does not count: a draft or documentation-only run reports every check as skipped, which proves nothing about code. One exception:
    when what the merge brings in (`B..M`) changes nothing under `infrastructure/`, `.tflint.hcl` or `.github/`, this push would skip
    `terraform` and `terraform-lint` itself, so those two may have succeeded **or** been skipped; they must still be there and completed, and
-   the other five must have succeeded. Before this (2026-11-19), every merge of a pull request that skipped them re-ran the whole suite on
+   the other five must have succeeded. `image` may be skipped on the same terms when every path the merge brings in is outside the image. Before this (2026-11-19), every merge of a pull request that skipped them re-ran the whole suite on
    `main`. A diff that cannot be read keeps the strict rule.
 
 When the proof holds, the push run still runs `secret-scan`, and `image` only while the release variables are set. The step
@@ -141,7 +141,7 @@ job-level condition and reports success to the ruleset (see "How GitHub treats a
 | `browser` | runs | skipped | skipped | skipped | runs | runs |
 | `terraform` | runs if infrastructure, `.tflint.hcl` or `.github/` changed, else skipped | skipped | skipped | skipped | as for a pull request | runs |
 | `secret-scan` | runs | runs | skipped | runs | runs | runs |
-| `image` | runs | skipped | skipped | runs only while the release variables are set | runs | runs |
+| `image` | runs unless every changed path is outside the image (`outsideImagePath` in `.github/ci/scope.mjs`: frontend, ai-service, smart-pilot, fhir-utils, terraform, lambda and other non-image areas, specs, docs markdown) | skipped | skipped | runs only while the release variables are set | as for a pull request, and always while the release variables are set | runs |
 
 A scheduled run is skipped entirely when an earlier one already passed everything at the same commit.
 
