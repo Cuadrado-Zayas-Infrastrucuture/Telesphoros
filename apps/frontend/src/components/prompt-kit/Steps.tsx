@@ -16,7 +16,7 @@ export function Steps({
   label = 'Simulated process steps',
   colored = false,
 }: {
-  /** Status as a word in color (success/failure). Off by default so the chat preview looks exactly as before. */
+  /** Status as a word in color (success/failure). Off by default for the chat preview, whose words stay plain. */
   colored?: boolean;
   stage: number;
   failed?: boolean;
@@ -28,7 +28,8 @@ export function Steps({
     <ol aria-label={label} className="ml-2 border-l border-divider pl-4">
       {labels.map((step, index) => (
         <li key={step} className="flex items-start gap-3 py-2 text-sm">
-          <span aria-hidden="true" className="mt-1 shrink-0">
+          {/* The step under way takes the signal colour on its mark, in every list (specs/043 D4): progress, not a result. Its word stays plain. */}
+          <span aria-hidden="true" className={`mt-1 shrink-0 ${!failed && index === stage ? 'text-signal' : ''}`}>
             {index < stage ? <Check className="size-4" /> : <Circle className="size-4" />}
           </span>
           <div>

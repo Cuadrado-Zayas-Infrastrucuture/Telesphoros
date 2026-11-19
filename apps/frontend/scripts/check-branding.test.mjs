@@ -206,3 +206,12 @@ test('rejects poor contrast in the dark theme alone', () => rejects(input => {
   input.policy.allowedColorLiterals.push('#4a5f63');
   input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--muted-foreground: #9CA4A8;', '--muted-foreground: #4a5f63;');
 }, /contrast \(dark\): muted-foreground\/panel/));
+// Specs/043: the signal colour is pinned in each theme, and must stay visible as a mark on the page and on a card.
+test('rejects a signal colour that drifts from the reviewed tangerine, in the light and the dark theme', () => {
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--signal: #C2500A;', '--signal: #FF7A1A;'); }, /--signal must be #C2500A/);
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--brand-accent: #6FAFBD;\n  --signal: #FF7A1A;', '--brand-accent: #6FAFBD;\n  --signal: #C2500A;'); }, /dark --signal must be #FF7A1A/);
+});
+test('rejects a signal colour too faint for the page it marks', () => rejects(input => {
+  input.policy.tokens.signal = '#F8EFDC';
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--signal: #C2500A;', '--signal: #F8EFDC;');
+}, /contrast: signal\/background/));

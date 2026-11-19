@@ -15,3 +15,9 @@ it('offers one sign-in action and no overview detour when entering the protected
   expect(client.signIn).toHaveBeenCalledWith('/workspace');
   expect(router.state.location.pathname).toBe('/signin');
 });
+
+it('puts the heading, and not the button, in the signal colour (specs/043 D6)', async () => {
+  renderApp('/workspace');
+  expect(await screen.findByRole('heading', { name: 'Sign in' })).toHaveClass('text-signal');
+  expect(screen.getByRole('button', { name: 'Sign in' }).className).not.toMatch(/signal/);
+});

@@ -29,7 +29,12 @@ export function ConversationWelcome({
       <img className="one-screen-mascot mascot-plate" src={mascot} width="162" height="192" loading="eager" alt="Telesphoros mascot in a teal cloak" />
       <p className="mb-2 text-center text-sm break-words text-muted-foreground">{preferredName ? `Welcome, ${preferredName}.` : 'Welcome.'}</p>
       {/* The prototype does not interpret reports yet, so the heading does not promise a reading (specs/024 D3). */}
-      <h1 className="mb-4 text-center font-heading text-3xl font-medium">Start with a synthetic report.</h1>
+      {/* The heading's last words take the signal colour, as the landing page's headline does (specs/043 D6): decoration, never a status. */}
+      <h1 className="mb-3 text-center font-heading text-3xl font-medium">
+        Start with a <span className="text-signal">synthetic report.</span>
+      </h1>
+      {/* A short line in the signal colour under it (specs/043 D3). */}
+      <span aria-hidden="true" className="one-screen-signal-rule" />
       {(canAttach || canReadRecords) && (
         <div role="group" aria-label="What you can do here" className="mb-3 flex flex-wrap justify-center gap-2">
           {canAttach && onAttach && (
