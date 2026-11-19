@@ -25,7 +25,9 @@ it('marks nothing once every step is done', () => {
   expect(signalMarks()).toEqual([false, false, false]);
 });
 
-it('leaves the plain list, the chat preview, without the signal colour', () => {
+it('marks the step under way in the plain list, the chat preview, too, and keeps every word plain', () => {
   render(<Steps stage={1} labels={LABELS} words={WORDS} label="Preview steps" />);
-  expect(signalMarks()).toEqual([false, false, false]);
+  expect(signalMarks()).toEqual([false, true, false]);
+  expect(screen.getByText('Done')).toHaveClass('text-muted-foreground');
+  expect(screen.getByText('In progress')).toHaveClass('text-muted-foreground');
 });

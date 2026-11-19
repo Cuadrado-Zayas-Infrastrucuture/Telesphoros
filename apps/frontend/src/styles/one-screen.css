@@ -68,14 +68,14 @@
   margin: 0 auto 0.5rem;
 }
 
-/* The chat home's one mark in the signal colour (specs/043 D3): a short line under the heading that runs from the signal colour
+/* The chat home's line in the signal colour (specs/043 D3): under the heading, running from the signal colour
    to the brand teal, as the landing page's stage opens. Decoration only. */
 .one-screen-signal-rule {
   display: block;
-  width: 3rem;
-  height: 2px;
+  width: 5rem;
+  height: 3px;
   margin: 0 auto 1rem;
-  border-radius: 1px;
+  border-radius: 1.5px;
   background: linear-gradient(90deg, var(--signal), var(--brand-accent));
 }
 

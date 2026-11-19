@@ -31,7 +31,8 @@ export default function SignInPage() {
   return (
     <div className="grid items-center gap-10 lg:grid-cols-2">
       <div className="flex max-w-prose flex-col gap-4">
-        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Sign in</h1>
+        {/* The heading takes the signal colour, as the landing page's headline does (specs/043 D6). The button below does not. */}
+        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight text-signal">Sign in</h1>
         <p className="text-muted-foreground">You will be taken to the secure sign-in page. Accounts are by invitation only: if you need access, ask your administrator.</p>
         {error && (
           <Alert variant="destructive">

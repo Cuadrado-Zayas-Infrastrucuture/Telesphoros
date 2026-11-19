@@ -284,6 +284,11 @@
       "foreground": "signal",
       "background": "panel",
       "minimum": 3
+    },
+    {
+      "foreground": "signal",
+      "background": "muted",
+      "minimum": 3
     }
   ],
   "references": {

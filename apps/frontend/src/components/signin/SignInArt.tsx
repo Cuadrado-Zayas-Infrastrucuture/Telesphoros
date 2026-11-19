@@ -58,9 +58,9 @@ function drawFrame(context: CanvasRenderingContext2D, width: number, height: num
         }
       }
       if (level <= 0) continue;
-      // About one loose character in seven takes the signal colour (specs/043 D2), as the dashes off the landing page's helix do.
+      // About one loose character in three takes the signal colour (specs/043 D2), as the dashes off the landing page's helix do.
       // The offsets keep this draw apart from the one above that chose the character: with related inputs the two agree, and almost none is picked.
-      const spark = loose && hash(column + 101, seed + 57) < 0.14;
+      const spark = loose && hash(column + 101, seed + 57) < 0.33;
       context.globalAlpha = Math.min(1, 0.4 + level * 0.6);
       context.fillStyle = spark ? tones[3] : tones[level < 0.4 ? 0 : level < 0.75 ? 1 : 2];
       context.fillText(hash(column * 7, seed * 3) < 0.5 ? '0' : '1', x, y);
