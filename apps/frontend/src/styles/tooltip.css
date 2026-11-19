@@ -1,0 +1,22 @@
+/* Tooltip (specs/042). Styled here, not with utilities: the lint rule against one-off Tailwind values also covers
+   `data-[state=…]` variants. The colours are the page's own text and background, swapped, so the contrast is the
+   body text's in every theme. */
+.tooltip {
+  z-index: 60;
+  max-width: 15rem;
+  padding: .375rem .625rem;
+  border-radius: var(--radius-2);
+  background: var(--foreground);
+  color: var(--background);
+  box-shadow: var(--elevation-panel);
+  font-size: .8125rem;
+  line-height: 1.4;
+  transition: opacity 120ms ease-out;
+}
+/* It fades in once. It leaves at once, so a control is never covered by a label that is on its way out. */
+@starting-style {
+  .tooltip { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tooltip { transition: none; }
+}
