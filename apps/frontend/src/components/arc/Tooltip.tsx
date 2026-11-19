@@ -9,7 +9,7 @@ const EDGE_PX = 12;
 /**
  * Shows a control's name beside it, on hover and on keyboard focus (specs/042 D1). For icon-only controls: the child keeps its own
  * `aria-label`, and `label` repeats that name for people who see the icon. A fact, a status or a safety statement never lives only
- * here (D3): touch users rarely see a tooltip, and a disabled control shows none.
+ * here (D3): touch users rarely see a tooltip, and the keyboard never reaches a disabled control's.
  */
 export function Tooltip({ label, side = 'top', children }: { label: string; side?: 'top' | 'bottom' | 'left' | 'right'; children: ReactElement }) {
   return (

@@ -50,7 +50,8 @@ it('links the name to the control only while it shows', async () => {
   expect(button).toHaveAttribute('aria-describedby', tooltip.id);
 });
 
-it('shows none for a disabled control, which takes no focus', async () => {
+// Hover still names a disabled control in a real browser (measured, specs/042 T009); jsdom cannot show that.
+it('shows none from the keyboard for a disabled control, which takes no focus', async () => {
   const user = userEvent.setup();
   const button = show(true);
   await user.tab();
