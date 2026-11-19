@@ -38,6 +38,7 @@ function drawFrame(context: CanvasRenderingContext2D, width: number, height: num
       const inside = dx * dx + dy * dy;
       let level = 0;
       let seed = row;
+      let loose = false;
       if (inside < 1) {
         // The sphere: two rows of characters, then a gap, all the way down; brighter toward the middle, worn away toward the top.
         const band = Math.floor(((dy + 1) * radius) / ROW) % 3 !== 2;
@@ -50,12 +51,18 @@ function drawFrame(context: CanvasRenderingContext2D, width: number, height: num
           const across = Math.abs(dx) / (1.2 - lift * 0.5);
           const chance = (1 - lift) ** 1.4 * Math.max(0, 1 - across * across) * 0.5;
           seed = row + Math.floor(rise * (0.5 + hash(column, 5)));
-          if (hash(column, seed) < chance) level = 0.25 + 0.75 * hash(seed, column) * (1 - lift * 0.5);
+          if (hash(column, seed) < chance) {
+            level = 0.25 + 0.75 * hash(seed, column) * (1 - lift * 0.5);
+            loose = true;
+          }
         }
       }
       if (level <= 0) continue;
+      // About one loose character in three takes the signal colour (specs/043 D2), as the dashes off the landing page's helix do.
+      // The offsets keep this draw apart from the one above that chose the character: with related inputs the two agree, and almost none is picked.
+      const spark = loose && hash(column + 101, seed + 57) < 0.33;
       context.globalAlpha = Math.min(1, 0.4 + level * 0.6);
-      context.fillStyle = tones[level < 0.4 ? 0 : level < 0.75 ? 1 : 2];
+      context.fillStyle = spark ? tones[3] : tones[level < 0.4 ? 0 : level < 0.75 ? 1 : 2];
       context.fillText(hash(column * 7, seed * 3) < 0.5 ? '0' : '1', x, y);
     }
   }
@@ -77,8 +84,8 @@ export function SignInArt() {
     if (!canvas || !context) return;
     const tokens = getComputedStyle(document.documentElement);
     const read = (name: string) => tokens.getPropertyValue(name).trim();
-    // Dim to bright, all from the theme.
-    const tones = [read('--brand-accent'), read('--muted-foreground'), read('--foreground')];
+    // Dim to bright, all from the theme; the fourth is the signal colour for a few of the loose characters.
+    const tones = [read('--brand-accent'), read('--muted-foreground'), read('--foreground'), read('--signal')];
     const family = read('--font-family-mono');
     const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let width = 0;

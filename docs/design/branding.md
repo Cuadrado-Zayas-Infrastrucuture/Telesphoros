@@ -13,6 +13,7 @@ The product/company identity uses Inter for readable editorial and application c
 | Text | Body text is slate `--foreground` (#2C3438; dark #D4D9DB), about 11 to 13:1 rather than higher, to avoid glare. Reports use `--dashboard-foreground` (#263034) and `--dashboard-muted-foreground` (#4E5A61). Decorative accent is not body text |
 | Controls | Existing components and approved fills; minimum shared target 2.75rem (44px at the default root size) |
 | Status | Semantic success/warning/error tokens, expressed as words; never decorative badges |
+| Signal colour | Tangerine `--signal` (#C2500A on light surfaces; #FF7A1A in the dark theme and on the sign-in flow), the colour telesphoros.app uses ([spec 043](../../specs/043-signal-colour/spec.md)). Decoration, progress marks and an accent on a large heading only: never a result, a status, small or body text, or a button fill, because orange reads as caution on a clinical screen |
 | Artwork | Exact approved company/product logos, unchanged mascot and bundled fonts. The watermarked DNA image is retired and must not ship |
 | Data surfaces | Opaque, with clear borders and restrained depth. Blur only as the progressive scroll edge (`ProgressiveBlur`, at most `--size-blur-edge` deep and 3.5px, opaque fade under reduced transparency); never glass, frosted panels or blur over resting content |
 | Accessibility | Visible focus, readable text and role/state labels; verify reflow and keyboard behavior |

@@ -14,7 +14,7 @@ export function QuestionnaireProgress({ steps, active }: { steps: readonly strin
           <li
             key={step}
             aria-current={index === active ? 'step' : undefined}
-            className={index === active ? 'border-b-2 border-primary pb-2 font-semibold' : 'border-b border-divider pb-2 text-muted-foreground'}
+            className={index === active ? 'border-b-2 border-signal pb-2 font-semibold' : 'border-b border-divider pb-2 text-muted-foreground'}
           >
             {index + 1}. {step}
           </li>

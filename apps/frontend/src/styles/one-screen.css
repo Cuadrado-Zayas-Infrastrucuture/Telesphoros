@@ -68,6 +68,17 @@
   margin: 0 auto 0.5rem;
 }
 
+/* The chat home's line in the signal colour (specs/043 D3): under the heading, running from the signal colour
+   to the brand teal, as the landing page's stage opens. Decoration only. */
+.one-screen-signal-rule {
+  display: block;
+  width: 5rem;
+  height: 3px;
+  margin: 0 auto 1rem;
+  border-radius: 1.5px;
+  background: linear-gradient(90deg, var(--signal), var(--brand-accent));
+}
+
 .one-screen-avatar {
   width: 2.125rem;
   height: auto;

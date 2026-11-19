@@ -41,11 +41,11 @@
   .reports-workspace--compact .report-records-region { height: 14rem; }
 }
 
-/* Native progress defaults vary by browser; navigation uses the approved primary token. */
-.questionnaire-progress { appearance: none; border: 0; background: var(--muted); color: var(--primary); }
+/* Native progress defaults vary by browser; the filled part is progress, so it takes the signal colour (specs/043 D4). */
+.questionnaire-progress { appearance: none; border: 0; background: var(--muted); color: var(--signal); }
 .questionnaire-progress::-webkit-progress-bar { background: var(--muted); }
-.questionnaire-progress::-webkit-progress-value { background: var(--primary); }
-.questionnaire-progress::-moz-progress-bar { background: var(--primary); }
+.questionnaire-progress::-webkit-progress-value { background: var(--signal); }
+.questionnaire-progress::-moz-progress-bar { background: var(--signal); }
 
 /* Operational navigation has its own column; public pages keep their existing header. */
 .workspace-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }

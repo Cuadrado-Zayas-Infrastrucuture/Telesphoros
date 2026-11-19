@@ -17,7 +17,7 @@ export function ThinkingBar({ text, stage, onStop }: { text: string; stage: numb
       </div>
       <div className="mt-2 flex gap-1" aria-hidden="true">
         {[0, 1, 2].map((step) => (
-          <span key={step} className={`h-1 flex-1 rounded-sm ${step <= stage ? 'bg-primary' : 'bg-divider'}`} />
+          <span key={step} className={`h-1 flex-1 rounded-sm ${step <= stage ? 'bg-signal' : 'bg-divider'}`} />
         ))}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Simulated preparation · phase {stage + 1} of 3</p>
