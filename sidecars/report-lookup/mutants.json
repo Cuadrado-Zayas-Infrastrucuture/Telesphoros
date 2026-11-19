@@ -1,0 +1,73 @@
+{
+  "comment": "Mutants for test_mutations.py. Each replacement's first string must appear exactly once in its file; .github/ci/report-lookup-mutations.test.mjs checks that on every pull request. The oracle is the jest test name (-t) that must fail on the mutant.",
+  "module": "apps/backend/src/services/report-lookup/",
+  "mutants": [
+    {
+      "id": "erase-unavailable-basis",
+      "file": "contracts.ts",
+      "replacements": [["basis: z.literal('unavailable-token'),", "basis: z.literal('unavailable-token').optional(),"]],
+      "oracle": "erasing the unavailable basis"
+    },
+    {
+      "id": "admit-empty-diplotype",
+      "file": "lookup.ts",
+      "replacements": [["if (diagnostics.length > 0) return hold(diagnostics[0]!.stage, diagnostics[0]!.reasonCode);", ""]],
+      "oracle": "empty diplotype beside a canonical"
+    },
+    {
+      "id": "ignore-diplotype-for-unavailable",
+      "file": "lookup.ts",
+      "replacements": [
+        ["if (diplotype.state === 'present') {", "if (diplotype.state === 'present' && state.state !== 'approved-unavailable') {"],
+        ["record.type !== 'unavailable' ||\n          diplotype.state !== 'missing' ||", "record.type !== 'unavailable' ||"]
+      ],
+      "oracle": "unavailable beside"
+    },
+    {
+      "id": "capture-scope-bypass",
+      "file": "lookup.ts",
+      "replacements": [["!scoped(capture, scope.data) ||\n      !scoped(capture.acceptance, scope.data) ||", ""]],
+      "oracle": "capture is bound to"
+    },
+    {
+      "id": "stale-capture-acceptance",
+      "file": "lookup.ts",
+      "replacements": [
+        ["capture.acceptance.decision !== 'accepted'", "false"],
+        ["capture.acceptance.id !== shell.data.captureAcceptanceId", "false"]
+      ],
+      "oracle": "latest rejection cannot be bypassed"
+    },
+    {
+      "id": "context-scope-bypass",
+      "file": "lookup.ts",
+      "replacements": [[" || !scoped(contextReview, scope.data)", ""]],
+      "oracle": "external context targets"
+    },
+    {
+      "id": "superseded-evidence-review",
+      "file": "lookup.ts",
+      "replacements": [["latest[0]!.reviewId !== payload.review.id", "false"]],
+      "oracle": "record hash tampering and superseded"
+    },
+    {
+      "id": "combined-falls-back",
+      "file": "routing.ts",
+      "replacements": [
+        [
+          "if (!policy.reviewedRows.some((s) => key(s) === key(selector))) return hold('out-of-review-scope');",
+          "if (!policy.reviewedRows.some((s) => key(s) === key(selector))) return routeAdmitted(states.map((s) => s.gene === 'CYP2B6' ? { gene: 'CYP2B6', state: 'absent', coverageRecordId: 'mutation' } : s), policy, knowledge);"
+        ]
+      ],
+      "oracle": "excluded combined cell never falls back"
+    },
+    {
+      "id": "expose-clinical-wording",
+      "file": "routing.ts",
+      "replacements": [
+        ["return { state: 'row-selected', selectedRow: selector };", "return { state: 'row-selected', selectedRow: selector, recommendationText: row.recommendationText };"]
+      ],
+      "oracle": "canonical / canonical"
+    }
+  ]
+}

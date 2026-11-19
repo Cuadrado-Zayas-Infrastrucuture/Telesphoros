@@ -158,7 +158,9 @@ suite('stream and process bounds with real storage', () => {
     const a = await attempt();
     const storage = app.get(ObjectStorage);
     const spy = jest.spyOn(storage, 'putStream');
-    const start = performance.now();
+    // No stopwatch: the bound is this test's 25 s timeout, well inside the 60 s absolute deadline. Three limits each end a stalled body in
+    // about 10 s: the intake socket timeout (src/app.factory.ts) and the idle and trickle rules (src/reports/intake/stage.ts). With all three
+    // removed this test times out (checked 2026-11-19); the rules' thresholds are tested on a fake clock in structural-validator.spec.ts.
     const req = httpRequest(`${await app.getUrl()}/api/v1/reports/${a.id}/upload-attempts/${a.attemptId}/bytes`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/pdf', 'X-Upload-Revision': a.revision, 'Content-Length': size },
@@ -172,7 +174,6 @@ suite('stream and process bounds with real storage', () => {
     });
     req.write(head);
     await ended;
-    expect(performance.now() - start).toBeLessThan(15000);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
     const healthy = await attempt();
