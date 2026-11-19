@@ -42,4 +42,4 @@ Checked by simulation, not with people: the model of Machado, Oliveira and Ferna
 
 What follows from it, and is now part of D5: **colour is never the only difference between a signal mark and a warning, an error or a success.** Every use today passes: the progress marks sit beside a plain word ("In progress") and differ from done and failed steps by icon and word; the heading accents and the lines carry no state. A new use that would rely on the colour alone is refused by this.
 
-Not changed: the light value. `#C2500A` is the landing page's own colour, and a value a red-blind reader could tell from the warning brown would no longer match it. That trade is the founder's to make.
+Not changed: the light value. `#C2500A` is the landing page's own colour, and a value a red-blind reader could tell from the warning brown would no longer match it. The founder decided on 2026-11-19, with these numbers in front of him, to keep it ("Keep it"); the sentence added to D5 is what makes that safe, so it is not optional.
