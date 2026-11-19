@@ -100,3 +100,21 @@ test('invalid modes, commands and prerequisite names run nothing', () => {
     assert.equal(run(args, {}, () => { throw new Error('must not run'); }), 1);
   }
 });
+
+test('--except leaves the named packages out of a recursive typecheck or test, after the libraries are built', () => {
+  for (const command of ['typecheck', 'test']) {
+    const calls = [];
+    assert.equal(run(['run', command, '--except', 'backend,worker'], {}, (_bin, args) => { calls.push(args); return { status: 0 }; }), 0);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[0].slice(-1), ['build']); // the libraries first, as without the option
+    assert.deepEqual(calls[1], ['-r', '--filter', '!@telesphoros/backend', '--filter', '!@telesphoros/worker', '--if-present', command]);
+  }
+});
+
+test('--except is refused for builds, for libraries and when malformed, and then runs nothing', () => {
+  for (const args of [['run', 'build', '--except', 'backend'], ['run', 'test', '--except', 'shared-types'], ['run', 'test', '--except'],
+    ['run', 'test', '--except', ''], ['run', 'test', '--except', 'Backend'], ['run', 'test', '--except', 'backend,'], ['run', 'test', '--only', 'backend'],
+    ['run', 'test', '--except', 'backend', 'extra']]) {
+    assert.equal(run(args, {}, () => { throw new Error('must not run'); }), 1, args.join(' '));
+  }
+});

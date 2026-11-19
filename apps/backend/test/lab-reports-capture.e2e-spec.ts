@@ -1,32 +1,23 @@
-import { spawn } from 'node:child_process';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
-import { cpus, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { acceptanceDtoSchema, captureDtoSchema, fileLinkDtoSchema } from '@telesphoros/shared-types';
+import { Client } from 'pg';
 import { ObjectStorage } from '../src/object-storage/object-storage';
 import { createTestApp, usingPostgres } from './helpers/app';
-import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
+import { createEphemeralDatabase, withAdmin, type EphemeralDatabase } from './helpers/database';
 import { bearer } from './helpers/tokens';
-import { DOCUMENT_IDS, fixtureManifest, fixturePdf, fixtureText, LabPipeline, type Person, PUBLIC_FIXTURES, sha } from './helpers/lab-pipeline';
+import { DOCUMENT_IDS, fixtureManifest, fixturePdf, fixtureText, LabPipeline, PUBLIC_FIXTURES, sha } from './helpers/lab-pipeline';
 
 // Capture, decision and file links over HTTP (slice 5B-3.2b-1), on the real database and, in the S3 tier, the S3 protocol.
 // Synthetic data only. The text runner is a recorded-text substitute (see fake-text-capture-runner.ts).
-/** The loaded-host test below: up to this many batches of this many reports, each report raced by this many identical requests. */
-const RACE_BATCHES = 16;
-const RACES_PER_BATCH = 10;
-const CONTENDERS = 12;
-/**
- * Its time, sized to its Jest timeout. No batch starts after the race budget; the busy processes outlive the budget so every batch runs loaded; the stop
- * timer kills them and abandons the requests before Jest gives up on the test. A slow host runs fewer batches, never past the timeout (CI took ~110 s of 120
- * for all 16 and overran once). Fewer than the minimum is a failure: the guard would be too weak to count.
- */
-const RACE_TIMEOUT_MS = 120_000;
-const RACE_BUDGET_MS = 60_000;
-const BURNER_LIFETIME_MS = 75_000;
-const RACE_STOP_MS = 105_000;
-const MIN_RACE_BATCHES = 4;
-const MAX_BURNERS = 40;
+/** The gated race below: this many rounds of this many reports, each report raced by this many identical requests. */
+const RACE_ROUNDS = 6;
+const RACES_PER_ROUND = 3;
+const CONTENDERS = 10;
+/** Every contender of a round holds a pool connection while it waits at the gate, so the pool must fit them all. */
+const RACE_POOL = RACES_PER_ROUND * CONTENDERS + 4;
 
 (usingPostgres() ? describe : describe.skip)('lab-report capture and review', () => {
   let db: EphemeralDatabase;
@@ -34,7 +25,7 @@ const MAX_BURNERS = 40;
   let lab: LabPipeline;
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
+    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, databasePoolMax: RACE_POOL });
     lab = new LabPipeline(app, db.adminUrl);
   });
   afterAll(async () => {
@@ -79,66 +70,63 @@ const MAX_BURNERS = 40;
       expect(await lab.count('ledger_events', `subject_table = 'report_captures' AND subject_id = $1`, [responses[0]!.body.id])).toBe(1);
     });
 
-    // The race above rarely loses on an idle host: the loser has to land inside a window of microseconds. Busy processes plus many
-    // reports raced at once make that happen. This is a probabilistic guard: on the broken insert (it named only the identity key) it failed
-    // in 10 of 15 runs; on the fixed insert it passed 13 of 13. A regression therefore shows up as a flaky test, not as a missing one.
-    // Time-boxed (2026-10-20): broken insert 27 of 35 runs failed, including 9 of 10 on a host so loaded that only 12 or 13 batches fit; fixed 24 of 24 passed.
-    it(
-      'concurrent identical requests, for many reports at once, still give one 201 and the rest 200s while the CPUs are busy',
-      async () => {
-        const started = Date.now();
-        const burners = Array.from({ length: Math.min(cpus().length * 4, MAX_BURNERS) }, () =>
-          spawn(process.execPath, ['-e', `const end = Date.now() + ${BURNER_LIFETIME_MS}; while (Date.now() < end) {}`], { stdio: 'ignore' }),
-        ); // each stops itself if the test run dies
-        const inFlight = new Set<ReturnType<LabPipeline['capture']>>();
-        const stop = new AbortController();
-        const stopped = new Promise<never>((_, reject) => stop.signal.addEventListener('abort', () => reject(stop.signal.reason as Error), { once: true }));
-        stopped.catch(() => undefined);
-        const halt = (reason: string) => {
-          if (!stop.signal.aborted) stop.abort(new Error(reason));
-          for (const burner of burners) burner.kill('SIGKILL');
-          for (const req of inFlight) req.abort();
-        };
-        // Not `finally` alone: a body stuck awaiting never reaches it, Jest moves on at its timeout, and the busy processes and requests outlive the test.
-        const stopTimer = setTimeout(() => halt(`stopped after ${RACE_STOP_MS} ms, before the ${RACE_TIMEOUT_MS} ms timeout`), RACE_STOP_MS);
-        const unlessStopped = <T>(work: PromiseLike<T>) => Promise.race([work, stopped]);
-        const capture = (clinician: Person, reportId: string) => {
-          const req = lab.capture(clinician, reportId);
-          inFlight.add(req);
-          return req.then((res) => {
-            inFlight.delete(req);
-            return res;
-          });
-        };
-        let batches = 0;
+    // The race above rarely loses on its own: the loser has to land inside a window of microseconds. Here every contender is made to lose
+    // the look-up. A lock on report_captures lets each request read (and find nothing) but holds its INSERT; once all of them wait there,
+    // the lock goes and they insert together. What is left to chance is inside PostgreSQL alone: whether a loser's insert meets the
+    // winner's row on the identity key or first on the text object's key (fix 9847b565). Measured 2026-11-19 in a 4-CPU sandbox: the old insert,
+    // which named only the identity key, failed 10 of 10 runs (a 409 LEDGER_CONFLICT each time); the fixed one passed 10 of 10 idle and
+    // 10 of 10 with the CPUs busy, in 3 to 8 s. It replaces a test that raced under CPU burners for up to 105 s and still lost on slow hosts.
+    it('identical requests that have all missed the look-up still give one 201 and the rest 200s, for many reports at once', async () => {
+      const clinician = await lab.person('clin', ['clinician']);
+      const patientId = await lab.patient(clinician);
+      const appUser = new URL(db.appUrl).username;
+      const contenders = RACES_PER_ROUND * CONTENDERS;
+      for (let round = 0; round < RACE_ROUNDS; round++) {
+        const reports: Awaited<ReturnType<LabPipeline['uploadedLabPdf']>>[] = [];
+        // One at a time (the upload route sheds load), seeded straight to "uploaded": the upload path is not what is under test here.
+        for (let i = 0; i < RACES_PER_ROUND; i++) reports.push(await lab.uploadedLabPdf(clinician, fixturePdf('D01'), { requester: clinician, patientId }));
+        const gate = new Client({ connectionString: db.adminUrl });
+        await gate.connect();
+        let raced: Promise<{ reportId: string; responses: Awaited<ReturnType<LabPipeline['capture']>>[] }[]> | undefined;
+        let open = false;
         try {
-          const clinician = await unlessStopped(lab.person('clin', ['clinician']));
-          const patientId = await unlessStopped(lab.patient(clinician));
-          for (let batch = 0; batch < RACE_BATCHES && Date.now() - started < RACE_BUDGET_MS; batch++) {
-            const reports: Awaited<ReturnType<LabPipeline['uploadedLabPdf']>>[] = [];
-            // One at a time (the upload route sheds load), seeded straight to "uploaded": the upload path is not what is under test here.
-            for (let i = 0; i < RACES_PER_BATCH; i++) reports.push(await unlessStopped(lab.uploadedLabPdf(clinician, fixturePdf('D01'), { requester: clinician, patientId })));
-            const raced = await unlessStopped(
-              Promise.all(
-                reports.map(async ({ reportId }) => ({ reportId, responses: await Promise.all(Array.from({ length: CONTENDERS }, () => capture(clinician, reportId))) })),
+          await gate.query('BEGIN');
+          // SHARE ROW EXCLUSIVE conflicts with the ROW EXCLUSIVE an INSERT needs, not with the ACCESS SHARE a SELECT needs.
+          await gate.query('LOCK TABLE report_captures IN SHARE ROW EXCLUSIVE MODE');
+          raced = Promise.all(
+            reports.map(async ({ reportId }) => ({ reportId, responses: await Promise.all(Array.from({ length: CONTENDERS }, () => lab.capture(clinician, reportId))) })),
+          );
+          let waiting = 0;
+          for (let attempt = 0; attempt < 1500 && waiting < contenders; attempt++) {
+            waiting = await withAdmin(db.adminUrl, async (c) =>
+              Number(
+                (
+                  await c.query<{ n: string }>(
+                    `SELECT count(*) AS n FROM pg_stat_activity WHERE datname = $1 AND usename = $2 AND wait_event_type = 'Lock' AND query LIKE 'INSERT INTO report_captures %'`,
+                    [db.name, appUser],
+                  )
+                ).rows[0]!.n,
               ),
             );
-            for (const { reportId, responses } of raced) {
-              const seen = responses.map((r) => `${r.status}${r.body.error ? ` ${r.body.error.code}` : ''}`).sort();
-              expect({ batch, seen }).toEqual({ batch, seen: [...Array<string>(CONTENDERS - 1).fill('200'), '201'].sort() });
-              expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
-              expect(await unlessStopped(lab.count('report_captures', 'report_id = $1', [reportId]))).toBe(1);
-            }
-            batches = batch + 1;
+            if (waiting < contenders) await new Promise((resolve) => setTimeout(resolve, 10)); // Bounded polling of an observed lock, not a timing assumption.
           }
-          expect({ batches, enough: batches >= MIN_RACE_BATCHES }).toEqual({ batches, enough: true });
+          expect({ round, waiting }).toEqual({ round, waiting: contenders });
+          await gate.query('COMMIT');
+          open = true;
+          for (const { reportId, responses } of await raced) {
+            const seen = responses.map((r) => `${r.status}${r.body.error ? ` ${r.body.error.code}` : ''}`).sort();
+            expect({ round, seen }).toEqual({ round, seen: [...Array<string>(CONTENDERS - 1).fill('200'), '201'].sort() });
+            expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
+            expect(await lab.count('report_captures', 'report_id = $1', [reportId])).toBe(1);
+            expect(await lab.count('ledger_events', `subject_table = 'report_captures' AND subject_id = $1`, [responses[0]!.body.id])).toBe(1);
+          }
         } finally {
-          clearTimeout(stopTimer);
-          halt('finished');
+          if (!open) await gate.query('ROLLBACK').catch(() => undefined);
+          await gate.end();
+          await raced?.catch(() => undefined); // never leave requests running past the test
         }
-      },
-      RACE_TIMEOUT_MS,
-    );
+      }
+    }, 60_000);
 
     it('the same recorded PDF in two reports, or two tenants, never shares a capture, text object or event', async () => {
       const a = await lab.person('a', ['clinician']);
