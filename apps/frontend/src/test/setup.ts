@@ -18,6 +18,16 @@ HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElemen
 // JSDOM has no viewport; landing navigation scroll is checked in Playwright.
 window.scrollTo = () => {};
 
+// jsdom has no ResizeObserver, which the tooltip's placement code (Radix, specs/042) asks for when a tooltip opens.
+// Placement itself is checked in a real browser.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // jsdom has no native modal lifecycle; browser tests exercise real focus containment and Escape.
 if (!HTMLDialogElement.prototype.showModal) {
   HTMLDialogElement.prototype.showModal = function () {
