@@ -232,7 +232,7 @@ export function terraformJobProblems(text) {
   if (blocks.length !== terraformCommands.length + 4) problems.push('unexpected or missing Terraform job step');
   if (/^ {4}(?:if|continue-on-error|defaults|env):/m.test(withoutScopeGate(job)) || /^defaults:/m.test(text.split(/^jobs:\s*$/m)[0])) problems.push('Terraform gate must be unconditional and run from the repository root');
   if (!/^ {4}timeout-minutes: 15$/m.test(job)) problems.push('retain the existing Terraform timeout');
-  if (!/^ {2}NODE_VERSION: "22\.23\.4"$/m.test(text)) problems.push('retain the exact Node runtime');
+  if (!/^ {2}NODE_VERSION: "22\.23\.5"$/m.test(text)) problems.push('retain the exact Node runtime');
   for (const command of terraformCommands) {
     const expected = '- run: ' + command + (command.endsWith('/policy.test.mjs') ? policyEvidenceEnv : '');
     if (blocks.filter(b => b === expected).length !== 1) problems.push('required command must propagate failure without step overrides: ' + command);
@@ -637,8 +637,8 @@ test('Terraform gate refuses optional, swallowed, filtered, cached or misplaced 
   }
   for (const setting of ['if: false', 'continue-on-error: true', 'defaults:\n      run:\n        working-directory: infrastructure/terraform', 'env:\n      FD7A_TERRAFORM_BIN: cached-producer']) variants.push(workflow.replace('  terraform:\n', '  terraform:\n    ' + setting + '\n'));
   variants.push(workflow.replace('jobs:\n', 'defaults:\n  run:\n    working-directory: infrastructure/terraform\njobs:\n'));
-  variants.push(workflow.replace('  NODE_VERSION: "22.23.4"', '  NODE_VERSION: "22"'));
-  variants.push(workflow.replace('  NODE_VERSION: "22.23.4"', '  NODE_VERSION: "22.23.4"\n  TF_CLI_ARGS_test: -filter=tests/policy.tftest.hcl'));
+  variants.push(workflow.replace('  NODE_VERSION: "22.23.5"', '  NODE_VERSION: "22"'));
+  variants.push(workflow.replace('  NODE_VERSION: "22.23.5"', '  NODE_VERSION: "22.23.5"\n  TF_CLI_ARGS_test: -filter=tests/policy.tftest.hcl'));
   variants.push(workflow.replace('  terraform:\n', '  terraform:\n    # adversarial cached result step\n    steps:\n      - uses: actions/cache@' + 'a'.repeat(40) + ' # v1\n'));
   variants.push(workflow.replace(terraformCommands[1], terraformCommands[1].replace(' -lockfile=readonly', '')));
   variants.push(workflow.replace(terraformCommands[5], terraformCommands[5].replace(' -backend=false', '')));
