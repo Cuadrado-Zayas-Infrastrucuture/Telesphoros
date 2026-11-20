@@ -256,10 +256,12 @@ describe('moving to another patient', () => {
   });
 
   it('control: the held first-patient reads do show on that patient once they answer', async () => {
-    const { impl, release } = twoPatients(['clinician'], { results: true });
+    const { impl, release, called } = twoPatients(['clinician'], { results: true });
     renderApp(`/patients/${ID}`, { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
     await screen.findByRole('heading', { level: 1, name: 'SYN-004' });
     expect(screen.queryByText(A_ONLY)).not.toBeInTheDocument();
+    // release() frees only the reads already held; the heading can render before the results read is sent.
+    await vi.waitFor(() => expect(called(`/api/v1/evaluations?patientId=${ID}`)).toBe(true));
     await release();
     expect(await screen.findByText(A_ONLY)).toBeVisible();
     expect(screen.getByRole('button', { name: /^drugz:/ })).toBeVisible();
@@ -269,6 +271,8 @@ describe('moving to another patient', () => {
     const { impl, release, called } = twoPatients(['clinician'], { results: true });
     const view = renderApp(`/patients/${ID}`, { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
     await screen.findByRole('heading', { level: 1, name: 'SYN-004' });
+    // The first patient's results read must be held before the switch, or there is no late answer to release.
+    await vi.waitFor(() => expect(called(`/api/v1/evaluations?patientId=${ID}`)).toBe(true));
     await openSecondPatient(view);
     await vi.waitFor(() => expect(called(`/api/v1/evaluations?patientId=${B_ID}`)).toBe(true));
     await release();
