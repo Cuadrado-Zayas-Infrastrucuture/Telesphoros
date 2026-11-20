@@ -42,6 +42,7 @@ import '../../scripts/staging/release/fence-vars.test.mjs';
 import '../../scripts/staging/release/assessment-plan.test.mjs';
 import '../../scripts/staging/release/release-scripts.test.mjs';
 import '../../scripts/staging/release/migration-pending.test.mjs';
+import '../../scripts/staging/release/clinical-review.test.mjs';
 import '../../scripts/staging/release/release-steps.test.mjs';
 import '../../scripts/staging/release/release-after.test.mjs';
 import '../../scripts/staging/release/lambda-build.test.mjs';

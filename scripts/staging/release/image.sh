@@ -3,6 +3,7 @@
 # (docs/ops/image-push.md "Break-glass"). Founder-run, under the claim. Pushes an image; applies nothing in Terraform.
 #   CLAIM_OWNER=NAME scripts/staging/release/image.sh BUILD COMMIT
 # First write why the image is unsigned, one line of 10 to 300 characters, to ~/telesphoros-private/releases/COMMIT/break-glass-reason.txt.
+# A clinical change since the running image also needs releases/COMMIT/clinical-review.json (spec 044; clinical-review.mjs).
 # Needs CI's image job green on COMMIT, or, when the push run skipped it by tree reuse (.github/ci/scope.mjs), on the pull-request head with
 # exactly COMMIT's tree. Builds linux/amd64 from a fresh detached worktree beside the clone (<clone>-release-<commit8>), runs CI's synthetic
 # rehearsal, pushes manual-<sha12>, reads the digest from ECR, waits for ECR's scan of the linux/amd64 manifest inside the index (ECR does not
@@ -64,6 +65,9 @@ REPO_NAME=${REPO_URL#*/}
 TAG=manual-$(git -C "$W" rev-parse --short=12 HEAD)
 OLD=$(running_image)
 echo "repository ${REPO_NAME}, tag ${TAG}; running image ${OLD##*@}"
+# Spec 044 (audit P0-B): a clinical change since the running image needs Kevin's signed review, or on staging the founder's exception, in
+# releases/COMMIT/clinical-review.json. Before anything is pushed: nothing in AWS has changed when this stops.
+node "$HERE/clinical-review.mjs" gate "$C" "$COMMIT" "$OLD" "$OUT" staging </dev/null || die "clinical review refused (docs/ops/staging-release.md, step 4)"
 echo ok
 
 echo "== 2. Build (linux/amd64) and rehearse, unless the tag is already in ECR (tags are immutable)"
