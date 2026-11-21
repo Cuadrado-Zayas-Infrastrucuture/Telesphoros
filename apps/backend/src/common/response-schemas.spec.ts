@@ -1,4 +1,5 @@
 import {
+  genomicProfileDtoSchema,
   patientDemographicsDtoSchema,
   patientLinkDecisionDtoSchema,
   patientMedicationDtoSchema,
@@ -7,6 +8,8 @@ import {
   structuredRecordStateSchema,
 } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
+import { GenomicProfileController } from '../genomic-profile/genomic-profile.controller';
+import type { GenomicProfileService } from '../genomic-profile/genomic-profile.service';
 import { PatientDemographicsController } from '../patient-demographics/patient-demographics.controller';
 import type { PatientDemographicsService } from '../patient-demographics/patient-demographics.service';
 import { ReportPatientLinkController } from '../patient-identity/patient-identity.controller';
@@ -40,6 +43,11 @@ const cases: Case[] = [
     'GET patients/:id/medications',
     patientMedicationsDtoSchema,
     (s) => new PatientMedicationsController({ read: async () => s } as unknown as PatientMedicationsService).get(principal, { id: ID }, {} as never),
+  ],
+  [
+    'GET patients/:id/genomic-profile',
+    genomicProfileDtoSchema,
+    (s) => new GenomicProfileController({ read: async () => s } as unknown as GenomicProfileService).get(principal, { id: ID }, {}),
   ],
   [
     'POST patients/:id/medications',

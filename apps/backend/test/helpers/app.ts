@@ -62,6 +62,8 @@ export interface TestAppOptions {
   /** SYNTHETIC_ASSESSMENT=enabled with the synthetic structured knowledge (or `syntheticKnowledgeDir`): no disposable local run and no pipeline, as the synthetic staging runs. */
   syntheticAssessment?: boolean;
   syntheticKnowledgeDir?: string;
+  /** With `syntheticAssessment`: ASSESSMENT_KNOWLEDGE=signed, reading this signed set with these signers' public keys (spec 044 K2). Test keys only. */
+  signedKnowledge?: { dir: string; signerKeys: string };
   followupWrites?: 'enabled' | 'disabled';
   /**
    * Read reports with the private report-reader engine and its own captures, instead of the test stand-in and the public fixtures. Only specs on the
@@ -207,6 +209,9 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
             SYNTHETIC_ASSESSMENT: 'enabled',
             SYNTHETIC_KNOWLEDGE_DIR: options.syntheticKnowledgeDir ?? SYNTHETIC_STRUCTURED_KNOWLEDGE,
             BUILD_VERSION: options.buildVersion ?? 'test-build-1',
+            ...(options.signedKnowledge
+              ? { ASSESSMENT_KNOWLEDGE: 'signed', SIGNED_KNOWLEDGE_DIR: options.signedKnowledge.dir, KNOWLEDGE_SIGNER_KEYS: options.signedKnowledge.signerKeys }
+              : {}),
           }
         : {}),
       ...(options.evaluationRequests === undefined ? {} : { EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: options.evaluationRequests }),

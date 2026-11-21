@@ -183,6 +183,30 @@ describe('loadEnv', () => {
         expect(() => loadEnv({ ...production, SYNTHETIC_KNOWLEDGE_DIR: '/synthetic' })).toThrow(/SYNTHETIC_KNOWLEDGE_DIR.*SYNTHETIC_ASSESSMENT=enabled/);
         expect(() => loadEnv({ ...switched, SYNTHETIC_ASSESSMENT: 'yes' })).toThrow(/SYNTHETIC_ASSESSMENT/);
       });
+
+      describe('which knowledge it reads (spec 044 K2, decision K2-D1)', () => {
+        const signed = { ...switched, ASSESSMENT_KNOWLEDGE: 'signed', SIGNED_KNOWLEDGE_DIR: '/signed', KNOWLEDGE_SIGNER_KEYS: '{}' };
+
+        it('reads the synthetic set by default, and accepts signed with its directory and signer keys, with or without the synthetic directory (control)', () => {
+          expect(loadEnv(switched).ASSESSMENT_KNOWLEDGE).toBe('synthetic');
+          expect(loadEnv(signed)).toMatchObject({ ASSESSMENT_KNOWLEDGE: 'signed', SIGNED_KNOWLEDGE_DIR: '/signed' });
+          expect(loadEnv({ ...signed, SYNTHETIC_KNOWLEDGE_DIR: undefined }).ASSESSMENT_KNOWLEDGE).toBe('signed');
+        });
+
+        it.each([
+          ['no signed directory', { SIGNED_KNOWLEDGE_DIR: undefined }, /SIGNED_KNOWLEDGE_DIR.*required/],
+          ['no signer keys', { KNOWLEDGE_SIGNER_KEYS: undefined }, /KNOWLEDGE_SIGNER_KEYS.*ASSESSMENT_KNOWLEDGE=signed/],
+          ['a value that is neither synthetic nor signed', { ASSESSMENT_KNOWLEDGE: 'real' }, /ASSESSMENT_KNOWLEDGE/],
+        ])('refuses signed with %s', (_name, over, message) => {
+          expect(() => loadEnv({ ...signed, ...over })).toThrow(message);
+        });
+
+        it('refuses a signed directory beside the synthetic set, and signed or a signed directory while the assessment is off', () => {
+          expect(() => loadEnv({ ...switched, SIGNED_KNOWLEDGE_DIR: '/signed' })).toThrow(/SIGNED_KNOWLEDGE_DIR.*ASSESSMENT_KNOWLEDGE=signed/);
+          expect(() => loadEnv({ ...production, ASSESSMENT_KNOWLEDGE: 'signed' })).toThrow(/ASSESSMENT_KNOWLEDGE.*SYNTHETIC_ASSESSMENT=enabled/);
+          expect(() => loadEnv({ ...production, SIGNED_KNOWLEDGE_DIR: '/signed' })).toThrow(/SIGNED_KNOWLEDGE_DIR.*SYNTHETIC_ASSESSMENT=enabled/);
+        });
+      });
     });
 
     describe('the gene modifier lists (spec 045 N1)', () => {
