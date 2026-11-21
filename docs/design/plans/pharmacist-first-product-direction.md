@@ -23,6 +23,17 @@ defects that come from that shape: a report attached to the first loaded patient
 | **N3** | **Chat is the product's help assistant**: it explains every feature, how things work in the product, FAQs and policies. It is not the clinical interface and never answers a clinical question about a patient. | **Replaces** the 2026-11-02 direction "the primary clinical interface is chat" ([physician-chat-and-patient-record.md](physician-chat-and-patient-record.md)). Spec 024 D3 and spec 038 D3 are amended by the assistant slice (A3), not by this document |
 | **N4** | **The help assistant starts with curated answers, to ship faster and prove the concept**: reviewed articles matched to the question, the screen and the role, with no model. A model is added later as the business lane of the existing agentic design (M0.1 I4: staff SOP and FAQ help, English and Spanish, read and draft only), answering from the same articles. | Revised the same day: the founder first chose a model from the start, then chose curated first. The model's gates (section 6) apply to slice A4 only |
 
+**Amended later on 2026-11-21 (founder),** in [spec 044](../../../specs/044-genomic-profile-medication-check/spec.md):
+
+- **N1 amended (GP-N1):** the clinical screens serve **prescribers and pharmacists**, the prescriber choosing a drug and the pharmacist
+  reviewing a list, on one patient screen.
+- **Order changed (GP-N2):** the patient's genomic profile and a medication check (A2 and B2, merged as spec 044) come first, because they
+  are what reduces trial-and-error prescribing. The worklist home (A1) and the help assistant (A3) follow.
+- **Signers (GP-N3):** both co-founders are pharmacists, so the two-signer rule for knowledge content can be met; the first real content
+  (M2.4) runs beside spec 044 as its slice K.
+- **Correction:** spec 041 slice C ("Pages everywhere": Reports and Follow-ups as pages, a breadcrumb on the record) had already merged
+  when this plan was written. A1 builds on it and does not fold it in.
+
 ## 3. What the research found
 
 Web research on 2026-11-21. **V** = read in the source; **S** = from a search summary or vendor marketing, check before relying.
@@ -126,7 +137,7 @@ panel reads no clinical API (a test asserts it).
 | Order | Slice | Touches | Depends on |
 | --- | --- | --- | --- |
 | 0 | **This plan** | `docs/` only | none |
-| A1 | **Navigation and the worklist home.** Folds in spec 041 slice C and spec 040 slices B and C. The chat leaves the centre; the home becomes the worklist; one read endpoint gathers the existing queues without new clinical logic | Frontend; one read-only API route | N2 |
+| A1 | **Navigation and the worklist home.** Builds on spec 041 slice C (merged); spec 040 slices B and C stay their own approved PRs. The chat leaves the centre; the home becomes the worklist; one read endpoint gathers the existing queues without new clinical logic | Frontend; one read-only API route | N2 |
 | A2 | **The patient PGx profile.** Reads existing evaluations and the structured reconciliation; shows sources, conflicts and holds | Frontend; possibly one read-only route | A1 |
 | A3 | **Help assistant, curated (the proof of concept).** Released to users. The panel; the article format and the first reviewed articles in English and Spanish; help for the current screen and role; search as you type; the deterministic refusal rule for clinical questions; topic counts of what people ask. No model and no new clinical read. Amends spec 024 D3 and spec 038 D3 | Frontend; docs; possibly one route for topic counts | N3, N4, F2, F3 |
 | A4 | **Help assistant, model added.** Answers from the A3 articles with citations; the citation check and refusal on the serving path; the evaluation set built from A3's topics, as a required check; the chosen host, budgets, the dormant switch and kill switch; the curated answers as fallback | `apps/ai-service`, backend, Terraform | A3 in use, AG-D7, F1, R1 to R5 tests |
