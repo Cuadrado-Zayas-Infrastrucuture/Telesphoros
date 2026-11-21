@@ -112,7 +112,8 @@ test('attachments, nested image dialog, feedback and scroll controls remain loca
 });
 test('staged loader and text shimmer describe only simulated activity', async ({ page }) => {
   await signInAs(page, 'alice', '/local-interpretation'); const now = new Date();
-  await page.clock.install({ time: now }); await page.clock.pauseAt(now);
+  // The installed clock follows real time until paused, so pause ahead of `now`: pausing at `now` itself throws "Cannot fast-forward to the past" once any time has passed.
+  await page.clock.install({ time: now }); await page.clock.pauseAt(new Date(now.getTime() + 1000));
   await page.getByRole('button', { name: 'Explain this example', exact: true }).click(); await page.clock.runFor(500);
   await expect(page.getByText('Preparing sample preview…')).toBeVisible();
   const drawer = await evidence(page); await drawer.getByText('Example tool activity', { exact: true }).click();
