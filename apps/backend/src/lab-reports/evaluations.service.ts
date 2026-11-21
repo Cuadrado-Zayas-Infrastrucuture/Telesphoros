@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   buildMeta,
+  MAX_PAGE_SIZE,
   type Paginated,
   type EvaluationCreate,
   type EvaluationDto,
@@ -39,6 +40,11 @@ export const LAB_READER = Symbol('LAB_READER');
 export const SYNTHETIC_KNOWLEDGE = Symbol('SYNTHETIC_KNOWLEDGE');
 /** The scope stored in the binding of a synthetic structured assessment: it never reads a PDF and is never a clinical release. */
 export const STRUCTURED_ASSESSMENT_SCOPE = 'synthetic-structured-assessment';
+/**
+ * The scope of a structured assessment of a synthetic patient made against the signed, real knowledge (spec 044 K2): the patient and report are still
+ * synthetic and it is still never a clinical release; only the guidelines are real. Named apart so the two can never be confused, stored or shown.
+ */
+export const SIGNED_ASSESSMENT_SCOPE = 'synthetic-patient-signed-knowledge';
 /** What a structured assessment refusal says, by plan reason. Nothing from the report is quoted. */
 const STRUCTURED_REFUSALS = {
   'not-recorded': ['structured-not-recorded', 'No stored structured revision exists for this report.'],
@@ -174,7 +180,8 @@ export class EvaluationsService {
 
   /**
    * Assesses the stored structured revision of a report (032 S3, synthetic). Nothing here reads a PDF or runs the reader: the input is the stored
-   * revision and the independent reviews of its findings, evaluated against the SYNTHETIC knowledge only (never the pipeline's). Refused BEFORE anything
+   * revision and the independent reviews of its findings, evaluated against the assessment's own knowledge (the synthetic set, or with
+   * ASSESSMENT_KNOWLEDGE=signed the signed real set; never the pipeline's). Refused BEFORE anything
    * is stored: a report without a verified patient link, one that is not a structured report, a revision whose stored evidence changed or that is not
    * the one under review. Held (stored, no result) for everything incomplete, conflicting or unsupported. The stored evidence the plan rests on (revisions,
    * newest reviews, resolutions) is read again after the ledger lock is held, as the patient link and disputes are; a difference plans again, once more.
@@ -204,7 +211,7 @@ export class EvaluationsService {
         sha256: report.sha256 as string,
         objectVersion: report.objectVersion as string,
       });
-      const plan = planStructuredAssessment(principal.tenantId, report, snapshot);
+      const plan = planStructuredAssessment(principal.tenantId, report, snapshot, knowledge);
       if (plan.kind === 'refused') {
         const [code, message] = STRUCTURED_REFUSALS[plan.reason];
         throw AppException.conflictBecause(code, message);
@@ -253,6 +260,34 @@ export class EvaluationsService {
       );
     }
     return { data: out, meta: buildMeta(page, pageSize, total) };
+  }
+
+  /**
+   * Spec 044 slice A: every current evaluation of one patient, each as the list presents it, with the RxCUI each stored result carries (by
+   * result id; null for a result from schema 1.2 knowledge). The evaluation DTO does not send that identifier (founder decision B-D3), so a
+   * frontend's strict parse of an evaluation never meets an unknown field. Read in pages of the list's largest size, at most
+   * `maxPages` of them; `capped` says whether more remain. Read only.
+   */
+  async currentForPatient(principal: Principal, patientId: string, maxPages: number): Promise<{ items: CurrentEvaluation[]; capped: boolean }> {
+    const ledger = this.need(this.ledger);
+    const items: CurrentEvaluation[] = [];
+    for (let page = 0; page < maxPages; page += 1) {
+      const view = await ledger.evaluationPage(principal.tenantId, { patientId, current: true }, { offset: page * MAX_PAGE_SIZE, limit: MAX_PAGE_SIZE });
+      for (const record of view.items) {
+        const context = view.contexts.get(record.id);
+        if (!context) throw AppException.pipelineMisconfigured();
+        const evaluation = toEvaluationSummaryDto(record, {
+          ...context,
+          current: view.currentIds.get(record.reportId as string) === record.id,
+          activeDisputes: view.activeDisputes,
+          patientLink: view.links.get(record.reportId as string) ?? 'unverified',
+          loadedKnowledgeSetId: this.loadedKnowledgeSetId(record),
+        });
+        items.push({ evaluation, drugRxcuiByResultId: drugRxcuisOf(record) });
+      }
+      if ((page + 1) * MAX_PAGE_SIZE >= view.total) return { items, capped: false };
+    }
+    return { items, capped: true };
   }
 
   async get(principal: Principal, id: string): Promise<EvaluationDto> {
@@ -368,7 +403,7 @@ export class EvaluationsService {
     const { revision } = plan;
     const binding: Record<string, unknown> = {
       version: 'structured-assessment-binding/1',
-      scope: STRUCTURED_ASSESSMENT_SCOPE,
+      scope: knowledge.files.some((file) => !file.synthetic) ? SIGNED_ASSESSMENT_SCOPE : STRUCTURED_ASSESSMENT_SCOPE,
       synthetic: true,
       clinicalUse: 'not-approved',
       revisionId: revision.id,
@@ -384,6 +419,8 @@ export class EvaluationsService {
       return { ...common, disposition: 'held', holdCode: plan.holdCode, binding, knowledgeSetId: knowledge.id, geneInputs: [], occurrences: [], results: [], geneStates: [] };
     }
     binding.reviewIds = plan.reviewIds;
+    // K2-D2: which genes entered as the laboratory's own phenotype, and under which of its translations. Absent when none did, so every other binding is as before.
+    if (plan.labPhenotypes.length > 0) binding.labPhenotypes = plan.labPhenotypes;
     const overlay = this.overlayFor(knowledge, active, binding);
     const engine = evaluate(overlay.knowledge, plan.geneInputs);
     return {
@@ -408,6 +445,17 @@ export class EvaluationsService {
   private loadedKnowledgeSetId(record: Projected): string | null {
     return (record.structuredRevisionId === undefined ? this.knowledge : this.syntheticKnowledge)?.id ?? null;
   }
+}
+
+/** One current evaluation and the RxCUI its stored results carry (spec 044 slice A). */
+export interface CurrentEvaluation {
+  evaluation: EvaluationSummaryDto;
+  drugRxcuiByResultId: ReadonlyMap<string, string | null>;
+}
+
+/** The stored RxCUI of each result, by result id. Only results made from schema 1.3 knowledge carry one (migration 0071); the rest map to null. */
+function drugRxcuisOf(record: Projected): Map<string, string | null> {
+  return new Map((record.results as Array<Record<string, unknown>>).map((r) => [r.id as string, typeof r.drugRxcui === 'string' ? r.drugRxcui : null]));
 }
 
 /** The state is derived from these same corrections (mapper), so what is shown can never disagree with the history shown beside it. */
