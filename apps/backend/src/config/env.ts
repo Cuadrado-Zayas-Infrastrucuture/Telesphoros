@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { z } from 'zod';
 import { evaluationExecutionProfileSchema } from '@telesphoros/shared-types';
 
@@ -142,6 +143,12 @@ export const envSchema = z
      * infrastructure, never read from the repository. Under the production rules a real reviewed file needs two of them.
      */
     KNOWLEDGE_SIGNER_KEYS: z.string().min(1).optional(),
+    /**
+     * The gene modifier lists (spec 045 D2): the medications a signed source lists as strong or moderate inhibitors or inducers of a gene's
+     * protein. Its own directory, never a CPIC knowledge directory, always loaded under the production rules. Unset: no list is loaded, and
+     * medications that can change a gene's effect are not checked (PN-6).
+     */
+    GENE_MODIFIERS_DIR: z.string().min(1).optional(),
     /** Stored with every evaluation as the code that produced it. Required when enabled. */
     BUILD_VERSION: z
       .string()
@@ -290,6 +297,21 @@ export const envSchema = z
       if (env.LOCAL_STORAGE_RUN_ID) problem('SYNTHETIC_ASSESSMENT', 'cannot be enabled in a disposable local storage run');
     } else if (env.SYNTHETIC_KNOWLEDGE_DIR) {
       problem('SYNTHETIC_KNOWLEDGE_DIR', 'can only be set when SYNTHETIC_ASSESSMENT=enabled');
+    }
+
+    if (env.GENE_MODIFIERS_DIR) {
+      // Spec 045 PN-1: the lists load under the production rules only, which check two signatures against these keys.
+      if (!env.KNOWLEDGE_SIGNER_KEYS) problem('GENE_MODIFIERS_DIR', 'needs KNOWLEDGE_SIGNER_KEYS: the lists load under the production rules, which check their signatures');
+      // Only the genomic profile reads the lists, and it answers only with one of these on.
+      if (env.SYNTHETIC_ASSESSMENT !== 'enabled' && env.LAB_REPORT_PIPELINE !== 'enabled')
+        problem('GENE_MODIFIERS_DIR', 'can only be set when SYNTHETIC_ASSESSMENT=enabled or LAB_REPORT_PIPELINE=enabled');
+      // Spec 045 D2: never inside the CPIC knowledge, so a list can never be read as a guideline or a guideline as a list.
+      for (const [name, directory] of [
+        ['KNOWLEDGE_DIR', env.KNOWLEDGE_DIR],
+        ['SYNTHETIC_KNOWLEDGE_DIR', env.SYNTHETIC_KNOWLEDGE_DIR],
+      ] as const) {
+        if (directory && resolve(directory) === resolve(env.GENE_MODIFIERS_DIR)) problem('GENE_MODIFIERS_DIR', `must be its own directory, not ${name}`);
+      }
     }
 
     // Checked on its own, not only through the pipeline: production refuses the queued path even with the pipeline off.

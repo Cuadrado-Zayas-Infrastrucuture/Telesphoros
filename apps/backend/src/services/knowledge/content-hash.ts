@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { KnowledgeFile } from '@telesphoros/cpic-schema';
+import type { SignableKnowledgeFile } from '@telesphoros/cpic-schema';
 
 /** JSON with object keys sorted at every level, so the same content always serialises the same way. */
 export function canonicalJson(value: unknown): string {
@@ -18,14 +18,14 @@ const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').diges
  * its own hash). Formatting, key order and whitespace in the file do not change it; any change to
  * content does.
  */
-export function contentSha256(file: KnowledgeFile): string {
+export function contentSha256(file: SignableKnowledgeFile): string {
   const { review: _review, ...content } = file;
   void _review;
   return sha256(canonicalJson(content));
 }
 
 /** Hash of the whole file including its review block, used to identify a knowledge set. */
-export function fullSha256(file: KnowledgeFile): string {
+export function fullSha256(file: SignableKnowledgeFile): string {
   return sha256(canonicalJson(file));
 }
 
