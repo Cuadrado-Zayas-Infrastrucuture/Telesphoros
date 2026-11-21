@@ -9,7 +9,7 @@ Read against `main` at `7f5f3cf`.
   evaluations with strict schemas (`clinicianDecisions.ts`, `StructuredAssessment.tsx`), so a new field on the DTO would make an older
   frontend refuse every evaluation response for as long as a release runs the new API beside the old frontend. Instead
   `EvaluationsService.currentForPatient` returns each current evaluation's DTO **beside** a map of the RxCUI each stored result carries, read
-  from the same records; the evaluation responses are unchanged. Slice B adds `drugRxcui` to the DTO, releasing the frontend first. The
+  from the same records; the evaluation responses are unchanged. Founder decision B-D3 (2026-11-21, slice B plan) then dropped `drugRxcui` from the DTO altogether: the screen gets what it needs from this route. The
   mapper (`lab-report.mapper.ts`) is therefore not touched.
 - **Rule 2, said exactly:** only sources that resolved the gene are compared. A source that could not resolve it, beside one that did, is
   listed and does not make a conflict.

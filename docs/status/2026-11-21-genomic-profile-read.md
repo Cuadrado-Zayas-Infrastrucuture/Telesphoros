@@ -9,6 +9,6 @@ against the stored results by RxNorm id: `review`, `held`, `no-recommendation` o
 through their services, runs no engine and writes nothing. A new module, `apps/backend/src/genomic-profile/`, is the only place that reads
 both (the MD-6 boundary test now says so); `LabReportsModule` exports the evaluations service and its read guard, and
 `PatientMedicationsModule` exports its service. The evaluation DTO is unchanged: the stored RxCUI reaches the profile beside the DTO, so an
-older frontend never meets an unknown field; slice B adds it to the DTO with the frontend released first. The route is pinned in
+older frontend never meets an unknown field, and founder decision B-D3 keeps it off the DTO for good. The route is pinned in
 `test/route-set.json` and listed among what the synthetic assessment switch opens. The code was written without running it here (founder
 decision P2); CI is its first run. Validation note: `docs/clinical-validation/genomic-profile-read.md`.

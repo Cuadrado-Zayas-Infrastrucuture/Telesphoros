@@ -258,8 +258,8 @@ export class EvaluationsService {
 
   /**
    * Spec 044 slice A: every current evaluation of one patient, each as the list presents it, with the RxCUI each stored result carries (by
-   * result id; null for a result from schema 1.2 knowledge). The evaluation DTO does not send that identifier yet: slice B adds it, with the
-   * frontend released first, so an older frontend's strict parse never meets an unknown field. Read in pages of the list's largest size, at most
+   * result id; null for a result from schema 1.2 knowledge). The evaluation DTO does not send that identifier (founder decision B-D3), so a
+   * frontend's strict parse of an evaluation never meets an unknown field. Read in pages of the list's largest size, at most
    * `maxPages` of them; `capped` says whether more remain. Read only.
    */
   async currentForPatient(principal: Principal, patientId: string, maxPages: number): Promise<{ items: CurrentEvaluation[]; capped: boolean }> {

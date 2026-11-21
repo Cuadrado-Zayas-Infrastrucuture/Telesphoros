@@ -46,4 +46,4 @@ before merge.
 ## Not covered
 
 No real RxNorm id, gene or guideline is used. Combination products are not split (spec 039 D2). The evaluation DTO does not yet carry
-`drugRxcui`; slice B adds it, releasing the frontend first.
+`drugRxcui`, and by founder decision B-D3 it will not: the profile route is where it is read.
