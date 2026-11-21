@@ -39,7 +39,9 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
       {combination && <p className="text-sm">{PROFILE_WORDS.combination}</p>}
       {check.knowledgeChanged && <p className="text-sm font-medium text-warning">{PROFILE_WORDS.knowledgeChanged}</p>}
       {conflict && <p className="text-sm font-medium text-warning">{conflict}</p>}
-      {check.results.filter(showsWording).map((result) => <LayerOne key={result.resultId} result={result} genes={genes} />)}
+      {check.results.filter(showsWording).map((result) => (
+        <LayerOne key={result.resultId} result={result} genes={genes} />
+      ))}
       {check.results.length > 0 && (
         <div>
           <Button variant="outline" size="sm" aria-expanded={open} aria-controls={`${id}-layers`} onClick={() => setOpen((value) => !value)}>
@@ -49,7 +51,9 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
       )}
       {open && (
         <div id={`${id}-layers`} className="flex flex-col gap-4 border-t border-border pt-3">
-          {check.results.map((result) => <ResultLayers key={result.resultId} result={result} genes={genes} knowledgeChanged={check.knowledgeChanged} />)}
+          {check.results.map((result) => (
+            <ResultLayers key={result.resultId} result={result} genes={genes} knowledgeChanged={check.knowledgeChanged} />
+          ))}
         </div>
       )}
     </article>
@@ -83,7 +87,9 @@ function ResultLayers({ result, genes, knowledgeChanged }: { result: GenomicChec
       <section className="flex flex-col gap-1">
         <h5 className="text-sm font-semibold">{PROFILE_WORDS.evidenceHeading}</h5>
         <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
-          {result.genes.map((name) => <GeneEvidence key={name} name={name} gene={genes.find((gene) => gene.gene === name)} />)}
+          {result.genes.map((name) => (
+            <GeneEvidence key={name} name={name} gene={genes.find((gene) => gene.gene === name)} />
+          ))}
           <dt className="text-muted-foreground">Guideline</dt>
           <dd className="wrap-anywhere sm:col-span-2">{guideline ?? 'Not recorded'}</dd>
           <dt className="text-muted-foreground">Table and row</dt>
