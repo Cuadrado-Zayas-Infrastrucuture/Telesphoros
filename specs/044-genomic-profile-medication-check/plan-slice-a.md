@@ -3,6 +3,20 @@
 **Status**: **approved by the founder on 2026-11-21**, with P1 and P2 decided (below). Plan only. Spec 044 itself was approved by the founder on 2026-11-21 ("Approved").
 Read against `main` at `7f5f3cf`.
 
+## Amended during implementation (2026-11-21)
+
+- **`drugRxcui` is not added to the evaluation DTO in slice A** (item 1 below, and the first row of "Touched"). The frontend parses
+  evaluations with strict schemas (`clinicianDecisions.ts`, `StructuredAssessment.tsx`), so a new field on the DTO would make an older
+  frontend refuse every evaluation response for as long as a release runs the new API beside the old frontend. Instead
+  `EvaluationsService.currentForPatient` returns each current evaluation's DTO **beside** a map of the RxCUI each stored result carries, read
+  from the same records; the evaluation responses are unchanged. Slice B adds `drugRxcui` to the DTO, releasing the frontend first. The
+  mapper (`lab-report.mapper.ts`) is therefore not touched.
+- **Rule 2, said exactly:** only sources that resolved the gene are compared. A source that could not resolve it, beside one that did, is
+  listed and does not make a conflict.
+- **Combination products** are matched only by a guideline stating the combination's own RxCUI (spec 039 D2). A combination medication
+  therefore reads `no-guideline-loaded` even when a guideline for one of its ingredients is loaded. How slice B shows that is a founder
+  decision, recorded in `docs/clinical-validation/genomic-profile-read.md`.
+
 ## What slice A delivers
 
 1. **`drugRxcui` on every result the API returns.** `evaluationResultDtoSchema` gains `drugRxcui: string | null`. The value is already read
