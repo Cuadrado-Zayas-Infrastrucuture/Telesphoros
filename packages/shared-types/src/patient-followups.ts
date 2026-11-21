@@ -99,7 +99,7 @@ export type FollowupAvailability = z.infer<typeof followupAvailabilitySchema>;
 /** The `reason` a refused follow-up write carries when recording is paused (retrying will not help). */
 export const FOLLOWUP_WRITES_PAUSED = 'followup-writes-paused';
 /**
- * Spec 045: a reminder assigned to the reader that another clinician closed, not yet acknowledged. The note is the closer's own required note
+ * Spec 047: a reminder assigned to the reader that another clinician closed, not yet acknowledged. The note is the closer's own required note
  * (or a redaction notice); `closedBy` is the closer's subject id, shown through the app's clinician label.
  */
 export const followupClosureNoticeSchema = z.strictObject({

@@ -67,7 +67,7 @@ const relationships: [string, string, string, string][] = [
   ['patient_followups_note_fk', 'patient_followups', 'note_id,tenant_id', 'event_notes:id,tenant_id'],
   ['patient_followups_medication_id_fkey', 'patient_followups', 'medication_id', 'patient_medications:id'],
   ['patient_followups_decision_id_fkey', 'patient_followups', 'decision_id', 'clinician_result_decisions:id'],
-  // Spec 045: an acknowledgement names the dismiss version and the patient; the trigger checks they agree.
+  // Spec 047: an acknowledgement names the dismiss version and the patient; the trigger checks they agree.
   ['patient_followup_closure_acks_followup_id_fkey', 'patient_followup_closure_acks', 'followup_id', 'patient_followups:id'],
   ['patient_followup_closure_acks_patient_fk', 'patient_followup_closure_acks', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_medications_patient_fk', 'patient_medications', 'patient_id,tenant_id', 'patients:id,tenant_id'],

@@ -930,7 +930,7 @@ describe('patient follow-ups down guard as the non-superuser migrator', () => {
   });
 });
 
-describe('follow-up closure acknowledgements down guard as the non-superuser migrator (spec 045)', () => {
+describe('follow-up closure acknowledgements down guard as the non-superuser migrator (spec 047)', () => {
   it('refuses populated acknowledgements despite FORCE RLS and reverses the empty migration to the event types before it', async () => {
     const f = await fixture();
     const above = revertAbove('followup_closure_acks');

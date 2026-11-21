@@ -1,5 +1,5 @@
 -- compat: breaking
--- Spec 045 (audit P0-C): an acknowledgement that a reminder's assignee saw a colleague close it. One row per dismiss version written by
+-- Spec 047 (audit P0-C): an acknowledgement that a reminder's assignee saw a colleague close it. One row per dismiss version written by
 -- someone other than the previous version's assignee, recorded by that assignee. A ledger record: append-only, FORCE row-level security, one
 -- event each (type `patient-followup-closure-ack`). Who may dismiss, the required note and needs_reassignment are unchanged (0067).
 --

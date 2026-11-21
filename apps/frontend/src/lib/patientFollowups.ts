@@ -101,7 +101,7 @@ export async function readFollowupResponseSummary(apiFetch: ApiFetch, signal?: A
   return followupResponseSummarySchema.parse(await response.json());
 }
 
-/** Spec 045: the signed-in clinician's reminders that someone else closed, until each is acknowledged. */
+/** Spec 047: the signed-in clinician's reminders that someone else closed, until each is acknowledged. */
 export async function readFollowupClosures(apiFetch: ApiFetch, signal?: AbortSignal) {
   const response = await apiFetch('/api/v1/followups/closures', { signal });
   if (!response.ok) {

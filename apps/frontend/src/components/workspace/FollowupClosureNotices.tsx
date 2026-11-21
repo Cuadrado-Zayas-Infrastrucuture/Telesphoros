@@ -9,7 +9,7 @@ import { acknowledgeFollowupClosure, announceFollowupsChanged, onFollowupsChange
 const day = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 /**
- * Spec 045 FN-5: reminders assigned to the signed-in clinician that someone else closed, in words, each until it is acknowledged.
+ * Spec 047 FN-5: reminders assigned to the signed-in clinician that someone else closed, in words, each until it is acknowledged.
  * Renders nothing while there are none, or when they cannot be read (the list below still says what it can).
  */
 export function FollowupClosureNotices() {

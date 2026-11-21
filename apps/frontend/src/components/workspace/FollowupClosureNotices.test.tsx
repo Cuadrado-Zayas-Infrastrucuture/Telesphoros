@@ -5,7 +5,7 @@ import { followupClosureNoticesSchema } from '@telesphoros/shared-types';
 import { describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
-// Spec 045 FN-5: the Follow-ups page shows reminders someone else closed, in words, until the assignee acknowledges each one.
+// Spec 047 FN-5: the Follow-ups page shows reminders someone else closed, in words, until the assignee acknowledges each one.
 const NOW = '2026-11-01T12:00:00.000Z';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const notice = {
@@ -43,7 +43,7 @@ function open(notices: unknown[], acknowledgeStatus = 201) {
   return { ...view, fetchImpl };
 }
 
-describe('reminders closed by someone else (spec 045)', () => {
+describe('reminders closed by someone else (spec 047)', () => {
   it('the fixture is a valid notice list', () => {
     expect(() => followupClosureNoticesSchema.parse({ items: [notice], total: 1 })).not.toThrow();
   });

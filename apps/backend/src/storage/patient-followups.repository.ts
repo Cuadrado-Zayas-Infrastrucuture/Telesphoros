@@ -16,7 +16,7 @@ export abstract class PatientFollowupsRepository {
   abstract read(tenant: string, patient: string | null, query: FollowupQuery & Partial<FollowupInboxFilters>, actor: string): Promise<FollowupList>;
   abstract record(tenant: string, actor: string, patient: string, input: FollowupInput): Promise<FollowupDto>;
   abstract assignees(tenant: string): Promise<string[]>;
-  /** Spec 045: the reader's reminders that someone else closed and the reader has not acknowledged. */
+  /** Spec 047: the reader's reminders that someone else closed and the reader has not acknowledged. */
   abstract closures(tenant: string, actor: string): Promise<FollowupClosureNotices>;
   abstract acknowledge(tenant: string, actor: string, thread: string, input: FollowupClosureAckInput): Promise<FollowupClosureAck>;
 }

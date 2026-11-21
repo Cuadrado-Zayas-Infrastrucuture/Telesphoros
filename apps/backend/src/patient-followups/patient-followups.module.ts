@@ -43,7 +43,7 @@ class FollowupsService {
     }
     return this.records.record(principal.tenantId, principal.sub, id, input);
   }
-  /** Spec 045 FN-3: behind the same switch as every follow-up write. */
+  /** Spec 047 FN-3: behind the same switch as every follow-up write. */
   async acknowledge(principal: Principal, thread: string, input: FollowupClosureAckInput) {
     if (!this.recordingEnabled()) {
       const message = 'Follow-up recording is paused. Your entries can be retried later.';
@@ -96,13 +96,13 @@ class FollowupsController {
   availability(): FollowupAvailability {
     return { recording: this.service.recordingEnabled() ? 'enabled' : 'paused' };
   }
-  /** Spec 045 FN-2: the caller's reminders that someone else closed, until the caller acknowledges each. */
+  /** Spec 047 FN-2: the caller's reminders that someone else closed, until the caller acknowledges each. */
   @Get('closures')
   @Roles('clinician', 'reviewer')
   closures(@CurrentPrincipal() principal: Principal) {
     return this.service.records.closures(principal.tenantId, principal.sub);
   }
-  /** Spec 045 FN-3: `:id` is the thread; the body names the dismiss version. */
+  /** Spec 047 FN-3: `:id` is the thread; the body names the dismiss version. */
   @Post(':id/acknowledge')
   @Roles('clinician')
   @HttpCode(201)

@@ -209,7 +209,7 @@ export class PostgresPatientFollowupsRepository extends PatientFollowupsReposito
     }
   }
   /**
-   * Spec 045 FN-1, FN-2: dismiss versions written by someone else whose previous version was assigned to `actor`, not yet acknowledged.
+   * Spec 047 FN-1, FN-2: dismiss versions written by someone else whose previous version was assigned to `actor`, not yet acknowledged.
    * One statement under the caller's tenant (row-level security, and the tenant named in the query as well).
    */
   closures(tenant: string, actor: string): Promise<FollowupClosureNotices> {
@@ -256,7 +256,7 @@ export class PostgresPatientFollowupsRepository extends PatientFollowupsReposito
     });
   }
 
-  /** Spec 045 FN-3, FN-4: one acknowledgement and its ledger event, in one transaction. The trigger of migration 0076 is the guarantee. */
+  /** Spec 047 FN-3, FN-4: one acknowledgement and its ledger event, in one transaction. The trigger of migration 0076 is the guarantee. */
   async acknowledge(tenant: string, actor: string, thread: string, input: FollowupClosureAckInput): Promise<FollowupClosureAck> {
     const hash = createHash('sha256')
       .update(JSON.stringify([thread, input.followupId]))

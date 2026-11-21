@@ -1,4 +1,4 @@
-# Tasks: Notice when someone else closes your reminder (spec 045)
+# Tasks: Notice when someone else closes your reminder (spec 047)
 
 | Task | Owner | Exit condition | State |
 | --- | --- | --- | --- |

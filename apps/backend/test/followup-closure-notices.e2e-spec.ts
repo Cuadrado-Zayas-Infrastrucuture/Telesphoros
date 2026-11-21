@@ -1,4 +1,4 @@
-// Spec 045 (audit P0-C): a reminder closed by someone other than its assignee shows to the assignee until they acknowledge it. Real PostgreSQL
+// Spec 047 (audit P0-C): a reminder closed by someone other than its assignee shows to the assignee until they acknowledge it. Real PostgreSQL
 // through the application's own role; synthetic people, patients and notes only.
 import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -10,7 +10,7 @@ import { bearer } from './helpers/tokens';
 import { Database } from '../src/db/database';
 import { LedgerVerifier } from '../src/ledger/verifier';
 
-(usingPostgres() ? describe : describe.skip)('follow-up closure notices (spec 045): real PostgreSQL HTTP contract', () => {
+(usingPostgres() ? describe : describe.skip)('follow-up closure notices (spec 047): real PostgreSQL HTTP contract', () => {
   let db: EphemeralDatabase;
   let app: NestExpressApplication;
   let lab: LabPipeline;
