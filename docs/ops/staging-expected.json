@@ -1,11 +1,11 @@
 {
-  "checked": "2026-11-19",
-  "appliedCommit": "f9571f06c781b07f2e802acb75cfd8947049efe9",
+  "checked": "2026-11-21",
+  "appliedCommit": "5fe8fdbd0f64c50d9cacf1049260c0ea00e510ef",
   "image": {
-    "digest": "sha256:84886621b6d45f937543b2e4afec67d37515ccc6325037da6ea51ebf2e286108",
-    "commit": "f9571f06c781b07f2e802acb75cfd8947049efe9"
+    "digest": "sha256:f561975b26f06c7ee6dab59d79eba50cf45c4250373fac6a874a0b331ab6018b",
+    "commit": "5fe8fdbd0f64c50d9cacf1049260c0ea00e510ef"
   },
-  "taskDefinitions": { "api": 23, "worker": 18 },
+  "taskDefinitions": { "api": 24, "worker": 19 },
   "alarms": 44,
   "newestMigration": "0075",
   "cloudfrontCachePaths": ["/assets/*"],
@@ -102,8 +102,18 @@
     },
     {
       "id": "break-glass-84886621b6d4",
-      "reason": "Pushed by hand on 2026-11-19 (commit f9571f06): the organization SCP denies GitHub OIDC, so CI cannot sign. The running image.",
+      "reason": "Pushed by hand on 2026-11-19 (commit f9571f06): the organization SCP denies GitHub OIDC, so CI cannot sign. No longer running.",
       "reviewBy": "2026-12-19"
+    },
+    {
+      "id": "break-glass-93fed636a8f9",
+      "reason": "Pushed by hand on 2026-11-21 (commit f681000d): the organization SCP denies GitHub OIDC, so CI cannot sign. Never ran: the release check refused its MIGRATE plan.",
+      "reviewBy": "2026-12-21"
+    },
+    {
+      "id": "break-glass-f561975b26f0",
+      "reason": "Pushed by hand on 2026-11-21 (commit 5fe8fdbd): the organization SCP denies GitHub OIDC, so CI cannot sign. The running image.",
+      "reviewBy": "2026-12-21"
     }
   ]
 }
