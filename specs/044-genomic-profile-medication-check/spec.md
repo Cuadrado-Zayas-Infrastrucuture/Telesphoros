@@ -4,7 +4,9 @@
 
 **Created**: 2026-11-21
 
-**Status**: **Draft, awaiting founder approval. Specification only: no code, migration, knowledge file or clinical hold changes.** It takes
+**Status**: **Approved by the founder on 2026-11-21 ("Approved"), decisions D1 to D9 as written. G1 answered in part: the other co-founder
+holds the second knowledge-signing key. Specification only: no code, migration, knowledge file or clinical hold changes.** Slice A's plan is
+[plan-slice-a.md](plan-slice-a.md). It takes
 over the draft [spec 031](../031-medication-gene-flags/spec.md) (medication–gene review flags), whose proposed decisions are carried into
 section 4 for approval, and it is slice A2 plus B2 of the
 [product direction plan](../../docs/design/plans/pharmacist-first-product-direction.md), merged and moved first.
@@ -96,7 +98,7 @@ only once M2.4 lands, which is why the content track (section 6) runs beside the
 | GP-7 | The route performs no write and runs no engine (D6). A test asserts it calls neither the engine nor any repository write. |
 | GP-8 | Nothing about a medication, gene, phenotype or patient is written to logs, security events or URLs other than the route's own path and the `rxcui` query. |
 | GP-9 | The screen works with 20 medications and 15 genes at 390 px and 1280 px, light and dark, keyboard only and with a screen reader; text is the signal, never colour alone. |
-| GP-10 | With knowledge empty (production today), the profile still shows genes from evaluations and every medication reads "No guideline loaded"; nothing errors. |
+| GP-10 | With no guideline loaded for any medication, the profile still shows genes from evaluations and every medication reads "No guideline loaded"; nothing errors. Where evaluations cannot be read at all (both evaluation switches off), the route answers 503 like `GET /evaluations` and the screen says the profile is unavailable. |
 
 ## 6. Slices
 
@@ -111,14 +113,14 @@ Slices A and B can be built and tested now, on synthetic data. Slice K is what m
 
 ## 7. Decisions only the founders can make (open)
 
-- **G1. The second signer.** Whether the other co-founder holds the second signing key, and, separately, whether the same person becomes the
-  named second approver that the two-person rules wait for (M0.1 I5 d, approval tiers D-A7, the second-reviewer decision FD-8). These are
-  separate seats; one person may hold several, and who holds which is the founders' decision.
+- **G1. The second signer.** **Answered 2026-11-21 (founder): the other co-founder holds the second signing key.** Still open, and
+  separate: whether the same person becomes the named second approver that the two-person rules wait for (M0.1 I5 d, approval tiers D-A7, the
+  second-reviewer decision FD-8). One person may hold several seats; who holds which is the founders' decision.
 - **G2. The first gene–drug pairs.** Suggested for slice K, all with published CPIC guidelines: CYP2C19 with clopidogrel; CYP2C19 and CYP2D6
   with the SSRIs (sertraline is already on the founder's waiting list); SLCO1B1 with simvastatin; DPYD with fluoropyrimidines. The founders
   choose, and the choice is checked against the current CPIC guideline versions when slice K is planned.
 - **G3. The wording in D4**, word by word, in English and Spanish. The founders are the clinical owners of it.
-- **G4. Who sees the profile.** D7 proposes all clinical read roles, `reader` included, as the patient page does today.
+- **G4. Who sees the profile.** Settled by the approval of D7: all clinical read roles, `reader` included, as the patient page does today.
 
 ## 8. Out of scope
 
