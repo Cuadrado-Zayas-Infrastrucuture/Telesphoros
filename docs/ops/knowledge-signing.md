@@ -43,9 +43,9 @@ The founder runs these steps; an agent only prepares them.
    ```
    `aws sts get-caller-identity --profile <id>-signer` asks for the MFA code and shows the signing role.
 
-**The keys themselves are a later step.** Naming the signers in `knowledge_signers` also gives the API task `KNOWLEDGE_SIGNER_KEYS`, a task definition
-change that an INFRA plan refuses, while the keys are new resources that an IMAGE plan refuses
-(`scripts/staging/release/release-check.mjs`). No release mode carries both today.
+**The keys themselves are the next step, in two releases.** Once each person can take on their signing role, name the signers in
+`knowledge_signers` with those roles' ARNs: an INFRA plan creates the keys and leaves the API task alone, and the next IMAGE release turns on
+`knowledge_signer_keys_on_api` so the API receives `KNOWLEDGE_SIGNER_KEYS` (steps below).
 
 ## Steps
 
