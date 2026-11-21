@@ -98,6 +98,30 @@ export const followupAvailabilitySchema = z.strictObject({ recording: z.enum(['e
 export type FollowupAvailability = z.infer<typeof followupAvailabilitySchema>;
 /** The `reason` a refused follow-up write carries when recording is paused (retrying will not help). */
 export const FOLLOWUP_WRITES_PAUSED = 'followup-writes-paused';
+/**
+ * Spec 045: a reminder assigned to the reader that another clinician closed, not yet acknowledged. The note is the closer's own required note
+ * (or a redaction notice); `closedBy` is the closer's subject id, shown through the app's clinician label.
+ */
+export const followupClosureNoticeSchema = z.strictObject({
+  followupId: uuid,
+  threadId: uuid,
+  patientId: uuid,
+  patientLabel: z.string(),
+  medicationName: z.string(),
+  closedBy: z.string(),
+  closedAt: z.iso.datetime(),
+  note: z.string(),
+  noteRedacted: z.boolean(),
+});
+export type FollowupClosureNotice = z.infer<typeof followupClosureNoticeSchema>;
+/** At most 50 notices, newest first; `total` counts all of them. */
+export const followupClosureNoticesSchema = z.strictObject({ items: z.array(followupClosureNoticeSchema), total: z.int().min(0) });
+export type FollowupClosureNotices = z.infer<typeof followupClosureNoticesSchema>;
+/** Acknowledging one closure: the dismiss version, by its id; a repeated `requestId` returns the same acknowledgement. */
+export const followupClosureAckInputSchema = z.strictObject({ requestId: uuid, followupId: uuid });
+export type FollowupClosureAckInput = z.infer<typeof followupClosureAckInputSchema>;
+export const followupClosureAckSchema = z.strictObject({ id: uuid, followupId: uuid, threadId: uuid, acknowledgedAt: z.iso.datetime() });
+export type FollowupClosureAck = z.infer<typeof followupClosureAckSchema>;
 export const followupSummaryQuerySchema = z.strictObject({});
 export const followupResponseSummarySchema = z
   .strictObject({

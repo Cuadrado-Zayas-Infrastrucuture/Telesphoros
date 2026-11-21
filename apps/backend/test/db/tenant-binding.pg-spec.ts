@@ -245,6 +245,8 @@ describe('T020 vacuity guard: every tenant-policy table is seeded here or listed
     // Spec 029: patient-medications.pg-spec.ts seeds a record and proves cross-tenant reads and writes are refused.
     'patient_medications',
     'patient_followups',
+    // Spec 045: followup-closure-notices.e2e-spec.ts seeds acknowledgements and proves another organization cannot see them.
+    'patient_followup_closure_acks',
     // Spec 032: structured-report-records.e2e-spec.ts seeds evidence and verifies API scope and finding-view RLS.
     'structured_report_revisions',
     // Spec 032 S2c: structured-findings-review.e2e-spec.ts seeds decisions through the API and proves the database guards.

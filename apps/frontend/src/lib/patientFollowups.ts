@@ -1,6 +1,8 @@
 import {
   FOLLOWUP_WRITES_PAUSED,
   followupAssigneesSchema,
+  followupClosureAckSchema,
+  followupClosureNoticesSchema,
   followupAvailabilitySchema,
   followupDtoSchema,
   followupInputSchema,
@@ -97,4 +99,26 @@ export async function readFollowupResponseSummary(apiFetch: ApiFetch, signal?: A
     throw new SubmitError('Response summary could not be loaded.', response.status);
   }
   return followupResponseSummarySchema.parse(await response.json());
+}
+
+/** Spec 045: the signed-in clinician's reminders that someone else closed, until each is acknowledged. */
+export async function readFollowupClosures(apiFetch: ApiFetch, signal?: AbortSignal) {
+  const response = await apiFetch('/api/v1/followups/closures', { signal });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Closed reminders could not be loaded.', response.status);
+  }
+  return followupClosureNoticesSchema.parse(await response.json());
+}
+export async function acknowledgeFollowupClosure(apiFetch: ApiFetch, thread: string, followupId: string) {
+  const response = await apiFetch(`/api/v1/followups/${encodeURIComponent(thread)}/acknowledge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: crypto.randomUUID(), followupId }),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Acknowledgement was not saved. Please retry.', response.status);
+  }
+  return followupClosureAckSchema.parse(await response.json());
 }
