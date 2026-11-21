@@ -20,7 +20,6 @@ const LOCAL_ONLY_SCRIPTS = [
   { pkg: '@telesphoros/ai-service', script: 'test:durable:pg', why: 'Declared local-only by vitest.durable.config.mts: it needs a loopback PostgreSQL its runner owns. Whether ai-service stays at all is open (simplify audit 2026-11-07, finding 16).' },
   { pkg: 'telesphoros-remastered', script: 'test:storage-rehearsal', why: 'Explicit local acceptance (its own header says so); it needs local services that CI does not start.' },
   { pkg: 'telesphoros-remastered', script: 'test:storage-recovery', why: 'Local regression for the foreground supervisor; it needs explicit local runtimes and has no service discovery.' },
-  { pkg: 'telesphoros-remastered', script: 'test:product-demo', why: 'Runs only against an already-started, owned synthetic demo at a fixed loopback URL; CI has no such demo.' },
   { pkg: '@telesphoros/backend', script: 'test:db', why: 'Local shorthand for the command service-postgres runs as Tier 2, spelled there through pnpm --filter.' },
   { pkg: 'telesphoros-remastered', script: 'test', why: 'The whole local run. CI runs its parts: test:scripts and the workspace suites in verify, the backend and worker suites in the service jobs.' },
   { pkg: '@telesphoros/smart-pilot', script: 'test:browser', why: 'Optional check through a locally installed browser driver against dedicated synthetic localhost pages.' },
