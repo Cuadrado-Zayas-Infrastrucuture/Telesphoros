@@ -57,6 +57,8 @@ PRODUCT_DEMO_SCREENSHOTS=true pnpm test:product-demo
 
 The browser suite covers D01, D08 and an unmapped D02 uploaded under a misleading D01 filename at 375px and 1280px. It verifies actual stored hashes, sample selection, keyboard interaction, accessibility, layout and disabled processing. It does not establish clinical correctness or AWS acceptance.
 
+The required `browser` check runs the same suite on every pull request that changes code, through `pnpm test:product-demo:ci`: it starts an owned stack like the one above, runs the suite against it and stops it through its own teardown ([CI and CD](ops/ci-cd.md)). A change that breaks the demo therefore fails its pull request. The meeting-machine checks below are still needed: CI proves the suite on a Linux runner, not the presentation machine, the recording or the narration.
+
 Before a meeting, complete these checks on the exact presentation machine:
 
 - Start from a fresh owned run; record its source commit and tool versions.

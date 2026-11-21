@@ -399,3 +399,17 @@ it('keeps the alert and the retry for any other failure', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Retry stored results' }));
   expect(await screen.findByText('Z normal-low.')).toBeVisible();
 });
+
+// Spec 044 K2-D3: a stored result made against the signed, real knowledge says so beside the synthetic label, which stays true.
+it('labels a stored result made with signed knowledge, and keeps the synthetic label', async () => {
+  auth.apiFetch.mockImplementation(async () => page({ ...evaluation, scope: 'synthetic-patient-signed-knowledge' }));
+  show();
+  expect(await screen.findByText('Real CPIC guideline wording. Fictional patient. Not approved for clinical use.')).toBeVisible();
+  expect(screen.getByText(/Stored synthetic results/)).toBeVisible();
+});
+
+it('does not label a result made with the synthetic knowledge (control)', async () => {
+  show();
+  expect(await screen.findByText('Z normal-low.')).toBeVisible();
+  expect(screen.queryByText(/Real CPIC guideline wording/)).not.toBeInTheDocument();
+});
