@@ -108,8 +108,8 @@ const usingPostgres = process.env.TEST_STORAGE === 'postgres';
   it('the application role still cannot read the audit table itself, and cannot call the admin check', async () => {
     const a = await organisation();
     await expect(database.withTenant(a.tenant, (c) => c.query('SELECT count(*) FROM security_audit_events'), { actor: a.admin })).rejects.toMatchObject({ code: '42501' });
-    await expect(
-      database.withTenant(a.tenant, (c) => c.query('SELECT access_review_admin_current($1, $2)', [a.tenant, a.admin]), { actor: a.admin }),
-    ).rejects.toMatchObject({ code: '42501' });
+    await expect(database.withTenant(a.tenant, (c) => c.query('SELECT access_review_admin_current($1, $2)', [a.tenant, a.admin]), { actor: a.admin })).rejects.toMatchObject({
+      code: '42501',
+    });
   });
 });

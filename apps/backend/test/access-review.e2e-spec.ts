@@ -25,9 +25,13 @@ it('answers 403 to every role but admin, on the review and on the export', async
 });
 
 it(`answers an admin with ${usingPostgres ? 'the review' : '503 (the review reads PostgreSQL only)'}`, async () => {
-  const res = await api().get('/api/v1/access-review').set(bearer(await admin()));
+  const res = await api()
+    .get('/api/v1/access-review')
+    .set(bearer(await admin()));
   expect(res.status).toBe(usingPostgres ? 200 : 503);
-  const csv = await api().get('/api/v1/access-review/export').set(bearer(await admin()));
+  const csv = await api()
+    .get('/api/v1/access-review/export')
+    .set(bearer(await admin()));
   expect(csv.status).toBe(usingPostgres ? 200 : 503);
 });
 

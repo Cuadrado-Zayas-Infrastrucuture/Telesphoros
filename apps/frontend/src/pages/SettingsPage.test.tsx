@@ -192,3 +192,17 @@ describe('Appearance', () => {
     expect(page().dataset.theme).toBeUndefined();
   });
 });
+
+// Spec 046 T-8: the access review is in Settings for administrators only.
+describe('Settings: access review', () => {
+  it('shows the Access review section to an administrator', async () => {
+    open(['admin'], api(['admin'], organization));
+    expect(await section('Access review')).toBeInTheDocument();
+  });
+
+  it('does not show it to a member without the admin role', async () => {
+    open(['clinician', 'reviewer'], api(['clinician', 'reviewer'], organization));
+    await section('Roles');
+    expect(screen.queryByRole('region', { name: 'Access review' })).not.toBeInTheDocument();
+  });
+});

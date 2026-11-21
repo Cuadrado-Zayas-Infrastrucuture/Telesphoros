@@ -31,7 +31,9 @@ async function lookUp(apiFetch: ReturnType<typeof vi.fn>, value = PATIENT) {
 
 describe('Access review (Settings)', () => {
   it('lists the reads of a patient, by member, what, outcome and patient id, and asks the API with the patient and the window', async () => {
-    const apiFetch = vi.fn(async () => json(page([row(), row({ routeKey: 'ReportsController.downloadUrl', event: 'download-link', outcome: 'refused', subjectKind: 'report' })])));
+    const apiFetch = vi.fn<(path: string) => Promise<Response>>(async () =>
+      json(page([row(), row({ routeKey: 'ReportsController.downloadUrl', event: 'download-link', outcome: 'refused', subjectKind: 'report' })])),
+    );
     const container = await lookUp(apiFetch);
     const table = await screen.findByRole('table', { name: 'Reads of patient records' });
     const rows = within(table).getAllByRole('row').slice(1);
@@ -73,7 +75,9 @@ describe('Access review (Settings)', () => {
   });
 
   it('pages with Previous and Next, and downloads the CSV of what is shown', async () => {
-    const apiFetch = vi.fn(async (path: string) => (path.includes('/export') ? new Response('h\n', { status: 200 }) : json(page([row()], !path.includes('page=2'), path.includes('page=2') ? 2 : 1))));
+    const apiFetch = vi.fn(async (path: string) =>
+      path.includes('/export') ? new Response('h\n', { status: 200 }) : json(page([row()], !path.includes('page=2'), path.includes('page=2') ? 2 : 1)),
+    );
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);

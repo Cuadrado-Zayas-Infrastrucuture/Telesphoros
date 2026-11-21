@@ -22,6 +22,17 @@ The restricted table stores event/outcome, validated tenant and actor identifier
 - `api-auth` `accepted` is recorded before the guard asks for a capability, so that row's verified fields are always NULL. Later rows of the same request (`private-read`, `private-write`, `download-link`) carry the capability.
 - Until the issuer runs (synthetic staging today), every row's verified fields are NULL.
 
+## Review by an organisation administrator (spec 046)
+
+An administrator reads their own organisation's `private-read` and `download-link` rows in Settings, "Access review", or through
+`GET /api/v1/access-review` and its CSV export. The database function `security_audit_review` (migration 0076) checks that the caller is a current
+admin of the bound organisation; the table itself stays readable only by `telesphoros_ledger_verifier`, and nothing about how rows are written
+changed. Rows are shown by patient or by member over at most 92 days, with ids, route keys, outcomes and times; no patient label, because the
+admin role sees no clinical data. The patient of a row is its path id for patient routes, the evaluation's or report's patient for
+`/evaluations/:id` and `/reports/:id`, and, since spec 046 changed the interceptor for that one route, the `patientId` that `GET /evaluations` names.
+
+Still open, as below: how long rows are kept, independent custody, and how often someone reviews them.
+
 ## Limits and sequencing
 
 - This slice uses migration `0016`. The live-membership slice (M1.5) was built against the same number; it has been renumbered to `0017` on top of this one and re-verified (migration history, real PostgreSQL, recovery). The guard records `api-auth` `accepted` as soon as the token verifies and **before** the membership is read, so the event keeps its stated meaning: it does not prove the membership allowed anything.

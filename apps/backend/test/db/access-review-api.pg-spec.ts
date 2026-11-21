@@ -22,7 +22,7 @@ let seeded: { patientId: string; reportId: string; evaluationId: string; label: 
 
 beforeAll(async () => {
   pg = await createEphemeralDatabase();
-  app = await createTestApp({ postgresUrl: pg.appUrl });
+  app = await createTestApp({ postgresUrl: pg.appUrl, labReportPipeline: true }); // so the evaluation reads pass their gate and reach the audit
   database = new Database({ url: pg.appUrl, ssl: 'disable' });
   const ledger = new PostgresLedgerRecordsRepository(database);
   const label = `SYN-AR-${randomUUID().slice(0, 6)}`;
@@ -52,44 +52,85 @@ const window = () => ({ from: new Date(Date.now() - 3_600_000).toISOString(), to
 it('T-4: a clinician opens a patient, its evaluations, an evaluation and a report; the review by that patient lists each, resolved to the patient', async () => {
   const token = await clinician();
   await api().get(`/api/v1/patients/${seeded.patientId}`).set(bearer(token)).expect(200);
-  await api().get(`/api/v1/evaluations?patientId=${seeded.patientId}`).set(bearer(token)); // 200 or 503 by the pipeline switch; either is audited
-  await api().get(`/api/v1/evaluations/${seeded.evaluationId}`).set(bearer(token));
+  await api().get(`/api/v1/evaluations?patientId=${seeded.patientId}`).set(bearer(token)).expect(200);
+  await api().get(`/api/v1/evaluations/${seeded.evaluationId}`).set(bearer(token)).expect(200);
   await api().get(`/api/v1/reports/${seeded.reportId}`).set(bearer(token)).expect(200);
 
-  const res = await api().get('/api/v1/access-review').query({ patientId: seeded.patientId, ...window() }).set(bearer(await admin())).expect(200);
+  const res = await api()
+    .get('/api/v1/access-review')
+    .query({ patientId: seeded.patientId, ...window() })
+    .set(bearer(await admin()))
+    .expect(200);
   const rows = res.body.data as Array<{ member: string; routeKey: string; subjectKind: string; subjectId: string | null; patientId: string | null; outcome: string }>;
   const byRoute = Object.fromEntries(rows.map((r) => [r.routeKey, r]));
-  expect(byRoute['PatientsController.get']).toMatchObject({ member: 'syn-ar-clinician', subjectKind: 'patient', subjectId: seeded.patientId, patientId: seeded.patientId, outcome: 'succeeded' });
+  expect(byRoute['PatientsController.get']).toMatchObject({
+    member: 'syn-ar-clinician',
+    subjectKind: 'patient',
+    subjectId: seeded.patientId,
+    patientId: seeded.patientId,
+    outcome: 'succeeded',
+  });
   expect(byRoute['EvaluationsController.list']).toMatchObject({ subjectKind: 'patient', subjectId: seeded.patientId, patientId: seeded.patientId });
   expect(byRoute['EvaluationsController.get']).toMatchObject({ subjectKind: 'evaluation', subjectId: seeded.evaluationId, patientId: seeded.patientId });
   expect(byRoute['ReportsController.get']).toMatchObject({ subjectKind: 'report', subjectId: seeded.reportId, patientId: seeded.patientId, outcome: 'succeeded' });
   expect(rows.every((r) => r.patientId === seeded.patientId)).toBe(true);
   expect(JSON.stringify(res.body)).not.toContain(seeded.label);
 
-  const mine = await api().get('/api/v1/access-review').query({ member: 'syn-ar-clinician', ...window() }).set(bearer(await admin())).expect(200);
+  const mine = await api()
+    .get('/api/v1/access-review')
+    .query({ member: 'syn-ar-clinician', ...window() })
+    .set(bearer(await admin()))
+    .expect(200);
   expect(mine.body.data.length).toBeGreaterThanOrEqual(4);
   expect(mine.body.data.every((r: { member: string }) => r.member === 'syn-ar-clinician')).toBe(true);
+  // By member, nothing names the patient up front: each evaluation and report row is resolved to its patient by the API (D4).
+  expect(mine.body.data.every((r: { patientId: string | null }) => r.patientId === seeded.patientId)).toBe(true);
 });
 
 it('T-5: the export is CSV with its header, holds no label, and another organisation sees none of these rows', async () => {
-  const csv = await api().get('/api/v1/access-review/export').query({ patientId: seeded.patientId, ...window() }).set(bearer(await admin())).expect(200);
+  const csv = await api()
+    .get('/api/v1/access-review/export')
+    .query({ patientId: seeded.patientId, ...window() })
+    .set(bearer(await admin()))
+    .expect(200);
   expect(csv.headers['content-type']).toMatch(/^text\/csv/);
   const lines = csv.text.trim().split('\n');
   expect(lines[0]).toBe('occurred_at,member,route_key,event,outcome,subject_kind,subject_id,patient_id');
   expect(lines.length).toBeGreaterThanOrEqual(5);
   expect(csv.text).not.toContain(seeded.label);
-  const foreign = await api().get('/api/v1/access-review').query({ patientId: seeded.patientId, ...window() }).set(bearer(await outsider())).expect(200);
+  const foreign = await api()
+    .get('/api/v1/access-review')
+    .query({ patientId: seeded.patientId, ...window() })
+    .set(bearer(await outsider()))
+    .expect(200);
   expect(foreign.body.data).toEqual([]);
-  await api().get('/api/v1/access-review').query(window()).set(bearer(await clinician())).expect(403);
-  await api().get('/api/v1/access-review/export').query(window()).set(bearer(await clinician())).expect(403);
+  await api()
+    .get('/api/v1/access-review')
+    .query(window())
+    .set(bearer(await clinician()))
+    .expect(403);
+  await api()
+    .get('/api/v1/access-review/export')
+    .query(window())
+    .set(bearer(await clinician()))
+    .expect(403);
 });
 
 it('the review itself is audited, and a refused filter is a 400', async () => {
   const id = `syn-ar-review-${randomUUID().slice(0, 8)}`;
-  await api().get('/api/v1/access-review').query(window()).set(bearer(await admin())).set('X-Request-Id', id).expect(200);
+  await api()
+    .get('/api/v1/access-review')
+    .query(window())
+    .set(bearer(await admin()))
+    .set('X-Request-Id', id)
+    .expect(200);
   const rows = await withAdmin(pg.adminUrl, async (c) => (await c.query('SELECT event_type, route_key FROM security_audit_events WHERE request_id = $1', [id])).rows);
   expect(rows).toContainEqual({ event_type: 'private-read', route_key: 'AccessReviewController.list' });
-  await api().get('/api/v1/access-review').query({ patientId: seeded.patientId, member: 'syn-ar-clinician', ...window() }).set(bearer(await admin())).expect(400);
+  await api()
+    .get('/api/v1/access-review')
+    .query({ patientId: seeded.patientId, member: 'syn-ar-clinician', ...window() })
+    .set(bearer(await admin()))
+    .expect(400);
   await api()
     .get('/api/v1/access-review')
     .query({ from: '2026-01-01T00:00:00Z', to: '2026-12-31T00:00:00Z' })

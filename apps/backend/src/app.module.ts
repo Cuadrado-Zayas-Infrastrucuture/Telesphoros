@@ -24,6 +24,7 @@ import { PatientsModule } from './patients/patients.module';
 import { ReportsModule } from './reports/reports.module';
 import { StorageModule } from './storage/storage.module';
 import { UsageModule } from './usage/usage.module';
+import { AccessReviewModule } from './access-review/access-review.module';
 
 @Module({})
 export class AppModule {
@@ -54,6 +55,7 @@ export class AppModule {
         MeModule,
         MembersModule,
         UsageModule,
+        AccessReviewModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

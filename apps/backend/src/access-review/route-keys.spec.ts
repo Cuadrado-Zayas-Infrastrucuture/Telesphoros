@@ -27,7 +27,7 @@ function getRoutes() {
     const base = String(Reflect.getMetadata(PATH_METADATA, cls) ?? '').replace(/^\/|\/$/g, '');
     for (const name of Object.getOwnPropertyNames(cls.prototype)) {
       if (name === 'constructor') continue;
-      const fn = (cls.prototype as Record<string, unknown>)[name];
+      const fn = (cls.prototype as unknown as Record<string, unknown>)[name];
       if (typeof fn !== 'function' || Reflect.getMetadata(METHOD_METADATA, fn) !== RequestMethod.GET) continue;
       const own = String(Reflect.getMetadata(PATH_METADATA, fn) ?? '').replace(/^\/|\/$/g, '');
       routes.push({ key: `${cls.name}.${name}`, path: [base, own].filter(Boolean).join('/') });

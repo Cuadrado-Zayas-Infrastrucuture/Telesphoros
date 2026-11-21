@@ -12,7 +12,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 function routeEvent(context: ExecutionContext, req: Request, type: SecurityAuditEvent['type'], outcome: SecurityAuditEvent['outcome']): SecurityAuditEvent {
   const controller = context.getClass().name;
   const handler = context.getHandler().name;
-  const candidate: unknown = req.params?.id;
+  // Spec 046 AR-2: the evaluations list names its patient in the query, not the path; its row takes that patient (a UUID or nothing). Only that route.
+  const candidate: unknown = controller === 'EvaluationsController' && handler === 'list' ? req.query?.patientId : req.params?.id;
   return {
     type,
     outcome,
