@@ -14,7 +14,8 @@ export const PROFILE_WORDS = {
   intro: 'From confirmed reports only. CPIC wording is quoted exactly. Not approved for clinical use.',
   unavailable: 'The genomic profile is not available in this environment.',
   failed: 'Could not read the genomic profile.',
-  retry: 'Retry',
+  // Named for what it retries: the patient page has its own Retry, and two buttons with one name are ambiguous to a screen reader.
+  retry: 'Retry the genomic profile',
   loading: 'Reading the genomic profile…',
   medicationsHeading: 'Current medications, checked',
   noMedications: 'No current medications are recorded for this patient.',

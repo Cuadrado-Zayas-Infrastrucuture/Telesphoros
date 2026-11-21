@@ -185,7 +185,7 @@ it('answers in place when the read fails, with a retry that reads again', async 
   auth.apiFetch.mockImplementationOnce(async () => json({}, 500));
   render(<GenomicProfileSection patientId={PATIENT} />);
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the genomic profile.');
-  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry the genomic profile' }));
   expect(await screen.findByText('1 of 4 current medications has guidance to review')).toBeInTheDocument();
 });
 
