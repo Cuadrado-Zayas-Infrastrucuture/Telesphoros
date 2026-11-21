@@ -1,4 +1,4 @@
-# Tasks: Clinical review before a release (spec 044)
+# Tasks: Clinical review before a release (spec 048)
 
 | Task | Owner | Exit condition | State |
 | --- | --- | --- | --- |

@@ -33,7 +33,7 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 4. The image, unsigned under break-glass ([image-push.md](image-push.md)): write the reason, one line, to
    `~/telesphoros-private/releases/COMMIT/break-glass-reason.txt`, then `image.sh BUILD COMMIT`. It needs CI's image job green on COMMIT,
    builds and rehearses in `<clone>-release-<commit8>`, waits for ECR's scan, and writes `verified-image.json`, then `new_image.txt` last.
-   Before it builds anything, the clinical review gate (spec 044, `clinical-review.mjs`) compares COMMIT with the commit of the image that
+   Before it builds anything, the clinical review gate (spec 048, `clinical-review.mjs`) compares COMMIT with the commit of the image that
    runs (`image.commit` in `staging-expected.json`, whose digest must be the one ECS runs). With no change under the clinical paths it
    writes `clinical-review.json` itself and goes on. Otherwise it stops and lists the changed files, until `releases/COMMIT/clinical-review.json` holds either:
    - **Kevin's review:** he writes the bytes with `node scripts/staging/release/clinical-review.mjs message BASE COMMIT > review.msg`, signs

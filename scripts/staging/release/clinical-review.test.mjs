@@ -1,4 +1,4 @@
-// Tests for scripts/staging/release/clinical-review.mjs (spec 044). Imported by infrastructure/terraform/guard.test.mjs (`pnpm test:infra`).
+// Tests for scripts/staging/release/clinical-review.mjs (spec 048). Imported by infrastructure/terraform/guard.test.mjs (`pnpm test:infra`).
 // Each test builds a throwaway git history and P-256 keys made here, so no real key, image or release is touched.
 // What this cannot prove: that KMS keeps returning DER signatures and base64 SPKI public keys as documented for ECC_NIST_P256 and
 // ECDSA_SHA_256 (the same assumption `knowledge:sign` makes), or that the founder runs the step.

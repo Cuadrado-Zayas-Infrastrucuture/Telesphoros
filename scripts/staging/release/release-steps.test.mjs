@@ -106,7 +106,7 @@ esac
 `, 0o755);
 git(clone, 'add', '.');
 git(clone, 'commit', '-q', '-m', 'base');
-// The facts name the running image and its commit (the base), as after a release: the clinical review gate (spec 044) reads them. The
+// The facts name the running image and its commit (the base), as after a release: the clinical review gate (spec 048) reads them. The
 // change below is not under a clinical path, so the gate passes on its own; its refusals are tested in clinical-review.test.mjs.
 const BASE = git(clone, 'rev-parse', 'HEAD');
 git(clone, 'checkout', '-q', '-b', 'feature');
@@ -180,7 +180,7 @@ test('image: the reason, the claim and CI come first; nothing is built before th
   assert.ok(!existsSync(join(rel, 'new_image.txt')));
 });
 
-test('image: a clinical change since the running image stops the step before anything is built, until a record is there (spec 044)', () => {
+test('image: a clinical change since the running image stops the step before anything is built, until a record is there (spec 048)', () => {
   clearLogs();
   git(clone, 'checkout', '-q', '-b', 'clinical', COMMIT);
   put(clone, 'apps/backend/src/services/recommendation-engine/rule.ts', 'export const r = 1;\n');

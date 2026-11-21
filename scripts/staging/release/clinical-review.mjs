@@ -1,4 +1,4 @@
-// Clinical review before a release (spec 044, audit slice P0-B). image.sh calls `gate` after its clone and identity gates and before it
+// Clinical review before a release (spec 048, audit slice P0-B). image.sh calls `gate` after its clone and identity gates and before it
 // pushes anything to ECR: a release whose commit changes a clinical path since the image that runs needs Kevin's signed review, or, on
 // staging only, a one-line reason from the founder (an exception, recorded as one). The record goes into the release's facts pull request.
 // Usage:
