@@ -2,9 +2,14 @@
 
 Status: only the requirements below are written. The rest of this document is still to do.
 
-Model output is grounded in `knowledge/cpic` rules and disabled by default
-(`PGX_CLINICAL_HOLD_LIFTED` must be exactly `true`). Every model needs a model
-card and an evaluation gate before use.
+Model output is grounded in `knowledge/cpic` rules and off. What keeps it off today is code, not a setting:
+`liveReadiness()` in [`apps/ai-service/src/policy.ts`](../apps/ai-service/src/policy.ts) always answers
+`MODEL_EXECUTION_DISABLED`, and the only model client is the scripted test stand-in. `PGX_CLINICAL_HOLD_LIFTED` is
+the founder's switch for the future: when the change that adds a real model client arrives, an adapter reads it, and
+only the exact text `true` makes it the `founderFlagSet` condition of `readiness()`. That is one of eight conditions
+(FR-012 of [spec 003](../specs/003-llm-harness/spec.md)); the switch alone never opens the model path. Until then no
+code reads it, and `.github/ci/clinical-hold.test.mjs` fails if any code starts to, or if a model client is added,
+so the two arrive together and reviewed. Every model needs a model card and an evaluation gate before use.
 
 ## Requirements for any model path
 
