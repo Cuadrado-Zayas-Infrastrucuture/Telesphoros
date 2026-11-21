@@ -12,8 +12,12 @@ export const KNOWLEDGE_SCHEMA_VERSIONS = ['1.2', '1.3'] as const;
 /** Which source a cell or gene map came from. "unknown" is a draft state: a reviewed, non-synthetic file may not use it. */
 export const KNOWLEDGE_ORIGINS = ['cpic', 'pharmgkb', 'pharmvar', 'unknown'] as const;
 
-/** The license a source states for its content. "unknown" is a draft state: a reviewed, non-synthetic file may not use it. */
-export const KNOWLEDGE_LICENSES = ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'proprietary', 'unknown'] as const;
+/**
+ * The license a source states for its content. "unknown" is a draft state: a reviewed, non-synthetic file may not use it.
+ * "us-government-work" is a work of the US federal government, which US copyright does not cover (17 U.S.C. 105), such as the FDA's tables
+ * (spec 045 P-D2); the reviewer still states `redistribution` from what the source itself says.
+ */
+export const KNOWLEDGE_LICENSES = ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'us-government-work', 'proprietary', 'unknown'] as const;
 /** Whether the content may be redistributed or built into another product. "unknown" has the same limit as the license. */
 export const REDISTRIBUTION_STATES = ['allowed', 'restricted', 'unknown'] as const;
 
@@ -445,3 +449,82 @@ export type GuidelineFile = z.infer<typeof guidelineFileSchema>;
 
 export const knowledgeFileSchema = z.discriminatedUnion('kind', [geneMapFileSchema, guidelineFileSchema]);
 export type KnowledgeFile = z.infer<typeof knowledgeFileSchema>;
+
+/** The one file kind a CPIC knowledge directory may never hold: it loads from its own directory (spec 045 D2). */
+export const GENE_MODIFIER_LIST_KIND = 'gene-modifier-list';
+/** Where a gene modifier list came from. "unknown" is a draft state: a reviewed, non-synthetic list may not use it. */
+export const GENE_MODIFIER_ORIGINS = ['fda', 'unknown'] as const;
+/** What the ingredient does to the protein the gene encodes. */
+export const GENE_MODIFIER_EFFECTS = ['inhibitor', 'inducer'] as const;
+/**
+ * The strength as the source labels it. Weak modifiers are not listed at all (spec 045 P-D4), so a list cannot carry one by mistake;
+ * listing them would be a schema change.
+ */
+export const GENE_MODIFIER_STRENGTHS = ['strong', 'moderate'] as const;
+
+/** Where the entry sits in the source, so a person can find it and check it. */
+const modifierLocatorSchema = z.strictObject({
+  /** The table as the source names it. */
+  table: label(200),
+  /** The row or entry as printed, when the table has one. */
+  row: label(200).optional(),
+});
+export type GeneModifierLocator = z.infer<typeof modifierLocatorSchema>;
+
+const geneModifierEntrySchema = z.strictObject({
+  /** The ingredient as the source names it, lower case. Shown in the notice; matching never uses it. */
+  ingredient: drugNameSchema,
+  /** The ingredient's RxNorm id (term type IN, which the reviewer confirms). The only thing a medication is matched by (spec 045 D3). */
+  rxcui: identifierSchema('rxcui'),
+  /** The gene whose protein the ingredient affects, as the guidelines name it, e.g. SLCO1B1 for OATP1B1. */
+  gene: geneSymbolSchema,
+  hgncId: identifierSchema('hgncId'),
+  effect: z.enum(GENE_MODIFIER_EFFECTS),
+  strength: z.enum(GENE_MODIFIER_STRENGTHS),
+  locator: modifierLocatorSchema,
+});
+export type GeneModifierEntry = z.infer<typeof geneModifierEntrySchema>;
+
+/**
+ * Spec 045 D2: the medications a source lists as strong or moderate inhibitors or inducers of a gene's protein, one entry per ingredient
+ * and gene. It is signed knowledge like every other file, but it is not a CPIC file: it never sits in a CPIC knowledge directory, and no
+ * guideline cell reads it. Written for schema 1.3 only, so it always carries identifiers and can carry signatures.
+ */
+export const geneModifierListFileSchema = z
+  .strictObject({
+    ...envelope,
+    schemaVersion: z.literal('1.3'),
+    kind: z.literal(GENE_MODIFIER_LIST_KIND),
+    origin: z.enum(GENE_MODIFIER_ORIGINS),
+    entries: z.array(geneModifierEntrySchema).min(1).max(2000),
+  })
+  .superRefine((file, ctx) => {
+    requireStatedLicense(file, ctx);
+    requireStatedOrigin(file, [{ path: ['origin'], origin: file.origin }], ctx);
+    const pairs = new Set<string>();
+    const ingredientOf = new Map<string, string>();
+    const hgncOf = new Map<string, string>();
+    const geneOf = new Map<string, string>();
+    file.entries.forEach((entry, index) => {
+      requireIdentifierForm(file, 'rxcui', entry.rxcui, ['entries', index, 'rxcui'], ctx);
+      requireIdentifierForm(file, 'hgncId', entry.hgncId, ['entries', index, 'hgncId'], ctx);
+      // One ingredient and gene, one entry: two would leave the notice to pick an effect or a strength.
+      const pair = `${entry.rxcui}\0${entry.gene}`;
+      if (pairs.has(pair)) addIssue(ctx, ['entries', index], 'This ingredient is already listed for this gene.');
+      pairs.add(pair);
+      const ingredient = ingredientOf.get(entry.rxcui);
+      if (ingredient === undefined) ingredientOf.set(entry.rxcui, entry.ingredient);
+      else if (ingredient !== entry.ingredient) addIssue(ctx, ['entries', index, 'ingredient'], 'This RxNorm id is listed under another ingredient name.');
+      const hgnc = hgncOf.get(entry.gene);
+      if (hgnc === undefined) hgncOf.set(entry.gene, entry.hgncId);
+      else if (hgnc !== entry.hgncId) addIssue(ctx, ['entries', index, 'hgncId'], 'This gene is listed with another HGNC id.');
+      const gene = geneOf.get(entry.hgncId);
+      if (gene === undefined) geneOf.set(entry.hgncId, entry.gene);
+      else if (gene !== entry.gene) addIssue(ctx, ['entries', index, 'gene'], 'This HGNC id is listed under another gene.');
+    });
+  });
+export type GeneModifierListFile = z.infer<typeof geneModifierListFileSchema>;
+
+/** Every file a reviewer hashes and signs: the CPIC kinds and the gene modifier list. Only the CLI's `hash` and `sign` read files this way. */
+export const signableKnowledgeFileSchema = z.discriminatedUnion('kind', [geneMapFileSchema, guidelineFileSchema, geneModifierListFileSchema]);
+export type SignableKnowledgeFile = z.infer<typeof signableKnowledgeFileSchema>;

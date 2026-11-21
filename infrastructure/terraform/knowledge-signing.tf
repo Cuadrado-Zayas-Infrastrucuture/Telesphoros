@@ -81,6 +81,10 @@ resource "aws_kms_key" "knowledge_signer" {
   key_usage                = "SIGN_VERIFY"
   deletion_window_in_days  = local.kms_deletion_days
   policy                   = data.aws_iam_policy_document.knowledge_signer_key[each.key].json
+
+  # A key policy that names a role AWS does not know yet is refused, so when knowledge_signers names a signing role made in the same plan
+  # (knowledge-signer-people.tf), the key waits for it.
+  depends_on = [aws_iam_role.knowledge_signer_person]
 }
 
 resource "aws_kms_alias" "knowledge_signer" {

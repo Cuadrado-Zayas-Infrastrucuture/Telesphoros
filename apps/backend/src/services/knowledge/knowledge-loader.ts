@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type GeneMapFile, type GuidelineFile, knowledgeFileSchema, type KnowledgeFile } from '@telesphoros/cpic-schema';
+import { GENE_MODIFIER_LIST_KIND, type GeneMapFile, type GuidelineFile, knowledgeFileSchema, type KnowledgeFile } from '@telesphoros/cpic-schema';
 import { contentSha256, fullSha256, knowledgeSetId } from './content-hash';
 import { genesKey, type KnowledgeFileInfo, KnowledgeSet } from './knowledge-set';
 import { checkSignatures, type SignerKeys } from './signatures';
@@ -275,6 +275,11 @@ async function readOne(fullPath: string, path: string, expectedKind: KnowledgeFi
   } catch {
     // intentional: JSON.parse messages can quote file content; the path is what matters
     problems.push(`${path}: not valid JSON.`);
+    return undefined;
+  }
+  // Spec 045 D2: a gene modifier list is signed knowledge, but never CPIC knowledge. Refused by name, not as a schema error.
+  if (json !== null && typeof json === 'object' && (json as { kind?: unknown }).kind === GENE_MODIFIER_LIST_KIND) {
+    problems.push(`${path}: a gene modifier list never belongs in a CPIC knowledge directory; it loads from GENE_MODIFIERS_DIR.`);
     return undefined;
   }
   const parsed = knowledgeFileSchema.safeParse(json);
