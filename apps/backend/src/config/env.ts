@@ -326,6 +326,7 @@ export const envSchema = z
       for (const [name, directory] of [
         ['KNOWLEDGE_DIR', env.KNOWLEDGE_DIR],
         ['SYNTHETIC_KNOWLEDGE_DIR', env.SYNTHETIC_KNOWLEDGE_DIR],
+        ['SIGNED_KNOWLEDGE_DIR', env.SIGNED_KNOWLEDGE_DIR],
       ] as const) {
         if (directory && resolve(directory) === resolve(env.GENE_MODIFIERS_DIR)) problem('GENE_MODIFIERS_DIR', `must be its own directory, not ${name}`);
       }

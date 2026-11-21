@@ -249,6 +249,9 @@ describe('loadEnv', () => {
           KNOWLEDGE_SIGNER_KEYS: '{}',
           GENE_MODIFIERS_DIR: '/gene-modifiers',
         };
+        const signed = { ...withLists, ASSESSMENT_KNOWLEDGE: 'signed', SIGNED_KNOWLEDGE_DIR: '/signed' };
+        expect(loadEnv(signed).GENE_MODIFIERS_DIR).toBe('/gene-modifiers');
+        expect(() => loadEnv({ ...signed, GENE_MODIFIERS_DIR: '/signed' })).toThrow(/GENE_MODIFIERS_DIR.*must be its own directory, not SIGNED_KNOWLEDGE_DIR/);
         expect(loadEnv(pipeline).GENE_MODIFIERS_DIR).toBe('/gene-modifiers');
         expect(() => loadEnv({ ...pipeline, GENE_MODIFIERS_DIR: '/k' })).toThrow(/GENE_MODIFIERS_DIR.*must be its own directory, not KNOWLEDGE_DIR/);
       });
