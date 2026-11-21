@@ -4,7 +4,8 @@
 
 **Created**: 2026-11-21
 
-**Status**: **Draft, awaiting founder approval. Specification only: no code, knowledge file or clinical hold changes.** It carries out
+**Status**: **Approved by the founder on 2026-11-21: P-D1 to P-D5 as recommended (section 6). P-D6, the wording, is still open.
+Specification only: no code, knowledge file or clinical hold changes.** It carries out
 step 1 of spec 006's deferred item D08 (phenoconversion): **a factual notice only**, with no adjusted phenotype (founder, 2026-11-21:
 "write the D08 plan, step 1 notice only").
 
@@ -88,14 +89,18 @@ released before or with the API that sends it.
 
 ## 6. Decisions only the founders can make (open)
 
-- **P-D1.** Approve step 1 as described: a notice only, no adjusted phenotype.
+- **P-D1.** Approve step 1 as described: a notice only, no adjusted phenotype. **Decided: approved.**
 - **P-D2.** Confirm the FDA tables may be reused in the product, and whether the knowledge licence vocabulary gains a value for a US
-  government work (today: `cc0-1.0`, `cc-by-4.0`, `cc-by-sa-4.0`, `proprietary`, `unknown`).
-- **P-D3.** Recently stopped modifiers: not in step 1 (recommended), or within a window the founders set per drug. Some inhibitors act for
+  government work (today: `cc0-1.0`, `cc-by-4.0`, `cc-by-sa-4.0`, `proprietary`, `unknown`). **Decided: the vocabulary gains a value
+  for a US government work** (slice N1). Reading FDA's own reuse terms on its pages, and recording what they say in the list's
+  provenance, is a check the reviewing pharmacist makes before the first list is signed (slice N0); a list whose terms were not read
+  is not signed.
+- **P-D3.** Recently stopped modifiers: not in step 1 (recommended), or within a window the founders set per drug. **Decided: not in
+  step 1.** Some inhibitors act for
   weeks after they are stopped; a window is a clinical rule and needs its own source.
-- **P-D4.** Strong and moderate only (recommended), or weak as well.
-- **P-D5.** Inhibitors and inducers together (recommended), or inhibitors first.
-- **P-D6.** The notice's wording and the glossary entry, in English and Spanish.
+- **P-D4.** Strong and moderate only (recommended), or weak as well. **Decided: strong and moderate only.**
+- **P-D5.** Inhibitors and inducers together (recommended), or inhibitors first. **Decided: together.**
+- **P-D6, still open.** The notice's wording and the glossary entry, in English and Spanish.
 
 ## 7. Out of scope
 
