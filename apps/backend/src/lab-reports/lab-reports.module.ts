@@ -45,12 +45,20 @@ export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | unde
 };
 
 /**
- * The synthetic knowledge for the structured assessment: loaded only while SYNTHETIC_ASSESSMENT is on, from its own directory and never from the
- * pipeline's. It is loaded under the non-production rules, so the check that makes that safe is made here: every file must say it is synthetic, and the set
- * must not be empty. A directory holding anything that claims to be real content stops the start.
+ * The knowledge for the structured assessment: loaded only while SYNTHETIC_ASSESSMENT is on, from its own directory and never from the pipeline's.
+ * By default it is the synthetic set, loaded under the non-production rules, so the check that makes that safe is made here: every file must say it is
+ * synthetic, and the set must not be empty. A directory holding anything that claims to be real content stops the start. With ASSESSMENT_KNOWLEDGE=signed
+ * (spec 044 K2) it is the signed, real set instead, under the production rules, and a synthetic file in it stops the start.
  */
 export const syntheticKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> => {
   if (env.SYNTHETIC_ASSESSMENT !== 'enabled') return undefined;
+  // Spec 044 K2 (K2-D1): with ASSESSMENT_KNOWLEDGE=signed the assessment reads the signed, real set instead, ALWAYS under the production rules
+  // (reviewed, not synthetic, schema 1.3, two valid signatures), whatever NODE_ENV says. One set at a time: the synthetic directory is then not read.
+  if (env.ASSESSMENT_KNOWLEDGE === 'signed') {
+    const signed = await loadKnowledge({ directory: env.SIGNED_KNOWLEDGE_DIR!, mode: 'production', signerKeys: parseSignerKeys(env.KNOWLEDGE_SIGNER_KEYS) });
+    if (signed.isEmpty || signed.files.some((file) => file.synthetic)) throw new Error('SIGNED_KNOWLEDGE_DIR must hold signed, real knowledge only, and at least one guideline.');
+    return signed;
+  }
   const set = await loadKnowledge({ directory: env.SYNTHETIC_KNOWLEDGE_DIR!, mode: 'non-production' });
   if (set.isEmpty || set.files.some((file) => !file.synthetic)) throw new Error('SYNTHETIC_KNOWLEDGE_DIR must hold synthetic knowledge only, and at least one guideline.');
   return set;
