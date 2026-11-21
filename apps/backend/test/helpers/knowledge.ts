@@ -2,13 +2,15 @@ import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:cryp
 import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { GuidelineFile, KnowledgeFile } from '@telesphoros/cpic-schema';
+import type { GeneModifierListFile, GuidelineFile, KnowledgeFile } from '@telesphoros/cpic-schema';
 import { contentSha256 } from '../../src/services/knowledge/content-hash';
 import { signingMessage, type SignerKeys } from '../../src/services/knowledge/signatures';
 
 export const REPO_ROOT = resolve(__dirname, '../../../..');
 /** Invented genes and drugs. Tests only. */
 export const SYNTHETIC_DIR = join(REPO_ROOT, 'data/fixtures/knowledge/synthetic');
+/** Invented gene modifier lists (spec 045 N1). Tests only. */
+export const SYNTHETIC_MODIFIERS_DIR = join(REPO_ROOT, 'data/fixtures/knowledge/synthetic-modifiers');
 /** The real knowledge directory that ships. */
 export const REAL_KNOWLEDGE_DIR = join(REPO_ROOT, 'knowledge/cpic');
 export const SCENARIO_DIR = join(REPO_ROOT, 'tests/clinical_scenarios');
@@ -153,6 +155,40 @@ export async function reviewedCopyOf(
       };
       await writeJson(path, file);
     }
+  }
+  return dir;
+}
+
+/**
+ * Real-form ids for a signed-off copy of the synthetic gene modifier lists, beyond any range RxNorm or HGNC has assigned, so no test names a
+ * real drug or gene, and never in the form `testIdFor` derives ("99" and ten digits, "HGNC:9" and six), so the two cannot collide.
+ */
+export const MODIFIER_TEST_IDS = {
+  rxcui: { drugm: '980000000201', drugn: '980000000202', drugp: '980000000203' },
+  hgncId: { GENEA: 'HGNC:8000201', GENEB: 'HGNC:8000202' },
+} as const;
+
+/**
+ * A copy of the synthetic gene modifier lists as signed-off real content: not synthetic, real-form ids, licence and origin stated, reviewed,
+ * and signed by `signers` (both TEST_SIGNERS unless told otherwise). `edit` runs before the hash is taken. Never written to the repository.
+ */
+export async function signedModifierCopy(options: { signers?: readonly TestSigner[]; edit?: (file: GeneModifierListFile) => void } = {}): Promise<string> {
+  const dir = await copyOf(SYNTHETIC_MODIFIERS_DIR);
+  const rxcuis: Readonly<Record<string, string>> = MODIFIER_TEST_IDS.rxcui;
+  const hgncIds: Readonly<Record<string, string>> = MODIFIER_TEST_IDS.hgncId;
+  for (const name of await readdir(dir)) {
+    if (!name.endsWith('.json')) continue;
+    const path = join(dir, name);
+    const file = JSON.parse(await readFile(path, 'utf8')) as GeneModifierListFile;
+    file.synthetic = false;
+    file.origin = 'fda';
+    file.provenance = { ...file.provenance, license: 'us-government-work', redistribution: 'allowed' };
+    file.entries = file.entries.map((entry) => ({ ...entry, rxcui: rxcuis[entry.ingredient]!, hgncId: hgncIds[entry.gene]! }));
+    options.edit?.(file);
+    const hash = contentSha256(file);
+    const signatures = (options.signers ?? TEST_SIGNERS).map((s) => signatureBy(s, file.id, hash));
+    file.review = { status: 'reviewed', reviewedBy: 'Test Reviewer', reviewedAt: '2026-02-01', contentSha256: hash, signatures };
+    await writeJson(path, file);
   }
   return dir;
 }

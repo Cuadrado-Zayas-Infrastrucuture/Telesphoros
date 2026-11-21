@@ -5,6 +5,7 @@ import {
   drugResultSchema,
   geneInputSchema,
   geneMapFileSchema,
+  geneModifierListFileSchema,
   geneStateResultSchema,
   guidelineFileSchema,
   hasAtMostTwoDecimals,
@@ -17,6 +18,7 @@ import {
   REASON_PRECEDENCE,
   RETIRED_REASON_CODES,
   REVIEWER_ACTIONS,
+  signableKnowledgeFileSchema,
   splitDiplotype,
   toHundredths,
 } from './index';
@@ -496,7 +498,7 @@ describe('license and redistribution', () => {
     expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, license: 'MIT' } }).success).toBe(false);
     expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, license: 'CC0-1.0' } }).success).toBe(false);
     expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, redistribution: 'yes' } }).success).toBe(false);
-    for (const license of ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'proprietary', 'unknown']) {
+    for (const license of ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'us-government-work', 'proprietary', 'unknown']) {
       expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, license } }).success, license).toBe(true);
     }
   });
@@ -808,5 +810,102 @@ describe('isRxcuiForm (spec 039)', () => {
 
   it('keeps the identifier forms themselves private, so no consumer can change what the schema accepts', () => {
     expect(Object.keys(everyExport)).not.toContain('IDENTIFIER_FORMS');
+  });
+});
+
+describe('gene modifier list (spec 045 N1)', () => {
+  const entry = (overrides: Record<string, unknown> = {}) => ({
+    ingredient: 'drugm',
+    rxcui: 'syn-rxcui-drugm',
+    gene: 'GENEA',
+    hgncId: 'syn-hgnc-genea',
+    effect: 'inhibitor',
+    strength: 'strong',
+    locator: { table: 'Synthetic Table 1', row: 'drugm' },
+    ...overrides,
+  });
+  const list = (entries: unknown[] = [entry()]) => ({ ...base, schemaVersion: '1.3', id: 'syn-modifiers', kind: 'gene-modifier-list', origin: 'fda', entries });
+  /** The same list as reviewed real content, with real-form test ids beyond any range RxNorm or HGNC has assigned. */
+  const realList = (provenance: Record<string, string> = {}, origin = 'fda') => ({
+    ...list([entry({ rxcui: '990000000101', hgncId: 'HGNC:9000101' })]),
+    synthetic: false,
+    origin,
+    provenance: { ...base.provenance, license: 'us-government-work', redistribution: 'allowed', ...provenance },
+    review: { status: 'reviewed', reviewedBy: 'Test Reviewer', reviewedAt: '2026-02-01', contentSha256: 'a'.repeat(64) },
+  });
+  const messages = (value: unknown) => {
+    const result = geneModifierListFileSchema.safeParse(value);
+    return result.success ? [] : result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
+  };
+
+  it('accepts a synthetic list, an entry without a row, and parses to exactly its input', () => {
+    const file = list([entry(), entry({ gene: 'GENEB', hgncId: 'syn-hgnc-geneb', locator: { table: 'Synthetic Table 2' } })]);
+    expect(geneModifierListFileSchema.parse(file)).toEqual(file);
+  });
+
+  it('is schema 1.3 only, and refuses an empty list', () => {
+    expect(messages({ ...list(), schemaVersion: '1.2' }).join('\n')).toContain('schemaVersion');
+    expect(messages(list([])).join('\n')).toContain('entries');
+  });
+
+  it('accepts only inhibitor or inducer, strong or moderate: a weak modifier cannot be listed (P-D4)', () => {
+    for (const effect of ['inhibitor', 'inducer']) expect(messages(list([entry({ effect })])), effect).toEqual([]);
+    for (const strength of ['strong', 'moderate']) expect(messages(list([entry({ strength })])), strength).toEqual([]);
+    for (const effect of ['substrate', 'Inhibitor', '']) expect(messages(list([entry({ effect })])).join('\n'), effect).toContain('entries.0.effect');
+    for (const strength of ['weak', 'Strong', '']) expect(messages(list([entry({ strength })])).join('\n'), strength).toContain('entries.0.strength');
+  });
+
+  it('needs every field of an entry and a table in its locator, and takes no other field', () => {
+    for (const key of ['ingredient', 'rxcui', 'gene', 'hgncId', 'effect', 'strength', 'locator']) {
+      const incomplete: Record<string, unknown> = entry();
+      delete incomplete[key];
+      expect(messages(list([incomplete])).length, key).toBeGreaterThan(0);
+    }
+    expect(messages(list([entry({ locator: { row: 'drugm' } })])).join('\n')).toContain('entries.0.locator.table');
+    expect(messages(list([entry({ phenotype: 'Synthetic Poor' })])).length).toBeGreaterThan(0);
+    expect(messages({ ...list(), recommendations: [] }).length).toBeGreaterThan(0);
+  });
+
+  it('lists an ingredient once per gene, and keeps one name per RxNorm id and one HGNC id per gene', () => {
+    // control: one ingredient for two genes is two entries, and allowed
+    expect(messages(list([entry(), entry({ gene: 'GENEB', hgncId: 'syn-hgnc-geneb' })]))).toEqual([]);
+    expect(messages(list([entry(), entry({ strength: 'moderate' })]))).toEqual(['entries.1: This ingredient is already listed for this gene.']);
+    expect(messages(list([entry(), entry({ ingredient: 'drugn', gene: 'GENEB', hgncId: 'syn-hgnc-geneb' })]))).toEqual([
+      'entries.1.ingredient: This RxNorm id is listed under another ingredient name.',
+    ]);
+    expect(messages(list([entry(), entry({ ingredient: 'drugn', rxcui: 'syn-rxcui-drugn', hgncId: 'syn-hgnc-other' })]))).toEqual([
+      'entries.1.hgncId: This gene is listed with another HGNC id.',
+    ]);
+    expect(messages(list([entry(), entry({ ingredient: 'drugn', rxcui: 'syn-rxcui-drugn', gene: 'GENEB' })]))).toEqual([
+      'entries.1.gene: This HGNC id is listed under another gene.',
+    ]);
+  });
+
+  it('a synthetic list must use "syn-" identifiers, and a real list real-form ones', () => {
+    expect(messages(list([entry({ rxcui: '990000000101' })])).join('\n')).toContain('entries.0.rxcui: A synthetic file must use an invented "syn-" rxcui');
+    expect(messages(list([entry({ hgncId: 'HGNC:9000101' })])).join('\n')).toContain('entries.0.hgncId: A synthetic file must use an invented "syn-" hgncId');
+    expect(messages(realList())).toEqual([]);
+    const invented = { ...realList(), entries: [entry()] };
+    expect(messages(invented)).toEqual([
+      'entries.0.rxcui: A non-synthetic file must use a real rxcui, not an invented "syn-" one.',
+      'entries.0.hgncId: A non-synthetic file must use a real hgncId, not an invented "syn-" one.',
+    ]);
+  });
+
+  it('a reviewed real list must state its licence, redistribution and origin; a draft or synthetic list need not', () => {
+    expect(messages(realList({ license: 'unknown' })).join('\n')).toContain('provenance.license');
+    expect(messages(realList({ redistribution: 'unknown' })).join('\n')).toContain('provenance.redistribution');
+    expect(messages(realList({}, 'unknown'))).toEqual(['origin: A reviewed file must state the origin of its content (not "unknown").']);
+    expect(messages(realList({}, 'cpic')).join('\n')).toContain('origin');
+    const draft = { ...realList({ license: 'unknown', redistribution: 'unknown' }, 'unknown'), review: { status: 'unreviewed' } };
+    expect(messages(draft)).toEqual([]);
+    expect(messages({ ...list(), origin: 'unknown', provenance: { ...base.provenance, license: 'unknown', redistribution: 'unknown' } })).toEqual([]);
+  });
+
+  it('is never a CPIC knowledge file, but is a file a reviewer hashes and signs', () => {
+    expect(knowledgeFileSchema.safeParse(list()).success).toBe(false);
+    expect(signableKnowledgeFileSchema.parse(list())).toEqual(list());
+    // control: the signable union still reads the CPIC kinds as they are
+    expect(signableKnowledgeFileSchema.parse(functionPairMap())).toEqual(geneMapFileSchema.parse(functionPairMap()));
   });
 });

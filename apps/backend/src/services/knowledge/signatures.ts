@@ -1,5 +1,5 @@
 import { createPublicKey, verify, type KeyObject } from 'node:crypto';
-import type { KnowledgeFile } from '@telesphoros/cpic-schema';
+import type { SignableKnowledgeFile } from '@telesphoros/cpic-schema';
 
 /**
  * Two-person sign-off for real knowledge (audit CLIN-01). A reviewed real file loads under the production rules only with valid signatures from at
@@ -76,7 +76,7 @@ export function parseSignerKeys(json: string | undefined): SignerKeys {
  * What stops a reviewed real file from loading under the production rules, one line each, and the signers that did verify. `contentSha256` is the
  * hash the loader recomputed from the content, not the one the file states.
  */
-export function checkSignatures(path: string, file: KnowledgeFile, contentSha256: string, keys: SignerKeys): { problems: string[]; signedBy: string[] } {
+export function checkSignatures(path: string, file: SignableKnowledgeFile, contentSha256: string, keys: SignerKeys): { problems: string[]; signedBy: string[] } {
   if (file.review.status !== 'reviewed') return { problems: [], signedBy: [] };
   if (keys.size === 0) return { problems: [`${path}: no signer keys are configured (KNOWLEDGE_SIGNER_KEYS), so its signatures cannot be checked.`], signedBy: [] };
   const problems: string[] = [];
