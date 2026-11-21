@@ -1,6 +1,6 @@
 # Plan: spec 044, slice A, the read
 
-**Status**: **draft, awaiting founder approval.** Plan only. Spec 044 itself was approved by the founder on 2026-11-21 ("Approved").
+**Status**: **approved by the founder on 2026-11-21**, with P1 and P2 decided (below). Plan only. Spec 044 itself was approved by the founder on 2026-11-21 ("Approved").
 Read against `main` at `7f5f3cf`.
 
 ## What slice A delivers
@@ -106,9 +106,10 @@ check is unrun until CI. CI runs `verify` and the database tiers on the pull req
 
 ## Decisions for the founders
 
-- **P1. The word when results disagree** (rule 4): Review before Held before No recommendation, with every result listed. Alternative:
-  Held wins when any result is held. Recommendation: as written, because a held result in one report does not erase guidance from another
-  verified one, and both are shown.
-- **P2. Where code may run** for this slice (above).
+- **P1. The word when results disagree** (rule 4): **decided 2026-11-21 (founder), as recommended:** Review before Held before No
+  recommendation, with every result listed, because a held result in one report does not erase guidance from another verified one.
+- **P2. Where code may run** for this slice: **decided 2026-11-21 (founder): "write it here and let CI test".** The code is written in
+  this cloud session and **not run here**: no test, build, type check or linter runs on this host, as agent policy requires. CI is the
+  first run, and the pull request says so.
 
 Not reopened here: G2 (the first pairs) and G3 (the wording) belong to slices K and B.
