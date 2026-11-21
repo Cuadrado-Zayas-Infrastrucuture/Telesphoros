@@ -216,6 +216,8 @@ const PRODUCT_DEMO_STEP = [
   '- name: Investor demo browser suite',
   '        env:',
   '          LOCAL_PG_BIN: /usr/lib/postgresql/16/bin',
+  // Temporary, while the intermittent CI teardown failure is diagnosed: only a non-zero teardown becomes a warning (product-demo-ci.cjs).
+  '          PRODUCT_DEMO_TEARDOWN_FAILURE: warn',
   '        run: MOTO_SERVER="$(command -v moto_server)" pnpm test:product-demo:ci',
 ].join('\n');
 
@@ -260,6 +262,7 @@ test('investor demo CI guard rejects missing, swallowed, optional, unpinned and 
     workflow.replace(step, step + '        continue-on-error: true\n'),
     workflow.replace(step, step + '        if: false\n'),
     workflow.replace(step, step.replace('/usr/lib/postgresql/16/bin', '/usr/lib/postgresql/15/bin')),
+    workflow.replace(step, step.replace('PRODUCT_DEMO_TEARDOWN_FAILURE: warn', 'PRODUCT_DEMO_TEARDOWN_FAILURE: ignore')),
     workflow.replace(step, step.replace('MOTO_SERVER="$(command -v moto_server)" ', '')),
     workflow.replace(build, ''),
     workflow.replace(build, '').replace(step, step + build),

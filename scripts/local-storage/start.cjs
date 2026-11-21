@@ -22,4 +22,9 @@ async function main() {
   finally { clearInterval(monitor); await teardown(run.id); }
   if (unhealthy) throw new Error('Owned service stopped unexpectedly; run removed.');
 }
-main().catch(() => { console.error('Local storage operation failed; inspect private run/control state.'); process.exitCode = 1; });
+main().catch((error) => {
+  console.error('Local storage operation failed; inspect private run/control state.');
+  // Asked by the CI wrapper (product-demo-ci.cjs), where the run state is gone with the runner: the reason's first line only, never a stack.
+  if (process.env.LOCAL_STORAGE_SHOW_REASON === '1') console.error('Reason: ' + String(error?.message ?? error).split('\n')[0]);
+  process.exitCode = 1;
+});
