@@ -34,6 +34,15 @@ const roleReadBack = (inline, policies = [held('example-role', 'check-and-publis
   return p;
 };
 const newAttr = (type, key, before, after) => () => { const p = infra(); p.resource_drift = drift(`${type}.x`, type, { [key]: before }, { [key]: after }); return p; };
+// The S3 gateway endpoint reading new ranges from its AWS-managed prefix list (the f681000d MIGRATE plan, 2026-11-21); documentation ranges.
+const RANGES = ['192.0.2.0/24', '198.51.100.0/24'];
+const ENDPOINT = { vpc_endpoint_type: 'Gateway', prefix_list_id: 'pl-00000000', service_name: 'com.amazonaws.us-east-2.s3', route_table_ids: ['rtb-1'] };
+const rangesMoved = (before, after, mode = 'MIGRATE') => () => {
+  const p = mode === 'MIGRATE' ? migrate() : infra();
+  const b = { ...ENDPOINT, ...before };
+  p.resource_drift = drift('aws_vpc_endpoint.synthetic_s3[0]', 'aws_vpc_endpoint', b, { ...b, ...after });
+  return p;
+};
 
 const cases = [
   ['MIGRATE good', 'MIGRATE', migrate, true],
@@ -85,6 +94,14 @@ const cases = [
   ['real drift: a role reads back its policy twice', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: POLICY }, { name: 'check-and-publish', policy: POLICY }]), false],
   ['real drift: a role read-back with no prior state to check it against', 'INFRA', () => { const p = roleReadBack([{ name: 'check-and-publish', policy: POLICY }]); delete p.prior_state; return p; }, false],
   ['real drift: a held policy whose document is not JSON', 'INFRA', () => roleReadBack([{ name: 'check-and-publish', policy: 'not json' }], [held('example-role', 'check-and-publish', 'not json')]), false],
+  ['harmless drift: the S3 gateway endpoint reads ranges AWS added to its prefix list', 'MIGRATE', rangesMoved({ cidr_blocks: RANGES }, { cidr_blocks: [...RANGES, '203.0.113.0/24'] }), true],
+  ['harmless drift: the S3 gateway endpoint reads a range AWS removed', 'INFRA', rangesMoved({ cidr_blocks: RANGES }, { cidr_blocks: RANGES.slice(0, 1) }, 'INFRA'), true],
+  ['real drift: an interface endpoint\'s ranges move', 'MIGRATE', rangesMoved({ vpc_endpoint_type: 'Interface', cidr_blocks: RANGES }, { cidr_blocks: RANGES.slice(0, 1) }), false],
+  ['real drift: the endpoint moves to another prefix list with its ranges', 'MIGRATE', rangesMoved({ cidr_blocks: RANGES }, { prefix_list_id: 'pl-11111111', cidr_blocks: RANGES.slice(0, 1) }), false],
+  ['real drift: the endpoint\'s ranges move with its route tables', 'MIGRATE', rangesMoved({ cidr_blocks: RANGES }, { route_table_ids: ['rtb-2'], cidr_blocks: RANGES.slice(0, 1) }), false],
+  ['real drift: the endpoint\'s ranges read back empty', 'MIGRATE', rangesMoved({ cidr_blocks: RANGES }, { cidr_blocks: [] }), false],
+  ['real drift: the endpoint reads a range that is not an IPv4 CIDR', 'MIGRATE', rangesMoved({ cidr_blocks: RANGES }, { cidr_blocks: [...RANGES, '2001:db8::/32'] }), false],
+  ['real drift: a security group rule\'s cidr_blocks move', 'MIGRATE', () => { const p = migrate(); p.resource_drift = drift('aws_security_group_rule.x[0]', 'aws_security_group_rule', { cidr_blocks: RANGES }, { cidr_blocks: [...RANGES, '203.0.113.0/24'] }); return p; }, false],
 ];
 
 for (const [name, mode, make, pass] of cases) {
