@@ -12,6 +12,40 @@ This runbook creates one KMS key per signer and gives the API their public keys.
 - **Nothing by default:** with `knowledge_signers` empty, nothing is created and the variable is absent, so the API refuses any signed real file.
 - **Cost:** about **$1 per key per month**, so **about $2/month** for two signers. Signing is a few KMS requests per released file.
 
+## Each signer's own sign-in (synthetic staging)
+
+A signer key may be used by one IAM principal only, and the account's administration role is shared by design, so each signer first needs an identity
+that is theirs alone. `infrastructure/terraform/knowledge-signer-people.tf` creates one per person named in `knowledge_signer_people`:
+
+- **An IAM user**, `<stack>-signer-<id>`, with no access key, no console password and no MFA device: Terraform never creates those, because each would
+  put a secret in the state. The user may change their own password, set up their own MFA device, manage their own access keys and become their own
+  signing role. Every other call is denied until the session has MFA.
+- **A signing role**, `<stack>-knowledge-signer-<id>`, that only that user can become, with an MFA code at most an hour old, for at most an hour. It
+  carries no policy: the key policy of that signer's key is what lets it sign. Its ARN is what `knowledge_signers` names for that id.
+- **Synthetic staging only.** The plan refuses `knowledge_signer_people` in production, where signers sign in through IAM Identity Center. IAM is free.
+
+The founder runs these steps; an agent only prepares them.
+
+1. **Name the people** with the same ids they will sign under: `knowledge_signer_people = ["jan", "kevin"]`. This is an INFRA plan (users, roles and
+   their policies; no task definition or service), reviewed and applied as in [staging-release.md](staging-release.md). The roles' ARNs are in
+   `terraform output knowledge_signer_person_role_arns`.
+2. **First console password, by hand.** In the IAM console, for each user: enable console access with a custom password that must be changed at the
+   first sign-in, and hand it to that person in person. It is never written to the repository, chat or email.
+3. **Each person, in their first session:** change the password, assign a virtual MFA device to their own user, then create their own access key.
+4. **Each person's CLI profile** takes on the signing role with MFA (the source profile holds their own access key):
+   ```ini
+   [profile <id>-signer]
+   role_arn       = <their signing role ARN>
+   source_profile = <id>-user
+   mfa_serial     = <their MFA device ARN>
+   duration_seconds = 3600
+   ```
+   `aws sts get-caller-identity --profile <id>-signer` asks for the MFA code and shows the signing role.
+
+**The keys themselves are a later step.** Naming the signers in `knowledge_signers` also gives the API task `KNOWLEDGE_SIGNER_KEYS`, a task definition
+change that an INFRA plan refuses, while the keys are new resources that an IMAGE plan refuses
+(`scripts/staging/release/release-check.mjs`). No release mode carries both today.
+
 ## Steps
 
 1. **Name the signers** in the environment's variables. Use two different people, each with their own IAM role or user:
