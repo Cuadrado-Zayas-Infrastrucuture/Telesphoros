@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { drugPresentation, type EvaluationDto } from '@telesphoros/shared-types';
 import { evaluationLine, evaluationStanding } from '@/lib/resultStatus';
 import { ResultDetails } from './ResultDetails';
+import { SignedKnowledgeLabel } from './SignedKnowledgeLabel';
 import { StandingNotices } from './StandingNotices';
 
 /** One stored synthetic assessment, read-only: the outcome and wording per drug, its source and provenance, and the way to the patient's stored results. */
@@ -13,6 +14,7 @@ export function AssessmentResult({ evaluation, created }: { evaluation: Evaluati
     <div aria-label="Assessment result" role="status" className="space-y-3">
       <p>{created ? 'Stored just now.' : 'The same assessment was already stored.'}</p>
       <StandingNotices notices={standing.notices} />
+      <SignedKnowledgeLabel evaluation={evaluation} />
       {evaluation.disposition === 'held' ? (
         <p className="text-warning">
           Held: {evaluation.hold?.message ?? evaluation.holdCode ?? 'No interpretation available.'} {evaluation.hold?.reviewerAction}

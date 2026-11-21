@@ -1044,6 +1044,16 @@ jobs:
       - run: pnpm test:launcher-cors
       - name: Browser tests
         run: pnpm --filter @telesphoros/frontend e2e
+      # The investor demo suite (product-demo-e2e, docs/investor-demo.md) against a freshly started, owned synthetic stack: its own disposable
+      # PostgreSQL 16 cluster from the runner image's binaries, the pinned Moto installed above, the built API and the demo build. It runs after the
+      # browser tests because both use the same fixed loopback ports. The wrapper fails the job if the stack is not ready, a test fails or the
+      # stack's own teardown fails; the launcher itself refuses a PostgreSQL other than 16 or a Moto other than the pinned one.
+      - name: Build the investor demo
+        run: pnpm demo:product:build
+      - name: Investor demo browser suite
+        env:
+          LOCAL_PG_BIN: /usr/lib/postgresql/16/bin
+        run: MOTO_SERVER="$(command -v moto_server)" pnpm test:product-demo:ci
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
