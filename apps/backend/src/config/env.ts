@@ -130,6 +130,14 @@ export const envSchema = z
     SYNTHETIC_ASSESSMENT: z.enum(['disabled', 'enabled']).default('disabled'),
     /** The synthetic knowledge the assessment evaluates against, loaded once at start. Required when SYNTHETIC_ASSESSMENT is enabled; never the pipeline's knowledge. */
     SYNTHETIC_KNOWLEDGE_DIR: z.string().min(1).optional(),
+    /**
+     * Which knowledge the synthetic assessment reads (spec 044 K2, decision K2-D1): `synthetic` (the default) reads SYNTHETIC_KNOWLEDGE_DIR; `signed`
+     * reads SIGNED_KNOWLEDGE_DIR instead, under the production rules (reviewed, real, two valid signatures from KNOWLEDGE_SIGNER_KEYS). One set at a
+     * time, never mixed. The patients stay synthetic either way: this chooses the guidelines, never the data.
+     */
+    ASSESSMENT_KNOWLEDGE: z.enum(['synthetic', 'signed']).default('synthetic'),
+    /** The signed, real knowledge the assessment reads when ASSESSMENT_KNOWLEDGE=signed. Never the pipeline's KNOWLEDGE_DIR. */
+    SIGNED_KNOWLEDGE_DIR: z.string().min(1).optional(),
     // Rollout fence: reads stay available; enable writes only after migration and compatible services are confirmed.
     MEDICATION_WRITES: z.enum(['disabled', 'enabled']).default('disabled'),
     FOLLOWUP_WRITES: z.enum(['disabled', 'enabled']).default('disabled'),
@@ -284,12 +292,21 @@ export const envSchema = z
       if (env.OBJECT_STORAGE_DRIVER !== 's3') problem('SYNTHETIC_ASSESSMENT', 'can only be enabled with OBJECT_STORAGE_DRIVER=s3 (its evidence is pinned to object versions)');
       if (!env.LEDGER_VERIFIER_DATABASE_URL)
         problem('LEDGER_VERIFIER_DATABASE_URL', 'is required when SYNTHETIC_ASSESSMENT=enabled (the record log must be watched while it is written)');
-      if (!env.SYNTHETIC_KNOWLEDGE_DIR) problem('SYNTHETIC_KNOWLEDGE_DIR', 'is required when SYNTHETIC_ASSESSMENT=enabled');
+      if (env.ASSESSMENT_KNOWLEDGE === 'signed') {
+        // Spec 044 K2: the signed set is loaded under the production rules, so its signers' public keys must be configured.
+        if (!env.SIGNED_KNOWLEDGE_DIR) problem('SIGNED_KNOWLEDGE_DIR', 'is required when ASSESSMENT_KNOWLEDGE=signed');
+        if (!env.KNOWLEDGE_SIGNER_KEYS) problem('KNOWLEDGE_SIGNER_KEYS', 'is required when ASSESSMENT_KNOWLEDGE=signed (signed knowledge needs two valid signatures)');
+      } else {
+        if (!env.SYNTHETIC_KNOWLEDGE_DIR) problem('SYNTHETIC_KNOWLEDGE_DIR', 'is required when SYNTHETIC_ASSESSMENT=enabled');
+        if (env.SIGNED_KNOWLEDGE_DIR) problem('SIGNED_KNOWLEDGE_DIR', 'can only be set when ASSESSMENT_KNOWLEDGE=signed');
+      }
       if (!env.BUILD_VERSION) problem('BUILD_VERSION', 'is required when SYNTHETIC_ASSESSMENT=enabled (it is stored with every evaluation)');
       if (env.LAB_REPORT_PIPELINE === 'enabled') problem('SYNTHETIC_ASSESSMENT', 'cannot be enabled with LAB_REPORT_PIPELINE=enabled: they are two different integrations');
       if (env.LOCAL_STORAGE_RUN_ID) problem('SYNTHETIC_ASSESSMENT', 'cannot be enabled in a disposable local storage run');
-    } else if (env.SYNTHETIC_KNOWLEDGE_DIR) {
-      problem('SYNTHETIC_KNOWLEDGE_DIR', 'can only be set when SYNTHETIC_ASSESSMENT=enabled');
+    } else {
+      if (env.SYNTHETIC_KNOWLEDGE_DIR) problem('SYNTHETIC_KNOWLEDGE_DIR', 'can only be set when SYNTHETIC_ASSESSMENT=enabled');
+      if (env.ASSESSMENT_KNOWLEDGE === 'signed') problem('ASSESSMENT_KNOWLEDGE', 'can only be signed when SYNTHETIC_ASSESSMENT=enabled');
+      if (env.SIGNED_KNOWLEDGE_DIR) problem('SIGNED_KNOWLEDGE_DIR', 'can only be set when SYNTHETIC_ASSESSMENT=enabled');
     }
 
     // Checked on its own, not only through the pipeline: production refuses the queued path even with the pipeline off.
