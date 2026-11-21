@@ -174,3 +174,12 @@ it('every drug on hold: no drug could be evaluated', () => {
   show(evaluation([notShown(ids[0]!, 'drugz', 'held', 'gene-absent'), notShown(ids[1]!, 'drugy', 'held', 'cell-disputed')]));
   expect(screen.getByText('No drug could be evaluated. 2 on hold.')).toHaveClass('text-warning');
 });
+
+// Spec 044 K2-D3: an assessment made against the signed, real knowledge says so, once; one made against the synthetic knowledge does not.
+it('says the guideline wording is real and the patient fictional only for a result made with signed knowledge', () => {
+  const signed = show({ ...evaluation([shown(ids[0]!, 'drugz')]), scope: 'synthetic-patient-signed-knowledge' });
+  expect(screen.getByText('Real CPIC guideline wording. Fictional patient. Not approved for clinical use.')).toBeVisible();
+  signed.unmount();
+  show(evaluation([shown(ids[0]!, 'drugz')]));
+  expect(screen.queryByText(/Real CPIC guideline wording/)).not.toBeInTheDocument();
+});
