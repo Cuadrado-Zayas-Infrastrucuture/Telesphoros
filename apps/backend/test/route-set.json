@@ -35,6 +35,7 @@
   { "route": "GET /api/v1/patients/:id", "access": ["clinician", "reader", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/patients/:id/demographics", "access": ["clinician", "reader", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/patients/:id/followups", "access": ["clinician", "reviewer"], "gate": "always" },
+  { "route": "GET /api/v1/patients/:id/genomic-profile", "access": ["clinician", "reader", "reviewer"], "gate": "pipeline-or-synthetic-assessment" },
   { "route": "GET /api/v1/patients/:id/identifiers", "access": ["clinician", "reader", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/patients/:id/medications", "access": ["clinician", "reader", "reviewer"], "gate": "always" },
   { "route": "GET /api/v1/patients/demographics-completeness", "access": ["clinician", "reader", "reviewer"], "gate": "always" },

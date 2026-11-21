@@ -3,8 +3,9 @@ export const canonical = (v) => JSON.stringify(v, (_, x) => (x && typeof x === '
 
 // Drift AWS or the provider makes on its own, seen on this stack and reviewed: RDS's restore mark, Cognito's user counter, a null read back
 // as empty (also nested, and for CloudFront as an empty list), the alarm subscription confirmed (true -> false only), an attribute a
-// provider upgrade added read for the first time (named attributes, null -> a value only), and a role reading back as inline policies the
-// aws_iam_role_policy resources Terraform already holds for it (same name and document; any other inline policy is still drift).
+// provider upgrade added read for the first time (named attributes, null -> a value only), a role reading back as inline policies the
+// aws_iam_role_policy resources Terraform already holds for it (same name and document; any other inline policy is still drift), and a
+// gateway endpoint's address ranges, which it reads from an AWS-managed prefix list that AWS changes on its own.
 const SELF_MOVING = { aws_db_instance: ['latest_restorable_time'], aws_cognito_user_pool: ['estimated_number_of_users'] };
 // hashicorp/aws 6.70.0 -> 6.72.0 (#295): neither attribute is in the 6.70.0 provider.
 const NEW_IN_PROVIDER = { aws_cloudtrail: ['recursive_logging'], aws_db_instance: ['multi_tenant'] };
@@ -27,6 +28,14 @@ const normalised = (emptyList) => function norm(v) {
   return v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, norm(x)])) : v;
 };
 const deepNullOnly = (b, a, emptyList = false) => canonical(b) !== canonical(a) && canonical(normalised(emptyList)(b)) === canonical(normalised(emptyList)(a));
+// The S3 gateway endpoint's cidr_blocks are computed from the AWS-managed S3 prefix list; the config cannot set them (2026-11-21, release
+// f681000d: AWS added three us-east-2 ranges, 18 -> 21). Only a Gateway endpoint on the same prefix list, both sides non-empty IPv4 ranges.
+const IPV4_CIDR = /^(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+const cidrList = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && IPV4_CIDR.test(x));
+const prefixRanges = (d, k, b, a) => d.type === 'aws_vpc_endpoint' && k === 'cidr_blocks'
+  && d.change.before.vpc_endpoint_type === 'Gateway' && d.change.after.vpc_endpoint_type === 'Gateway'
+  && typeof d.change.after.prefix_list_id === 'string' && d.change.before.prefix_list_id === d.change.after.prefix_list_id
+  && cidrList(b) && cidrList(a);
 const confirmed = (type, k, b, a) => type === 'aws_sns_topic_subscription' && k === 'pending_confirmation' && b === true && a === false;
 // `plan` is the whole plan: a role's read-back is checked against the policies in its prior state.
 export const harmlessDrift = (d, plan) => {
@@ -35,6 +44,7 @@ export const harmlessDrift = (d, plan) => {
   const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => canonical(before[k]) !== canonical(after[k]));
   return moved.length > 0 && moved.every((k) => (SELF_MOVING[d.type] ?? []).includes(k) || nullToEmpty(before[k], after[k]) || confirmed(d.type, k, before[k], after[k])
     || firstRead(d.type, k, before[k], after[k]) || (k === 'inline_policy' && ownPolicies(plan, d, before[k], after[k]))
+    || prefixRanges(d, k, before[k], after[k])
     || (d.type === 'aws_cloudwatch_log_metric_filter' && k === 'metric_transformation' && deepNullOnly(before[k], after[k]))
     || (d.type === 'aws_cloudfront_distribution' && k === 'ordered_cache_behavior' && deepNullOnly(before[k], after[k], true)));
 };

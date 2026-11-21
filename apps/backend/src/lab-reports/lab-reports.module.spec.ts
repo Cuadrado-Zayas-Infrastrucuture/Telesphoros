@@ -3,7 +3,7 @@ import type { Env } from '../config/env';
 import { KnowledgeLoadError } from '../services/knowledge/knowledge-loader';
 import { SignerKeysError } from '../services/knowledge/signatures';
 import { ReaderNotApprovedError } from '../services/report-reader/report-reader';
-import { cleanupTempDirs, reviewedCopyOf, tempDir } from '../../test/helpers/knowledge';
+import { cleanupTempDirs, reviewedCopyOf, signerKeysJson, tempDir, TEST_SIGNERS, UNLISTED_SIGNER } from '../../test/helpers/knowledge';
 import { labKnowledgeFactory, labReaderFactory, syntheticKnowledgeFactory } from './lab-reports.module';
 
 // loadEnv refuses the pipeline in production. These are the second line: had that refusal been bypassed (a wrong or missing NODE_ENV reaching
@@ -62,6 +62,35 @@ describe('the synthetic knowledge of the structured assessment', () => {
     const real = await reviewedCopyOf(SYNTHETIC_STRUCTURED);
     // Loaded as it would be started: the loader itself accepts it outside production, so only the factory's own check can stop it.
     await expect(syntheticKnowledgeFactory(switched({ SYNTHETIC_KNOWLEDGE_DIR: real }))).rejects.toThrow(/synthetic knowledge only/);
+  });
+
+  describe('with ASSESSMENT_KNOWLEDGE=signed (spec 044 K2)', () => {
+    const signed = async (over: Partial<Env> = {}) =>
+      switched({ ASSESSMENT_KNOWLEDGE: 'signed', SIGNED_KNOWLEDGE_DIR: await reviewedCopyOf(SYNTHETIC_STRUCTURED), KNOWLEDGE_SIGNER_KEYS: signerKeysJson(), ...over });
+
+    it('loads a set signed by two listed signers under the production rules, and it is not the synthetic set (control)', async () => {
+      const set = await syntheticKnowledgeFactory(await signed());
+      expect(set?.files.some((f) => f.synthetic)).toBe(false);
+      expect(set?.allGuidelines().length).toBeGreaterThan(0);
+    });
+
+    it('refuses a set signed by one listed signer only', async () => {
+      const oneSigner = await reviewedCopyOf(SYNTHETIC_STRUCTURED, undefined, { signers: [TEST_SIGNERS[0]!] });
+      await expect(syntheticKnowledgeFactory(await signed({ SIGNED_KNOWLEDGE_DIR: oneSigner }))).rejects.toBeInstanceOf(KnowledgeLoadError);
+    });
+
+    it('refuses a set when only one of its two signers is in the trust list', async () => {
+      const keys = signerKeysJson([TEST_SIGNERS[0]!, UNLISTED_SIGNER]);
+      await expect(syntheticKnowledgeFactory(await signed({ KNOWLEDGE_SIGNER_KEYS: keys }))).rejects.toBeInstanceOf(KnowledgeLoadError);
+    });
+
+    it('refuses the synthetic set itself, which the production rules do not accept', async () => {
+      await expect(syntheticKnowledgeFactory(await signed({ SIGNED_KNOWLEDGE_DIR: SYNTHETIC_STRUCTURED }))).rejects.toBeInstanceOf(KnowledgeLoadError);
+    });
+
+    it('refuses an empty directory', async () => {
+      await expect(syntheticKnowledgeFactory(await signed({ SIGNED_KNOWLEDGE_DIR: await tempDir() }))).rejects.toThrow(/at least one guideline/);
+    });
   });
 
   it('refuses an empty directory, and the base directory of the pipeline is not what it reads', async () => {

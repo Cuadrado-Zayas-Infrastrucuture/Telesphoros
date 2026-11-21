@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { DrugList } from '@telesphoros/shared-types';
 import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
@@ -59,6 +59,8 @@ async function openInbox(page: Page) {
   await expect(panel.getByText('Loading follow-ups…', { exact: true })).toHaveCount(0);
   return panel;
 }
+/** No reminder is listed: the only link left in main is the page's own Back to chat (specs/041 C4). */
+const expectNoReminderLinks = (panel: Locator) => expect(panel.getByRole('link')).toHaveText(['Back to chat']);
 const filteredRead = (page: Page, status: string, assignment = 'mine') =>
   page.waitForResponse((reply) => {
     const url = new URL(reply.url());
@@ -97,7 +99,7 @@ test('filtering resets pagination, keeps clinic totals, handles no matches and o
   await panel.getByLabel('Reminder status').selectOption('reassignment');
   await reply;
   await expect(panel.getByText('No matching follow-ups. Try another filter or clear filters.', { exact: true })).toBeVisible();
-  await expect(panel.getByRole('link')).toHaveCount(0);
+  await expectNoReminderLinks(panel);
   await panel.getByRole('button', { name: 'Clear filters', exact: true }).click();
   await expect(panel.getByRole('combobox', { name: 'Assignment', exact: true })).toHaveValue('all');
   await expect(panel.getByLabel('Reminder status')).toHaveValue('all');
@@ -122,7 +124,7 @@ test('a reviewer can filter clinic reminders and sees an honest empty assigned-t
     await panel.getByRole('combobox', { name: 'Assignment', exact: true }).selectOption('mine');
     await read;
     await expect(panel.getByText('No matching follow-ups. Try another filter or clear filters.', { exact: true })).toBeVisible();
-    await expect(panel.getByRole('link')).toHaveCount(0);
+    await expectNoReminderLinks(panel);
     await panel.getByRole('button', { name: 'Clear filters', exact: true }).click();
     const all = filteredRead(reviewer, 'upcoming', 'all');
     await panel.getByLabel('Reminder status').selectOption('upcoming');
@@ -164,7 +166,7 @@ test('changing filters discards an obsolete response and retries the current sel
     await panel.getByLabel('Reminder status').selectOption('overdue');
     await started;
     await expect(panel.getByText('Loading follow-ups…', { exact: true })).toBeVisible();
-    await expect(panel.getByRole('link')).toHaveCount(0);
+    await expectNoReminderLinks(panel);
     await panel.getByLabel('Reminder status').selectOption('upcoming');
     await expect(panel.getByRole('alert')).toContainText('Follow-ups could not be loaded');
     release();
