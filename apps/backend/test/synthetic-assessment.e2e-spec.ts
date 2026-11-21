@@ -6,6 +6,7 @@ import { RequestMethod } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { evaluationDtoSchema } from '@telesphoros/shared-types';
 import { ROLES_KEY } from '../src/auth/decorators';
+import { GenomicProfileController } from '../src/genomic-profile/genomic-profile.controller';
 import { EvaluationsController } from '../src/lab-reports/evaluations.controller';
 import { EvaluationsService } from '../src/lab-reports/evaluations.service';
 import { LabReportsModule } from '../src/lab-reports/lab-reports.module';
@@ -44,12 +45,17 @@ const pipelineControllers = [
   ReportPatientLinkController,
   PatientLinkQuarantineController,
 ] as ControllerClass[];
-const everyControllerTheSwitchCouldTouch = [...pipelineControllers, StructuredPreviewController as unknown as ControllerClass];
+// Spec 044: the genomic profile reads current evaluations behind the same gate as the evaluation reads, so the switch opens it too.
+const everyControllerTheSwitchCouldTouch = [
+  ...pipelineControllers,
+  StructuredPreviewController as unknown as ControllerClass,
+  GenomicProfileController as unknown as ControllerClass,
+];
 
 describe('what the switch opens (no database needed)', () => {
-  it('is exactly the evaluation reads, the assessment route and the structured preview, by their own marks', () => {
+  it('is exactly the evaluation reads, the genomic profile, the assessment route and the structured preview, by their own marks', () => {
     const unlocked = everyControllerTheSwitchCouldTouch.filter((c) => Reflect.getMetadata(UNLOCKED_BY_SYNTHETIC_ASSESSMENT, c) === true).map((c) => c.name);
-    expect(unlocked.sort()).toEqual(['EvaluationsController', 'StructuredAssessmentController', 'StructuredPreviewController']);
+    expect(unlocked.sort()).toEqual(['EvaluationsController', 'GenomicProfileController', 'StructuredAssessmentController', 'StructuredPreviewController']);
   });
 
   it('opens only reads of evaluations: every route of the evaluations controller is a GET', () => {

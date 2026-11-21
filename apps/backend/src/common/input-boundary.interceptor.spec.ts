@@ -15,6 +15,7 @@ import { ResultAcknowledgementsController } from '../lab-reports/result-acknowle
 import { ResultRendersController } from '../lab-reports/result-renders.controller';
 import { DisputesController } from '../lab-reports/disputes.controller';
 import { LedgerController } from '../ledger/ledger.controller';
+import { GenomicProfileController } from '../genomic-profile/genomic-profile.controller';
 import { HealthController } from '../health/health.controller';
 import { MeController } from '../me/me.controller';
 import { MembersController } from '../members/members.controller';
@@ -35,6 +36,7 @@ const controllers: Type[] = [
   PatientsController,
   PatientDemographicsController,
   PatientMedicationsController,
+  GenomicProfileController,
   ReportsController,
   CapturesController,
   ReportCaptureController,
