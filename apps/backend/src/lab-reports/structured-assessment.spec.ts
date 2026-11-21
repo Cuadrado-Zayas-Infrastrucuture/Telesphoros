@@ -4,7 +4,8 @@ import { parseSyntheticPgxPackage, type StructuredPreview } from '@telesphoros/s
 import type { StoredFindingReview, StoredSourceResolution, StoredStructuredRevision, StructuredSnapshot } from '../storage/structured-revisions.repository';
 import { loadKnowledge, KnowledgeLoadError } from '../services/knowledge/knowledge-loader';
 import { evaluate } from '../services/recommendation-engine/recommendation-engine';
-import { planStructuredAssessment, type StructuredAssessmentPlan } from './structured-assessment';
+import { cleanupTempDirs, copyOf, readJson, writeJson } from '../../test/helpers/knowledge';
+import { type PlanKnowledge, planStructuredAssessment, type StructuredAssessmentPlan } from './structured-assessment';
 import { STRUCTURED_HOLD_ACTIONS, STRUCTURED_HOLD_CODES, STRUCTURED_HOLD_MESSAGES } from './structured-hold-codes';
 
 // The expected plan for each case below is written from the rules in the slice plan (docs/design/plans/pgx-synthetic-assessment.md), not read back from
@@ -295,5 +296,78 @@ describe('the structured demonstration package', () => {
     if (plan_.kind !== 'ready') throw new Error('expected a ready plan');
     const text = Object.fromEntries(evaluate(set, plan_.geneInputs).results.map((r) => [r.drug, 'recommendationText' in r ? r.recommendationText : null]));
     expect(text).toEqual({ drugq: 'Q normal.', drugz: 'Z normal-low.' });
+  });
+});
+
+// Spec 044 K2-D2. A gene whose loaded map is phenotype-only (no alleles, no method) has no mapping from a diplotype, so the laboratory's phenotype is the
+// input, exactly as the map names it, or the revision holds. The S1 fixture's finding is GENEA, diplotype *A/*A, laboratory phenotype "Synthetic category
+// A" under translation "synthetic-lab-translation-1"; the maps below are written by hand for each case.
+describe('a phenotype-only map takes the laboratory phenotype, exactly, or holds (spec 044 K2-D2)', () => {
+  const LAB_PHENOTYPE = 'Synthetic category A';
+  const onlyPhenotypes = (phenotypes: string[]): PlanKnowledge => ({ gene: (symbol) => (symbol === 'GENEA' ? { phenotypes } : undefined) });
+  const planWith = (knowledge: PlanKnowledge, f = finding()) =>
+    planStructuredAssessment(TENANT, { id: 'rep-1', patientId: PATIENT }, snapshot([revision(withFindings([f]))], [review(REV1, f.id)]), knowledge);
+  afterAll(cleanupTempDirs);
+
+  it('reads the fixture as these cases assume (control)', () => {
+    expect(findingA.gene).toBe('GENEA');
+    expect(findingA.laboratoryInterpretation).toEqual({ phenotype: LAB_PHENOTYPE, activityScore: null, translationVersion: 'synthetic-lab-translation-1' });
+  });
+
+  it('passes the laboratory phenotype as a canonical, lab-reported input, and records which finding and translation it came from', () => {
+    const p = planWith(onlyPhenotypes(['Synthetic category B', LAB_PHENOTYPE]));
+    expect(p.kind).toBe('ready');
+    if (p.kind !== 'ready') return;
+    expect(p.geneInputs).toEqual([{ gene: 'GENEA', state: 'canonical', phenotype: LAB_PHENOTYPE, callSource: 'lab-report' }]);
+    expect(p.labPhenotypes).toEqual([{ findingId: findingA.id, gene: 'GENEA', translationVersion: 'synthetic-lab-translation-1' }]);
+  });
+
+  it('holds when the laboratory phenotype is not exactly one of the map terms: no case folding, no near match', () => {
+    for (const phenotypes of [['synthetic category a'], ['Synthetic category A '], ['Synthetic Normal']])
+      expect(held(planWith(onlyPhenotypes(phenotypes)))).toEqual({ holdCode: 'unsupported-source', detail: [`${findingA.id}:phenotype-not-in-map`] });
+  });
+
+  it('holds when the laboratory gave no phenotype', () => {
+    const noInterpretation = finding({ laboratoryInterpretation: null });
+    const scoreOnly = finding({ laboratoryInterpretation: { phenotype: null, activityScore: 1, translationVersion: 'synthetic-lab-translation-1' } });
+    for (const f of [noInterpretation, scoreOnly])
+      expect(held(planWith(onlyPhenotypes([LAB_PHENOTYPE]), f))).toEqual({ holdCode: 'unsupported-source', detail: [`${findingA.id}:phenotype-not-in-map`] });
+  });
+
+  it('keeps the diplotype, and ignores the laboratory phenotype, wherever the map can read a diplotype or the gene has no map', () => {
+    const withAlleles: PlanKnowledge = { gene: () => ({ phenotypes: [LAB_PHENOTYPE], alleles: [{ name: '*A' }] }) };
+    const withMethod: PlanKnowledge = { gene: () => ({ phenotypes: [LAB_PHENOTYPE], method: { kind: 'diplotype-table' } }) };
+    const noMap: PlanKnowledge = { gene: () => undefined };
+    for (const knowledge of [withAlleles, withMethod, noMap]) {
+      const p = planWith(knowledge);
+      expect(p.kind).toBe('ready');
+      if (p.kind !== 'ready') continue;
+      expect(p.geneInputs).toEqual([{ gene: 'GENEA', state: 'diplotype', diplotype: '*A/*A' }]);
+      expect(p.labPhenotypes).toEqual([]);
+    }
+  });
+
+  it('never reaches the phenotype for a finding no second person accepted, or one that is uncertain', () => {
+    const knowledge = onlyPhenotypes([LAB_PHENOTYPE]);
+    const unreviewed = planStructuredAssessment(TENANT, { id: 'rep-1', patientId: PATIENT }, snapshot([revision(withFindings([finding()]))]), knowledge);
+    expect(held(unreviewed).holdCode).toBe('findings-not-reviewed');
+    expect(held(planWith(knowledge, finding({ interpretationState: 'indeterminate' }))).holdCode).toBe('unresolved-finding');
+  });
+
+  it('end to end: the engine reads the laboratory phenotype through a phenotype-only copy of the synthetic set', async () => {
+    const dir = await copyOf(resolve(REPO, 'data/fixtures/knowledge/synthetic-structured'));
+    const path = resolve(dir, 'phenotypes', 'genea.json');
+    const map = (await readJson(path)) as unknown as Record<string, unknown>;
+    delete map.alleles;
+    delete map.method;
+    delete map.pharmvarVersion;
+    await writeJson(path, map);
+    const set = await loadKnowledge({ directory: dir, mode: 'non-production' });
+    // "Synthetic Normal" is a GENEA term; the guideline drugq-genea reads "Q normal." for it (the same cell the diplotype *1/*1 reaches above).
+    const f = finding({ laboratoryInterpretation: { phenotype: 'Synthetic Normal', activityScore: null, translationVersion: 'synthetic-lab-translation-1' } });
+    const p = planWith(set, f);
+    if (p.kind !== 'ready') throw new Error('expected a ready plan');
+    const drugq = evaluate(set, p.geneInputs).results.find((r) => r.drug === 'drugq');
+    expect(drugq && 'recommendationText' in drugq ? drugq.recommendationText : null).toBe('Q normal.');
   });
 });
