@@ -128,6 +128,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
       useFactory: evaluationRequestsFactory,
     },
   ],
-  exports: [PipelineSwitch, PipelineGateGuard],
+  // EvaluationsService and EvaluationReadGateGuard: for the genomic profile (spec 044), which reads current evaluations behind the same gate.
+  exports: [PipelineSwitch, PipelineGateGuard, EvaluationReadGateGuard, EvaluationsService],
 })
 export class LabReportsModule {}

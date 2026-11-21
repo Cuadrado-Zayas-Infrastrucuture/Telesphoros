@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   buildMeta,
+  MAX_PAGE_SIZE,
   type Paginated,
   type EvaluationCreate,
   type EvaluationDto,
@@ -261,6 +262,34 @@ export class EvaluationsService {
     return { data: out, meta: buildMeta(page, pageSize, total) };
   }
 
+  /**
+   * Spec 044 slice A: every current evaluation of one patient, each as the list presents it, with the RxCUI each stored result carries (by
+   * result id; null for a result from schema 1.2 knowledge). The evaluation DTO does not send that identifier (founder decision B-D3), so a
+   * frontend's strict parse of an evaluation never meets an unknown field. Read in pages of the list's largest size, at most
+   * `maxPages` of them; `capped` says whether more remain. Read only.
+   */
+  async currentForPatient(principal: Principal, patientId: string, maxPages: number): Promise<{ items: CurrentEvaluation[]; capped: boolean }> {
+    const ledger = this.need(this.ledger);
+    const items: CurrentEvaluation[] = [];
+    for (let page = 0; page < maxPages; page += 1) {
+      const view = await ledger.evaluationPage(principal.tenantId, { patientId, current: true }, { offset: page * MAX_PAGE_SIZE, limit: MAX_PAGE_SIZE });
+      for (const record of view.items) {
+        const context = view.contexts.get(record.id);
+        if (!context) throw AppException.pipelineMisconfigured();
+        const evaluation = toEvaluationSummaryDto(record, {
+          ...context,
+          current: view.currentIds.get(record.reportId as string) === record.id,
+          activeDisputes: view.activeDisputes,
+          patientLink: view.links.get(record.reportId as string) ?? 'unverified',
+          loadedKnowledgeSetId: this.loadedKnowledgeSetId(record),
+        });
+        items.push({ evaluation, drugRxcuiByResultId: drugRxcuisOf(record) });
+      }
+      if ((page + 1) * MAX_PAGE_SIZE >= view.total) return { items, capped: false };
+    }
+    return { items, capped: true };
+  }
+
   async get(principal: Principal, id: string): Promise<EvaluationDto> {
     const view = await this.need(this.ledger).evaluationView(principal.tenantId, id);
     if (!view) throw AppException.notFound('Evaluation not found.');
@@ -416,6 +445,17 @@ export class EvaluationsService {
   private loadedKnowledgeSetId(record: Projected): string | null {
     return (record.structuredRevisionId === undefined ? this.knowledge : this.syntheticKnowledge)?.id ?? null;
   }
+}
+
+/** One current evaluation and the RxCUI its stored results carry (spec 044 slice A). */
+export interface CurrentEvaluation {
+  evaluation: EvaluationSummaryDto;
+  drugRxcuiByResultId: ReadonlyMap<string, string | null>;
+}
+
+/** The stored RxCUI of each result, by result id. Only results made from schema 1.3 knowledge carry one (migration 0071); the rest map to null. */
+function drugRxcuisOf(record: Projected): Map<string, string | null> {
+  return new Map((record.results as Array<Record<string, unknown>>).map((r) => [r.id as string, typeof r.drugRxcui === 'string' ? r.drugRxcui : null]));
 }
 
 /** The state is derived from these same corrections (mapper), so what is shown can never disagree with the history shown beside it. */
