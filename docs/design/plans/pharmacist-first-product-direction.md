@@ -21,7 +21,7 @@ defects that come from that shape: a report attached to the first loaded patient
 | **N1** | **The first user is a pharmacist-led PGx service.** Prescribers are the people the service writes to, and come second as direct users. | Consistent with M0.1 I1 a ("pharmacists and clinicians"); no conflict |
 | **N2** | **The clinical home is a worklist by role**: reports to review, held results, follow-ups due, recent assessments. | Answers the navigation decision spec 041 slice C waits for |
 | **N3** | **Chat is the product's help assistant**: it explains every feature, how things work in the product, FAQs and policies. It is not the clinical interface and never answers a clinical question about a patient. | **Replaces** the 2026-11-02 direction "the primary clinical interface is chat" ([physician-chat-and-patient-record.md](physician-chat-and-patient-record.md)). Spec 024 D3 and spec 038 D3 are amended by the assistant slice (A3), not by this document |
-| **N4** | **The help assistant is model-powered from the start**, built as the business lane of the existing agentic design (M0.1 I4: staff SOP and FAQ help, English and Spanish, read and draft only). | Adds a first product surface to I4's business lane; every gate in section 6 still applies |
+| **N4** | **The help assistant starts with curated answers, to ship faster and prove the concept**: reviewed articles matched to the question, the screen and the role, with no model. A model is added later as the business lane of the existing agentic design (M0.1 I4: staff SOP and FAQ help, English and Spanish, read and draft only), answering from the same articles. | Revised the same day: the founder first chose a model from the start, then chose curated first. The model's gates (section 6) apply to slice A4 only |
 
 ## 3. What the research found
 
@@ -94,12 +94,22 @@ A command bar ("Open patient…", "Attach report…") keeps the speed of typing 
   unavailable to this role or in this build; FAQs; the product's published policies. Answers link to the screen that does the job; the
   assistant itself performs no action (tier T0 in [agent-approval-tiers.md](agent-approval-tiers.md)).
 - **What it refuses:** any question about a specific patient's genes, results, medications or care. It answers with a fixed sentence and a
-  link to that patient's profile, where the engine's result and its basis are. A refusal is not a model judgement alone: see A3.
+  link to that patient's profile, where the engine's result and its basis are. The refusal is a deterministic, tested rule (A3); when a model is added (A4) it adds its own check and never replaces the rule.
 - **What it reads:** a reviewed help corpus in the repository (feature articles, FAQs, glossary, approved policy text), the name of the
   current screen and the user's roles. **Never** patient records, report content or anything read from the clinical API.
 - **Languages:** English and Spanish, evaluated separately (AG-D1).
+- **How it answers, first (N4):** without a model. The panel opens on the articles for the current screen and role, searches every article as
+  the user types, in both languages, and shows the matching article with its links. A question with no good match says so and offers the
+  closest articles; it never guesses. Questions people type are counted by topic only, never stored as text, so the record cannot hold
+  patient information; that count is the evidence for the proof of concept and the starting question set for the model's evaluation.
+- **How it answers, later (A4):** a model answers from the same articles and cites them. The articles stay the source of truth, so the
+  curated assistant is the fallback whenever the model is off, failing or over budget.
 
-## 6. Gates the help assistant must pass (from documents already on record)
+## 6. Gates the model must pass before A4 (from documents already on record)
+
+None of these gates applies to the curated assistant in A3, which calls no model. A3 has its own, lighter checks: every article is reviewed
+before it is published (F2), the refusal rule for clinical questions is deterministic and tested with questions that must be refused, and the
+panel reads no clinical API (a test asserts it).
 
 | Gate | Source | What it means here |
 | --- | --- | --- |
@@ -118,19 +128,20 @@ A command bar ("Open patient…", "Attach report…") keeps the speed of typing 
 | 0 | **This plan** | `docs/` only | none |
 | A1 | **Navigation and the worklist home.** Folds in spec 041 slice C and spec 040 slices B and C. The chat leaves the centre; the home becomes the worklist; one read endpoint gathers the existing queues without new clinical logic | Frontend; one read-only API route | N2 |
 | A2 | **The patient PGx profile.** Reads existing evaluations and the structured reconciliation; shows sources, conflicts and holds | Frontend; possibly one read-only route | A1 |
-| A3 | **Help assistant, without a live model.** The panel, the corpus format and its first reviewed articles (EN and ES), the refusal rule (a deterministic pre-check plus the model's, both tested), the citation check, the evaluation set, run against the scripted model client already in `apps/ai-service`. Amends spec 024 D3 and spec 038 D3 | Frontend; `apps/ai-service`; docs | N3, N4, F1, F2 |
-| A4 | **Help assistant, live model.** The chosen host, the evaluation gate as a required check, budgets, the dormant switch and kill switch | `apps/ai-service`, backend, Terraform | A3, AG-D7, F1, R1 to R5 tests |
+| A3 | **Help assistant, curated (the proof of concept).** Released to users. The panel; the article format and the first reviewed articles in English and Spanish; help for the current screen and role; search as you type; the deterministic refusal rule for clinical questions; topic counts of what people ask. No model and no new clinical read. Amends spec 024 D3 and spec 038 D3 | Frontend; docs; possibly one route for topic counts | N3, N4, F2, F3 |
+| A4 | **Help assistant, model added.** Answers from the A3 articles with citations; the citation check and refusal on the serving path; the evaluation set built from A3's topics, as a required check; the chosen host, budgets, the dormant switch and kill switch; the curated answers as fallback | `apps/ai-service`, backend, Terraform | A3 in use, AG-D7, F1, R1 to R5 tests |
 | B1 | **Decisions and the prescriber note on synthetic staging.** Today decisions sit behind the pipeline, which production refuses | Backend gates; frontend | F4 |
 | B2 | **Medication review.** Spec 031 approved, MD-6 superseded by that approval | Backend, frontend, knowledge | Spec 031, M2.4 signed content |
 | later | Real signed knowledge (M2.4), the real reader and named lab layouts (M3.1), re-evaluation on a new knowledge set, SMART launch and CDS Hooks (G5.2, G5.3), Data Insights release | as their plans say | M0.1 counsel answers |
 
-A1 and A2 need no clinical gate and no model, so they can start first. A3 can run beside them.
+A1, A2 and A3 need no clinical gate and no model, so they can start first and run side by side.
 
 ## 8. Decisions only the founder can make (open)
 
 - **F1. The assistant's data class.** (a) `phi`: the typed text is treated as possibly carrying patient information, so the model runs only
   on a host inside the platform's boundary, and real use waits for the AWS BAA. (b) `no-phi`, with a pre-check that refuses text that looks
-  like patient information. The pre-check cannot be complete, so R1's "when unsure, `phi`" points to (a). **Recommendation: a.**
+  like patient information. The pre-check cannot be complete, so R1's "when unsure, `phi`" points to (a). **Recommendation: a.** Needed
+  before A4 only; A3 sends typed text to no model and stores none.
 - **F2. Who writes and reviews the help corpus**, in English and Spanish. Until named, the founder owns it (M0.1 I5 d).
 - **F3. Which policies the assistant may quote.** `docs/legal/privacy-policy-draft.md` is a draft; the assistant should quote only text the
   founder and counsel have published.
