@@ -399,8 +399,7 @@ const queryIndexes: Record<string, string> = {
     "INDEX structured_report_revisions_issuer_idx ON public.structured_report_revisions USING btree (tenant_id, ((laboratory_report ->> 'laboratoryId'::text)))",
   patient_followups_patient_idx: 'INDEX patient_followups_patient_idx ON public.patient_followups USING btree (tenant_id, patient_id, thread_id, version DESC)',
   patient_followups_event_idx: 'INDEX patient_followups_event_idx ON public.patient_followups USING btree (ledger_event_id, tenant_id)',
-  patient_followup_closure_acks_event_idx:
-    'INDEX patient_followup_closure_acks_event_idx ON public.patient_followup_closure_acks USING btree (ledger_event_id, tenant_id)',
+  patient_followup_closure_acks_event_idx: 'INDEX patient_followup_closure_acks_event_idx ON public.patient_followup_closure_acks USING btree (ledger_event_id, tenant_id)',
   evaluation_requests_tenant_report: 'INDEX evaluation_requests_tenant_report ON public.evaluation_requests USING btree (tenant_id, report_id)',
   browser_sessions_expiry_idx: 'INDEX browser_sessions_expiry_idx ON public.browser_sessions USING btree (tenant_id, expires_at, handle_hash)',
   upload_attempt_run_idx: 'INDEX upload_attempt_run_idx ON public.report_upload_attempts USING btree (tenant_id, run_id, state)',

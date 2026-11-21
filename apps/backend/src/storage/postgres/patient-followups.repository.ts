@@ -278,10 +278,14 @@ export class PostgresPatientFollowupsRepository extends PatientFollowupsReposito
             [tenant, actor, input.requestId],
           );
           if (replay.rows[0]) {
-            if (replay.rows[0].creation_request_hash !== hash) throw AppException.conflictBecause('request-id-reused', 'This save was already used for a different acknowledgement.');
+            if (replay.rows[0].creation_request_hash !== hash)
+              throw AppException.conflictBecause('request-id-reused', 'This save was already used for a different acknowledgement.');
             return ack(replay.rows[0]);
           }
-          const closing = await client.query<{ thread_id: string }>('SELECT thread_id::text AS thread_id FROM patient_followups WHERE tenant_id=$1 AND id=$2', [tenant, input.followupId]);
+          const closing = await client.query<{ thread_id: string }>('SELECT thread_id::text AS thread_id FROM patient_followups WHERE tenant_id=$1 AND id=$2', [
+            tenant,
+            input.followupId,
+          ]);
           if (!closing.rows[0]) throw AppException.notFound('Follow-up not found.');
           if (closing.rows[0].thread_id !== thread) throw AppException.validation([{ field: 'followupId', message: 'This version is not of this follow-up.' }]);
           const id = randomUUID(),
@@ -292,7 +296,9 @@ export class PostgresPatientFollowupsRepository extends PatientFollowupsReposito
             [id, tenant, actor, event, input.followupId, input.requestId, hash],
           );
           await this.ledger.appendRecordEvent(client, tenant, 'patient_followup_closure_acks', id, event);
-          return ack((await client.query<{ id: string; followup_id: string; thread_id: string; created_at: Date }>(`${select} WHERE tenant_id=$1 AND id=$2`, [tenant, id])).rows[0]!);
+          return ack(
+            (await client.query<{ id: string; followup_id: string; thread_id: string; created_at: Date }>(`${select} WHERE tenant_id=$1 AND id=$2`, [tenant, id])).rows[0]!,
+          );
         },
         { actor },
       );
@@ -305,5 +311,4 @@ export class PostgresPatientFollowupsRepository extends PatientFollowupsReposito
       throw toLedgerError(error);
     }
   }
-
 }

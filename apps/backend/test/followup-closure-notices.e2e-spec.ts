@@ -62,7 +62,14 @@ import { LedgerVerifier } from '../src/ledger/verifier';
         .api()
         .post(`/api/v1/patients/${patient}/medications`)
         .set(bearer(clinician.token))
-        .send({ requestId: randomUUID(), rxcui: BUNDLED_DRUG_LIST!.entries[0]!.rxcui, listVersion: BUNDLED_DRUG_LIST!.version, status: 'active', source: 'patient-reported', startMonth: '2026-01' })
+        .send({
+          requestId: randomUUID(),
+          rxcui: BUNDLED_DRUG_LIST!.entries[0]!.rxcui,
+          listVersion: BUNDLED_DRUG_LIST!.version,
+          status: 'active',
+          source: 'patient-reported',
+          startMonth: '2026-01',
+        })
         .expect(201)
     ).body;
     const saved = (await post(clinician, patient, reminder(medication.id, clinician.sub)).expect(201)).body;
@@ -131,7 +138,12 @@ import { LedgerVerifier } from '../src/ledger/verifier';
     const other = new LabPipeline(app, db.adminUrl);
     const outsider = await other.person('SYN-closure-outsider', ['clinician']);
     await other.patient(outsider);
-    await other.api().post(`/api/v1/followups/${w.saved.threadId}/acknowledge`).set(bearer(outsider.token)).send({ requestId: randomUUID(), followupId: w.dismissed.id }).expect(404);
+    await other
+      .api()
+      .post(`/api/v1/followups/${w.saved.threadId}/acknowledge`)
+      .set(bearer(outsider.token))
+      .send({ requestId: randomUUID(), followupId: w.dismissed.id })
+      .expect(404);
     // A reviewer reads (nothing of theirs) but cannot acknowledge.
     const reviewer = await lab.person('SYN-closure-reviewer', ['reviewer']);
     expect((await closures(reviewer).expect(200)).body).toEqual({ items: [], total: 0 });
@@ -188,7 +200,13 @@ import { LedgerVerifier } from '../src/ledger/verifier';
 
   it('refuses a malformed acknowledgement', async () => {
     const w = await closedByColleague();
-    for (const body of [{}, { requestId: randomUUID() }, { followupId: w.dismissed.id }, { requestId: 'x', followupId: w.dismissed.id }, { requestId: randomUUID(), followupId: w.dismissed.id, extra: 1 }]) {
+    for (const body of [
+      {},
+      { requestId: randomUUID() },
+      { followupId: w.dismissed.id },
+      { requestId: 'x', followupId: w.dismissed.id },
+      { requestId: randomUUID(), followupId: w.dismissed.id, extra: 1 },
+    ]) {
       await acknowledge(w.clinician, w.saved.threadId, body).expect(400);
     }
   });

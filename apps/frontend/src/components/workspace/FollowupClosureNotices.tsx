@@ -55,7 +55,10 @@ export function FollowupClosureNotices() {
       <ul className="divide-y divide-border">
         {notices.items.map((item) => (
           <li key={item.followupId} className="flex flex-col gap-1 py-2">
-            <Link className="inline-flex min-h-control items-center font-medium text-primary underline-offset-2 hover:underline" to={`/patients/${item.patientId}?followup=${item.threadId}#followups`}>
+            <Link
+              className="inline-flex min-h-control items-center font-medium text-primary underline-offset-2 hover:underline"
+              to={`/patients/${item.patientId}?followup=${item.threadId}#followups`}
+            >
               <span className="slashed-zero">{item.patientLabel}</span> · {item.medicationName}
             </Link>
             <p className="text-sm">
