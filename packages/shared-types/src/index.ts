@@ -21,6 +21,7 @@ export * from './result-renders';
 export * from './drug-list';
 export * from './patient-medications';
 export * from './patient-followups';
+export * from './genomic-profile';
 
 export * from './synthetic-pgx';
 export * from './structured-preview';
