@@ -933,7 +933,7 @@ describe('patient follow-ups down guard as the non-superuser migrator', () => {
 describe('follow-up closure acknowledgements down guard as the non-superuser migrator (spec 045)', () => {
   it('refuses populated acknowledgements despite FORCE RLS and reverses the empty migration to the event types before it', async () => {
     const f = await fixture();
-    const above = revertAbove('patient_followup_closure_acks');
+    const above = revertAbove('followup_closure_acks');
     if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
     const connection = new Database({ url: f.app, ssl: 'disable' });
     try {

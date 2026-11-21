@@ -39,11 +39,11 @@ BEGIN
   IF member IS NULL OR NOT public.membership_assert_current(member, member_version) THEN RAISE EXCEPTION 'A current clinician is required.' USING ERRCODE = 'insufficient_privilege'; END IF;
   SELECT * INTO closing FROM public.patient_followups WHERE id=NEW.followup_id AND tenant_id=NEW.tenant_id;
   IF closing.id IS NULL OR closing.action <> 'dismiss' THEN RAISE EXCEPTION 'Only a closed reminder can be acknowledged.' USING ERRCODE = 'FU002'; END IF;
-  IF closing.created_by = NEW.created_by THEN RAISE EXCEPTION 'You closed this reminder yourself.' USING ERRCODE = 'FU002'; END IF;
   SELECT * INTO prior FROM public.patient_followups WHERE tenant_id=NEW.tenant_id AND thread_id=closing.thread_id AND version=closing.version-1;
   IF prior.assignee IS DISTINCT FROM NEW.created_by THEN
     RAISE EXCEPTION 'Only the clinician the reminder was assigned to can acknowledge its closure.' USING ERRCODE = 'insufficient_privilege';
   END IF;
+  IF closing.created_by = NEW.created_by THEN RAISE EXCEPTION 'You closed this reminder yourself.' USING ERRCODE = 'FU002'; END IF;
   NEW.thread_id := closing.thread_id;
   NEW.patient_id := closing.patient_id;
   NEW.created_at := now();
