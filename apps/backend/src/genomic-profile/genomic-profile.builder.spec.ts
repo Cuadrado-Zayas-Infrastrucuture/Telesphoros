@@ -255,7 +255,10 @@ describe('spec 045 N2: a notice when a current medication is listed against a ge
     sourceUrl: 'https://example.invalid/synthetic',
     ...over,
   });
-  const lists = (entries: Record<string, ProfileModifier[]>): ModifierLookup => (rxcui) => entries[rxcui] ?? [];
+  const lists =
+    (entries: Record<string, ProfileModifier[]>): ModifierLookup =>
+    (rxcui) =>
+      entries[rxcui] ?? [];
   const usedGeneA = () =>
     evaluation({
       genes: [

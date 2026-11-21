@@ -204,7 +204,14 @@ export function buildGenomicProfile(input: ProfileInput): GenomicProfileDto {
   // Rule 7 (PN-6): with no list loaded, nothing is added but the flag that says so.
   if (!modifiersOf) return { ...profile, modifierLists: { loaded: false } };
   // Rules 2 and 3: a check's notices come from the genes its matching results used, so a check with no result has none. Rule 4: a card's from its gene.
-  const withNotices = (c: GenomicCheck): GenomicCheck => ({ ...c, contextNotices: noticesFor(c.results.flatMap((r) => r.genes), active, modifiersOf) });
+  const withNotices = (c: GenomicCheck): GenomicCheck => ({
+    ...c,
+    contextNotices: noticesFor(
+      c.results.flatMap((r) => r.genes),
+      active,
+      modifiersOf,
+    ),
+  });
   return {
     ...profile,
     genes: genes.map((gene) => ({ ...gene, contextNotices: noticesFor([gene.gene], active, modifiersOf) })),
