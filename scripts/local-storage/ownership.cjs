@@ -94,11 +94,18 @@ async function free(port) {
     server.listen({ host: '127.0.0.1', port, exclusive: true }, () => server.close(resolve));
   });
 }
-function checkTree(dir) {
-  for (const name of fs.readdirSync(dir)) {
-    const file = path.join(dir, name); const s = fs.lstatSync(file);
+// A running owned PostgreSQL deletes its own files at any moment (temporary relations, relcache init files).
+// The pre-signal check passes live: true and skips only an entry that vanished between readdir and lstat:
+// nothing is left there to remove. Every entry still present is checked in full, and remove() repeats the
+// strict check after every owned process has stopped, before any byte is deleted.
+function checkTree(dir, { live = false } = {}, nested = false) {
+  let entries;
+  try { entries = fs.readdirSync(dir); } catch (e) { if (live && nested && e.code === 'ENOENT') return; throw e; }
+  for (const name of entries) {
+    const file = path.join(dir, name); let s;
+    try { s = fs.lstatSync(file); } catch (e) { if (live && e.code === 'ENOENT') continue; throw e; }
     if (s.isSymbolicLink() || s.uid !== process.getuid() || (!s.isDirectory() && !s.isFile())) refuse();
-    if (s.isDirectory()) checkTree(file);
+    if (s.isDirectory()) checkTree(file, { live }, true);
   }
 }
 function remove(m) {
