@@ -211,6 +211,72 @@ test('the actual launcher CI command propagates a failed test producer', () => {
   }
 });
 
+const PRODUCT_DEMO_BUILD = ['- name: Build the investor demo', '        run: pnpm demo:product:build'].join('\n');
+const PRODUCT_DEMO_STEP = [
+  '- name: Investor demo browser suite',
+  '        env:',
+  '          LOCAL_PG_BIN: /usr/lib/postgresql/16/bin',
+  '        run: MOTO_SERVER="$(command -v moto_server)" pnpm test:product-demo:ci',
+].join('\n');
+
+/** The investor demo suite runs in the required browser job, unconditionally, after its dependencies and after the suite that holds its ports. */
+export function productDemoJobProblems(text) {
+  const jobs = text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m) ?? [];
+  const job = jobs.find(b => b.startsWith('browser:')) ?? '';
+  const problems = [];
+  if (/^ {4}if:/m.test(withoutScopeGate(job))) problems.push('the required browser job must not be conditional');
+  const command = 'pnpm test:product-demo:ci';
+  if (jobs.filter(b => b.includes(command)).length !== 1 || job.split(command).length !== 2) problems.push('one investor demo command is required, in the browser job');
+  const steps = job.split(/^ {6}(?=- )/m).map(step => step.trimEnd());
+  const build = steps.indexOf(PRODUCT_DEMO_BUILD);
+  const suite = steps.indexOf(PRODUCT_DEMO_STEP);
+  if (build < 0) problems.push('the investor demo build must run unconditionally in the browser job');
+  if (suite < 0) problems.push('the investor demo step must run unconditionally, on PostgreSQL 16 and the pinned Moto, and propagate failure');
+  const before = (needle, index) => steps.findIndex(step => step.includes(needle)) >= 0 && steps.findIndex(step => step.includes(needle)) < index;
+  for (const dependency of ['pip install --require-hashes -r .github/ci/requirements.txt', 'pnpm exec playwright install --with-deps chromium', 'run: pnpm --filter @telesphoros/frontend e2e']) {
+    if (suite >= 0 && !before(dependency, suite)) problems.push('the investor demo must run after its dependencies and after the browser tests');
+  }
+  if (suite >= 0 && !(build >= 0 && build < suite)) problems.push('the investor demo must be built before its suite runs');
+  return problems;
+}
+
+test('required browser CI runs the investor demo suite against an owned stack, after its dependencies and the browser tests', () => {
+  assert.deepEqual(productDemoJobProblems(workflow), []);
+  const pkg = JSON.parse(read('../../package.json'));
+  assert.equal(pkg.scripts['test:product-demo:ci'], 'node scripts/local-storage/product-demo-ci.cjs pnpm test:product-demo');
+  assert.ok(pkg.scripts['test:scripts'].split(/\s+/).includes('scripts/local-storage/product-demo-ci.test.cjs'));
+  for (const file of ['product-demo-ci.cjs', 'product-demo-ci.test.cjs']) assert.ok(existsSync(new URL(`../../scripts/local-storage/${file}`, import.meta.url)));
+});
+
+test('investor demo CI guard rejects missing, swallowed, optional, unpinned and premature runs', () => {
+  const step = '      ' + PRODUCT_DEMO_STEP + '\n';
+  const build = '      ' + PRODUCT_DEMO_BUILD + '\n';
+  const tests = '      - name: Browser tests\n        run: pnpm --filter @telesphoros/frontend e2e\n';
+  assert.ok(workflow.includes(step) && workflow.includes(build) && workflow.includes(tests));
+  for (const changed of [
+    workflow.replace(step, ''),
+    workflow.replace(step, step + step),
+    workflow.replace(step, step.trimEnd() + ' || true\n'),
+    workflow.replace(step, step + '        continue-on-error: true\n'),
+    workflow.replace(step, step + '        if: false\n'),
+    workflow.replace(step, step.replace('/usr/lib/postgresql/16/bin', '/usr/lib/postgresql/15/bin')),
+    workflow.replace(step, step.replace('MOTO_SERVER="$(command -v moto_server)" ', '')),
+    workflow.replace(build, ''),
+    workflow.replace(build, '').replace(step, step + build),
+    workflow.replace(tests, '').replace(step, step + tests),
+    workflow.replace('  browser:\n', '  browser:\n    if: false\n'),
+    workflow.replace('  terraform:\n', '  terraform:\n    steps:\n      - run: pnpm test:product-demo:ci\n'),
+  ]) assert.ok(productDemoJobProblems(changed).length > 0);
+});
+
+test('the actual investor demo CI command propagates a failed test producer', () => {
+  const command = PRODUCT_DEMO_STEP.split('run: ')[1];
+  for (const status of [0, 17]) {
+    const result = spawnSync('bash', ['-e', '-c', `pnpm() { return ${status}; };\n${command}`], { encoding: 'utf8' });
+    assert.equal(result.status, status);
+  }
+});
+
 const terraformCommands = ['infrastructure/terraform', 'infrastructure/terraform-state'].flatMap(root => [
   `terraform -chdir=${root} fmt -check -recursive -diff`,
   `terraform -chdir=${root} init -backend=false -input=false -lockfile=readonly`,
