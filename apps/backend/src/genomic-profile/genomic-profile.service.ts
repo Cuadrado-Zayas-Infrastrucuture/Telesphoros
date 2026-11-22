@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { GenomicProfileDto, GenomicProfileQuery } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { EvaluationsService } from '../lab-reports/evaluations.service';
+import { GENE_MODIFIERS, type GeneModifierSet } from '../gene-modifiers/gene-modifier-set';
 import { PatientMedicationsService } from '../patient-medications/patient-medications.service';
 import { buildGenomicProfile } from './genomic-profile.builder';
 
@@ -18,11 +19,15 @@ export class GenomicProfileService {
   constructor(
     private readonly evaluations: EvaluationsService,
     private readonly medications: PatientMedicationsService,
+    /** Spec 045 N2: the signed gene modifier lists, or undefined while GENE_MODIFIERS_DIR is unset. */
+    @Optional() @Inject(GENE_MODIFIERS) private readonly modifiers?: GeneModifierSet,
   ) {}
 
   async read(principal: Principal, patientId: string, query: GenomicProfileQuery): Promise<GenomicProfileDto> {
     const { items: medications } = await this.medications.read(principal, patientId, {});
     const { items: evaluations, capped } = await this.evaluations.currentForPatient(principal, patientId, GENOMIC_PROFILE_MAX_PAGES);
-    return buildGenomicProfile({ patientId, evaluations, medications, checkRxcui: query.rxcui, capped });
+    const modifiers = this.modifiers;
+    const modifiersOf = modifiers ? (rxcui: string) => modifiers.modifiersOf(rxcui) : undefined;
+    return buildGenomicProfile({ patientId, evaluations, medications, checkRxcui: query.rxcui, capped, modifiersOf });
   }
 }
