@@ -34,6 +34,15 @@ export function knowledgeSigningProblems({ signing, compute }) {
   if (!/local\.synthetic_assessment_environment, local\.knowledge_signer_environment\)/.test(squash(code(compute)))) {
     problems.push('the API task must receive the knowledge signer environment');
   }
+  // The keys and the API's copy of them go out in two releases: an INFRA plan may create the keys but never change a task definition, and an IMAGE
+  // plan replaces the task definitions but never creates a key (scripts/staging/release/release-check.mjs). The switch keeps them apart.
+  if (!/knowledge_signer_environment = var\.knowledge_signer_keys_on_api && length\(var\.knowledge_signers\) > 0 \? \{/.test(s)) {
+    problems.push('the API task gets KNOWLEDGE_SIGNER_KEYS only once knowledge_signer_keys_on_api is on');
+  }
+  if (!/variable "knowledge_signer_keys_on_api" \{[^}]*type = bool\s*default = false/.test(s)) problems.push('knowledge_signer_keys_on_api must be off by default');
+  if (!/condition = !var\.knowledge_signer_keys_on_api \|\| length\(var\.knowledge_signers\) > 0/.test(s)) {
+    problems.push('knowledge_signer_keys_on_api must refuse to turn on before the signers are named');
+  }
   return problems;
 }
 
@@ -49,6 +58,9 @@ test('each rule fails on a copy that breaks it', () => {
     [{ signing: files.signing.replace('length(distinct(values(var.knowledge_signers))) == length(var.knowledge_signers)', 'true') }, 'one principal'],
     [{ signing: files.signing.replace('id => key.public_key_pem', 'id => "pinned-in-repo"') }, 'built from the KMS public keys'],
     [{ compute: files.compute.replace(', local.knowledge_signer_environment)', ')') }, 'receive the knowledge signer environment'],
+    [{ signing: files.signing.replace('var.knowledge_signer_keys_on_api && length(var.knowledge_signers) > 0 ?', 'length(var.knowledge_signers) > 0 ?') }, 'only once knowledge_signer_keys_on_api is on'],
+    [{ signing: files.signing.replace(/(variable "knowledge_signer_keys_on_api" \{[^}]*default\s*=\s*)false/, '$1true') }, 'off by default'],
+    [{ signing: files.signing.replace('!var.knowledge_signer_keys_on_api || length(var.knowledge_signers) > 0', 'true') }, 'before the signers are named'],
   ];
   for (const [change, expected] of broken) {
     const problems = knowledgeSigningProblems({ ...files, ...change });

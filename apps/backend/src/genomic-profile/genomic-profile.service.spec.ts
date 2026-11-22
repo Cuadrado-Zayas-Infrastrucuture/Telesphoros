@@ -1,5 +1,6 @@
 import type { Principal } from '../auth/principal';
 import type { EvaluationsService } from '../lab-reports/evaluations.service';
+import type { GeneModifierSet } from '../gene-modifiers/gene-modifier-set';
 import type { PatientMedicationsService } from '../patient-medications/patient-medications.service';
 import { GENOMIC_PROFILE_MAX_PAGES, GenomicProfileService } from './genomic-profile.service';
 
@@ -9,11 +10,11 @@ import { GENOMIC_PROFILE_MAX_PAGES, GenomicProfileService } from './genomic-prof
 const principal: Principal = { sub: 'syn-reader', tenantId: 'syn-tenant', roles: ['reader'] };
 const PATIENT = '00000000-0000-4000-8000-0000000000b1';
 
-function stubs(order: string[], capped = false) {
+function stubs(order: string[], capped = false, modifiers?: GeneModifierSet, items: unknown[] = []) {
   const medications = {
     read: jest.fn(async () => {
       order.push('medications');
-      return { items: [] };
+      return { items };
     }),
   };
   const evaluations = {
@@ -22,7 +23,7 @@ function stubs(order: string[], capped = false) {
       return { items: [], capped };
     }),
   };
-  const service = new GenomicProfileService(evaluations as unknown as EvaluationsService, medications as unknown as PatientMedicationsService);
+  const service = new GenomicProfileService(evaluations as unknown as EvaluationsService, medications as unknown as PatientMedicationsService, modifiers);
   return { service, medications, evaluations };
 }
 
@@ -48,5 +49,17 @@ describe('GenomicProfileService', () => {
     const { service } = stubs([], true);
     const profile = await service.read(principal, PATIENT, { rxcui: '111' });
     expect(profile).toMatchObject({ patientId: PATIENT, capped: true, check: { rxcui: '111', word: 'no-guideline-loaded' } });
+  });
+
+  // Spec 045 N2: the service hands the builder the loaded lists, or says none is loaded. The rules themselves are the builder's tests.
+  it('passes the loaded gene modifier lists to the profile, and says when none is loaded', async () => {
+    const modifiersOf = jest.fn(() => []);
+    const items = [{ rxcui: '900', name: 'drugm', status: 'active', current: true, startMonth: null }];
+    const { service } = stubs([], false, { modifiersOf } as unknown as GeneModifierSet, items);
+    expect(await service.read(principal, PATIENT, {})).toMatchObject({ modifierLists: { loaded: true }, medications: [{ rxcui: '900', contextNotices: [] }] });
+    // no stored result and no gene: nothing to look up
+    expect(modifiersOf).not.toHaveBeenCalled();
+    const without = stubs([], false, undefined, items).service;
+    expect(await without.read(principal, PATIENT, {})).toMatchObject({ modifierLists: { loaded: false } });
   });
 });

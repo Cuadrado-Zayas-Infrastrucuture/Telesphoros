@@ -1408,6 +1408,50 @@ run "knowledge_signers_named" {
   }
 }
 
+# The keys and the API's copy of them go out in two releases (an INFRA plan never changes a task definition; an IMAGE plan never creates a key).
+run "knowledge_signer_keys_stay_off_the_api_until_switched_on" {
+  command = plan
+
+  variables {
+    knowledge_signers = {
+      "signer-one" = "arn:aws:iam::123456789012:role/knowledge-signer-one"
+      "signer-two" = "arn:aws:iam::123456789012:role/knowledge-signer-two"
+    }
+  }
+
+  assert {
+    condition     = length(aws_kms_key.knowledge_signer) == 2 && !contains(keys(local.api_environment), "KNOWLEDGE_SIGNER_KEYS")
+    error_message = "naming the signers creates their keys and leaves the API task alone"
+  }
+}
+
+run "knowledge_signer_keys_on_the_api_when_switched_on" {
+  command = plan
+
+  variables {
+    knowledge_signers = {
+      "signer-one" = "arn:aws:iam::123456789012:role/knowledge-signer-one"
+      "signer-two" = "arn:aws:iam::123456789012:role/knowledge-signer-two"
+    }
+    knowledge_signer_keys_on_api = true
+  }
+
+  assert {
+    condition     = contains(keys(local.api_environment), "KNOWLEDGE_SIGNER_KEYS")
+    error_message = "with the switch on, the API task carries the signers' public keys"
+  }
+}
+
+run "refuses_the_signer_keys_switch_without_signers" {
+  command = plan
+
+  variables {
+    knowledge_signer_keys_on_api = true
+  }
+
+  expect_failures = [var.knowledge_signer_keys_on_api]
+}
+
 run "refuses_a_single_knowledge_signer" {
   command = plan
 
@@ -1429,5 +1473,91 @@ run "refuses_one_principal_for_two_signers" {
   }
 
   expect_failures = [var.knowledge_signers]
+}
+
+# CLIN-01 / spec 033-23 H1: each signer's own sign-in, on synthetic staging only. Nothing exists until the founder names the people.
+run "knowledge_signer_people_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_iam_user.knowledge_signer_person) == 0 && length(aws_iam_role.knowledge_signer_person) == 0 && length(aws_iam_user_policy.knowledge_signer_person) == 0
+    error_message = "no signer user or signing role exists until people are named"
+  }
+}
+
+run "knowledge_signer_people_named" {
+  command = plan
+
+  variables {
+    knowledge_signer_people = ["jan", "kevin"]
+  }
+
+  assert {
+    condition     = toset([for user in aws_iam_user.knowledge_signer_person : user.name]) == toset(["telesphoros-staging-signer-jan", "telesphoros-staging-signer-kevin"])
+    error_message = "each named person gets their own IAM user"
+  }
+  assert {
+    condition     = toset([for role in aws_iam_role.knowledge_signer_person : role.name]) == toset(["telesphoros-staging-knowledge-signer-jan", "telesphoros-staging-knowledge-signer-kevin"])
+    error_message = "each named person gets their own signing role"
+  }
+  assert {
+    condition     = alltrue([for role in aws_iam_role.knowledge_signer_person : role.max_session_duration == 3600])
+    error_message = "a signing session lasts at most an hour"
+  }
+  assert {
+    condition     = length(aws_iam_user_policy.knowledge_signer_person) == 2 && length(aws_kms_key.knowledge_signer) == 0
+    error_message = "naming the people gives each their own-credentials policy and creates no signer key"
+  }
+}
+
+run "knowledge_signer_people_and_their_keys_in_one_plan" {
+  command = plan
+
+  variables {
+    knowledge_signer_people = ["jan", "kevin"]
+    knowledge_signers = {
+      "jan"   = "arn:aws:iam::123456789012:role/telesphoros-staging-knowledge-signer-jan"
+      "kevin" = "arn:aws:iam::123456789012:role/telesphoros-staging-knowledge-signer-kevin"
+    }
+  }
+
+  assert {
+    condition     = length(aws_iam_role.knowledge_signer_person) == 2 && length(aws_kms_key.knowledge_signer) == 2
+    error_message = "the people and their signer keys can be planned together"
+  }
+}
+
+run "refuses_a_malformed_knowledge_signer_person" {
+  command = plan
+
+  variables {
+    knowledge_signer_people = ["Jan Zayas"]
+  }
+
+  expect_failures = [var.knowledge_signer_people]
+}
+
+run "refuses_a_knowledge_signer_person_named_twice" {
+  command = plan
+
+  variables {
+    knowledge_signer_people = ["kevin", "kevin"]
+  }
+
+  expect_failures = [var.knowledge_signer_people]
+}
+
+run "refuses_knowledge_signer_people_in_production" {
+  command = plan
+
+  variables {
+    environment             = "production"
+    db_multi_az             = true
+    audit_lock_mode         = "COMPLIANCE"
+    aws_baa_executed        = true
+    knowledge_signer_people = ["jan", "kevin"]
+  }
+
+  expect_failures = [aws_iam_user.knowledge_signer_person]
 }
 

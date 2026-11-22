@@ -8,6 +8,7 @@ import { SubmitError } from '@/lib/api';
 import { evaluationStanding } from '@/lib/resultStatus';
 import { syntheticStagingMode } from '@/lib/storageMode';
 import { StandingNotices } from '@/components/StandingNotices';
+import { SignedKnowledgeLabel } from '@/components/SignedKnowledgeLabel';
 import { StoredResult } from './StoredResult';
 
 /** The result opened when a page is first read: the one a link named if it is there, else the first result the API marks current. */
@@ -101,6 +102,7 @@ export function ResultsList({
           <article key={evaluation.id} className="rounded-lg border border-border bg-panel p-4">
             <h3 className="font-medium">Evaluation · {new Date(evaluation.createdAt).toLocaleString()}</h3>
             <StandingNotices notices={standing.notices} />
+            <SignedKnowledgeLabel evaluation={evaluation} />
             {!standing.fold && <p className="text-sm text-muted-foreground">Current evaluation</p>}
             {evaluation.advisory.activeDisputes > 0 && <p className="text-warning">Active evidence dispute. New decisions are unavailable.</p>}
             {evaluation.disposition === 'held' && (
