@@ -176,3 +176,29 @@ test('lock publication is complete and exclusive; a release race retries health 
     assert.equal(fs.existsSync(file), false);
   } finally { fs.linkSync = link; fs.lstatSync = lstat; if (fs.existsSync(file)) fs.unlinkSync(file); o.remove(m); }
 });
+// PostgreSQL deletes its own temporary-relation and relcache files while it runs (seen on CI: the
+// teardown preflight failed after every demo test passed). Make one file and one directory vanish
+// mid-walk, the way a live cluster does, and prove teardown still completes while tampering refuses.
+function vanishing(m) {
+  const base = path.join(m.root, 'postgres', 'base'); const file = path.join(base, '1', 't3_16384'); const dir = path.join(base, 'pgsql_tmp', 'pgsql_tmp7.0.fileset');
+  fs.mkdirSync(path.join(base, '1'), { recursive: true, mode: 0o700 }); fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, 'synthetic', { mode: 0o600 }); fs.writeFileSync(path.join(dir, '0.0'), 'synthetic', { mode: 0o600 });
+  const { lstatSync, readdirSync } = fs;
+  fs.lstatSync = (target, ...rest) => { if (target === file && fs.existsSync(file)) fs.unlinkSync(file); return lstatSync(target, ...rest); };
+  fs.readdirSync = (target, ...rest) => { if (target === dir && fs.existsSync(dir)) fs.rmSync(dir, { recursive: true }); return readdirSync(target, ...rest); };
+  return () => { fs.lstatSync = lstatSync; fs.readdirSync = readdirSync; };
+}
+test('teardown completes when the live cluster deletes its own files during the preflight walk', async () => {
+  const m = fixture(); const restore = vanishing(m);
+  try { assert.equal((await require('./runtime.cjs').teardown(m.id)).phase, 'removed'); assert.equal(fs.existsSync(m.root), false); }
+  finally { restore(); if (fs.existsSync(m.root)) o.remove(m); }
+});
+test('only vanished entries are tolerated: the strict removal walk and every tamper refusal stay', () => {
+  const m = fixture(); let restore = vanishing(m);
+  try { assert.throws(() => o.checkTree(m.root), { code: 'ENOENT' }); } finally { restore(); }
+  restore = vanishing(m); try { assert.doesNotThrow(() => o.checkTree(m.root, { live: true })); } finally { restore(); }
+  const link = path.join(m.root, 'tmp'); fs.symlinkSync(o.base, link);
+  assert.throws(() => o.checkTree(m.root, { live: true }), /ownership verification refused/); assert.ok(fs.existsSync(o.base)); fs.unlinkSync(link);
+  assert.throws(() => o.checkTree(path.join(m.root, 'missing'), { live: true }), { code: 'ENOENT' });
+  o.remove(m);
+});
