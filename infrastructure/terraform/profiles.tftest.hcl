@@ -1408,6 +1408,50 @@ run "knowledge_signers_named" {
   }
 }
 
+# The keys and the API's copy of them go out in two releases (an INFRA plan never changes a task definition; an IMAGE plan never creates a key).
+run "knowledge_signer_keys_stay_off_the_api_until_switched_on" {
+  command = plan
+
+  variables {
+    knowledge_signers = {
+      "signer-one" = "arn:aws:iam::123456789012:role/knowledge-signer-one"
+      "signer-two" = "arn:aws:iam::123456789012:role/knowledge-signer-two"
+    }
+  }
+
+  assert {
+    condition     = length(aws_kms_key.knowledge_signer) == 2 && !contains(keys(local.api_environment), "KNOWLEDGE_SIGNER_KEYS")
+    error_message = "naming the signers creates their keys and leaves the API task alone"
+  }
+}
+
+run "knowledge_signer_keys_on_the_api_when_switched_on" {
+  command = plan
+
+  variables {
+    knowledge_signers = {
+      "signer-one" = "arn:aws:iam::123456789012:role/knowledge-signer-one"
+      "signer-two" = "arn:aws:iam::123456789012:role/knowledge-signer-two"
+    }
+    knowledge_signer_keys_on_api = true
+  }
+
+  assert {
+    condition     = contains(keys(local.api_environment), "KNOWLEDGE_SIGNER_KEYS")
+    error_message = "with the switch on, the API task carries the signers' public keys"
+  }
+}
+
+run "refuses_the_signer_keys_switch_without_signers" {
+  command = plan
+
+  variables {
+    knowledge_signer_keys_on_api = true
+  }
+
+  expect_failures = [var.knowledge_signer_keys_on_api]
+}
+
 run "refuses_a_single_knowledge_signer" {
   command = plan
 
