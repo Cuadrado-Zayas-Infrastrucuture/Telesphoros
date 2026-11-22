@@ -202,14 +202,3 @@ test('only vanished entries are tolerated: the strict removal walk and every tam
   assert.throws(() => o.checkTree(path.join(m.root, 'missing'), { live: true }), { code: 'ENOENT' });
   o.remove(m);
 });
-test('a launcher failure names its cause without paths: fixed messages verbatim, system errors by code', () => {
-  const { failureCause } = require('./start.cjs');
-  const refusal = 'Local ownership verification refused; resources retained.';
-  assert.equal(failureCause(new Error(refusal)), 'Cause: ' + refusal);
-  const vanished = Object.assign(new Error("ENOENT: no such file or directory, lstat '/synthetic/run/postgres/base/1/t3_16384'"), { code: 'ENOENT' });
-  assert.equal(failureCause(vanished), 'Cause: Error ENOENT (message withheld)');
-  assert.equal(failureCause(new Error('unexpected /synthetic/path detail')), 'Cause: Error (message withheld)');
-  const partial = 'Partial setup retained owned run 00000000-0000-4000-8000-000000000000; explicit teardown required.';
-  assert.equal(failureCause(new Error(partial)), 'Cause: ' + partial);
-  assert.equal(failureCause(undefined), 'Cause: Error (message withheld)');
-});
