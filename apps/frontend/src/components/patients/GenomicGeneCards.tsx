@@ -1,4 +1,5 @@
 import type { GenomicGene } from '@telesphoros/shared-types';
+import { GenomicContextNotices } from '@/components/patients/GenomicContextNotices';
 import { when } from '@/lib/formatWhen';
 import { geneValue, PROFILE_WORDS } from '@/lib/genomicProfileWords';
 
@@ -20,6 +21,7 @@ export function GenomicGeneCards({ genes, untested }: { genes: readonly GenomicG
                 Evaluated {when(source.evaluatedAt)}. {PROFILE_WORDS.confirmed}.
               </p>
             ))}
+            <GenomicContextNotices notices={gene.contextNotices} place="card" />
           </li>
         ))}
         {untested.map((name) => (
