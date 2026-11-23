@@ -5,8 +5,8 @@
 **Created**: 2026-11-21
 
 **Status**: Revised plan approved by the founder 2026-11-21 ("Approve revised plan"), replacing the first plan for decision #2 of the
-2026-11-16 clinical UX and adoption audit ("(a) Access log + review"). The working number 046 is unsettled: public `main` took 044 on
-2026-11-21, and two local branches hold 044 (release clinical review) and 045 (follow-up closure notice). Whichever merges later renumbers.
+2026-11-16 clinical UX and adoption audit ("(a) Access log + review"). Numbered 046 with migration 0077: the follow-up closure notice
+(spec 047, #437) merged first with migration 0076.
 
 **Input**: Access to patients is organisation-wide by design (`docs/auth.md:49-50`). The first plan proposed a new access table. Reading the
 code showed that one already exists. `SecurityAuditInterceptor` (`apps/backend/src/auth/security-audit.interceptor.ts`, global in
