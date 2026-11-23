@@ -29,6 +29,7 @@ export const APPEND_ONLY_CLASSES = {
     'structured_report_revisions',
     'structured_finding_reviews',
     'structured_source_resolutions',
+    'patient_followup_closure_acks',
   ],
   /** Parts of a record, covered by the parent's event. Insert-only; frozen once the parent's event is visible. */
   child: ['evaluation_results', 'evaluation_gene_states'],

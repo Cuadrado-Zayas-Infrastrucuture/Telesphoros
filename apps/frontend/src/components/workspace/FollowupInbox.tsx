@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { FollowupResponseSummary } from './FollowupResponseSummary';
+import { FollowupClosureNotices } from './FollowupClosureNotices';
 import { useFollowups } from '@/hooks/useFollowups';
 import type { FollowupInboxFilters } from '@telesphoros/shared-types';
 import { clinicianLabel } from '@/lib/clinicianLabel';
@@ -20,6 +21,7 @@ export function FollowupInbox() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">Clinic follow-ups. Dates use each reminder’s recorded timezone. Counts and recorded responses cover the whole clinic.</p>
+      <FollowupClosureNotices />
       <div>
         <Button
           variant="outline"
