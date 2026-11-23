@@ -1,6 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { FollowupDto, FollowupInput, FollowupList, FollowupQuery, FollowupInboxFilters, FollowupResponseSummary } from '@telesphoros/shared-types';
+import type {
+  FollowupClosureAck,
+  FollowupClosureAckInput,
+  FollowupClosureNotices,
+  FollowupDto,
+  FollowupInput,
+  FollowupList,
+  FollowupQuery,
+  FollowupInboxFilters,
+  FollowupResponseSummary,
+} from '@telesphoros/shared-types';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
 import { AppException } from '../../common/app-exception';
@@ -194,6 +204,109 @@ export class PostgresPatientFollowupsRepository extends PatientFollowupsReposito
       if (code === 'FU001') throw AppException.conflictBecause('followup-changed', 'This follow-up changed. Reload its current version before saving.');
       if (code === 'FU002' || code === '23503' || code === '23514' || code === '22007' || code === '22008')
         throw AppException.validation([{ field: 'followup', message: 'Check the patient, medication, assessment dates and responsible clinician.' }]);
+      if (code === '42501') throw AppException.forbidden();
+      throw toLedgerError(error);
+    }
+  }
+  /**
+   * Spec 047 FN-1, FN-2: dismiss versions written by someone else whose previous version was assigned to `actor`, not yet acknowledged.
+   * One statement under the caller's tenant (row-level security, and the tenant named in the query as well).
+   */
+  closures(tenant: string, actor: string): Promise<FollowupClosureNotices> {
+    return this.db.withTenant(tenant, async (client) => {
+      const { rows } = await client.query<{
+        followup_id: string;
+        thread_id: string;
+        patient_id: string;
+        patient_label: string;
+        medication_name: string;
+        closed_by: string;
+        closed_at: Date;
+        note: string;
+        note_redacted: boolean;
+        total: number;
+      }>(
+        `SELECT d.id::text AS followup_id, d.thread_id::text AS thread_id, d.patient_id::text AS patient_id, p.label AS patient_label,
+            m.drug_name AS medication_name, d.created_by AS closed_by, d.created_at AS closed_at, n.body AS note,
+            n.redacted_at IS NOT NULL AS note_redacted, count(*) OVER ()::int AS total
+          FROM patient_followups d
+          JOIN patient_followups prior ON prior.tenant_id=d.tenant_id AND prior.thread_id=d.thread_id AND prior.version=d.version-1
+          JOIN patients p ON p.id=d.patient_id AND p.tenant_id=d.tenant_id AND p.deleted_at IS NULL
+          JOIN patient_medications m ON m.id=d.medication_id AND m.tenant_id=d.tenant_id
+          JOIN event_notes n ON n.id=d.note_id AND n.tenant_id=d.tenant_id
+          WHERE d.tenant_id=$1 AND d.action='dismiss' AND prior.assignee=$2 AND d.created_by<>$2
+            AND NOT EXISTS (SELECT 1 FROM patient_followup_closure_acks a WHERE a.tenant_id=$1 AND a.followup_id=d.id)
+          ORDER BY d.created_at DESC, d.id LIMIT 50`,
+        [tenant, actor],
+      );
+      return {
+        items: rows.map((r) => ({
+          followupId: r.followup_id,
+          threadId: r.thread_id,
+          patientId: r.patient_id,
+          patientLabel: r.patient_label,
+          medicationName: r.medication_name,
+          closedBy: r.closed_by,
+          closedAt: r.closed_at.toISOString(),
+          note: r.note,
+          noteRedacted: r.note_redacted,
+        })),
+        total: rows[0]?.total ?? 0,
+      };
+    });
+  }
+
+  /** Spec 047 FN-3, FN-4: one acknowledgement and its ledger event, in one transaction. The trigger of migration 0076 is the guarantee. */
+  async acknowledge(tenant: string, actor: string, thread: string, input: FollowupClosureAckInput): Promise<FollowupClosureAck> {
+    const hash = createHash('sha256')
+      .update(JSON.stringify([thread, input.followupId]))
+      .digest('hex');
+    const ack = (row: { id: string; followup_id: string; thread_id: string; created_at: Date }): FollowupClosureAck => ({
+      id: row.id,
+      followupId: row.followup_id,
+      threadId: row.thread_id,
+      acknowledgedAt: row.created_at.toISOString(),
+    });
+    const select = 'SELECT id::text AS id, followup_id::text AS followup_id, thread_id::text AS thread_id, created_at FROM patient_followup_closure_acks';
+    try {
+      return await this.db.withTenant(
+        tenant,
+        async (client) => {
+          await client.query("SELECT pg_advisory_xact_lock(hashtextextended('followup-ack-request:' || $1 || ':' || $2 || ':' || $3,0))", [tenant, actor, input.requestId]);
+          const replay = await client.query<{ id: string; followup_id: string; thread_id: string; created_at: Date; creation_request_hash: string }>(
+            `${select.replace(' FROM', ', creation_request_hash FROM')} WHERE tenant_id=$1 AND created_by=$2 AND creation_request_id=$3`,
+            [tenant, actor, input.requestId],
+          );
+          if (replay.rows[0]) {
+            if (replay.rows[0].creation_request_hash !== hash)
+              throw AppException.conflictBecause('request-id-reused', 'This save was already used for a different acknowledgement.');
+            return ack(replay.rows[0]);
+          }
+          const closing = await client.query<{ thread_id: string }>('SELECT thread_id::text AS thread_id FROM patient_followups WHERE tenant_id=$1 AND id=$2', [
+            tenant,
+            input.followupId,
+          ]);
+          if (!closing.rows[0]) throw AppException.notFound('Follow-up not found.');
+          if (closing.rows[0].thread_id !== thread) throw AppException.validation([{ field: 'followupId', message: 'This version is not of this follow-up.' }]);
+          const id = randomUUID(),
+            event = randomUUID();
+          await client.query(
+            `INSERT INTO patient_followup_closure_acks (id,tenant_id,created_by,ledger_event_id,followup_id,thread_id,patient_id,creation_request_id,creation_request_hash)
+             SELECT $1,$2,$3,$4,f.id,f.thread_id,f.patient_id,$6,$7 FROM patient_followups f WHERE f.tenant_id=$2 AND f.id=$5`,
+            [id, tenant, actor, event, input.followupId, input.requestId, hash],
+          );
+          await this.ledger.appendRecordEvent(client, tenant, 'patient_followup_closure_acks', id, event);
+          return ack(
+            (await client.query<{ id: string; followup_id: string; thread_id: string; created_at: Date }>(`${select} WHERE tenant_id=$1 AND id=$2`, [tenant, id])).rows[0]!,
+          );
+        },
+        { actor },
+      );
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code === '23505') throw AppException.conflictBecause('already-acknowledged', 'This closure was already acknowledged.');
+      if (code === 'FU002' || code === '23503' || code === '23514')
+        throw AppException.validation([{ field: 'followupId', message: 'Only a reminder someone else closed can be acknowledged.' }]);
       if (code === '42501') throw AppException.forbidden();
       throw toLedgerError(error);
     }
