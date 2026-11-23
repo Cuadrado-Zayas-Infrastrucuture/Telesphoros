@@ -135,6 +135,8 @@ function checkOf(rxcui: string, name: string | null, evaluations: readonly Profi
           implication: result.implication,
           citation: result.citation,
           genes: result.genes,
+          // B2-D5: the evaluation's stored scope, unchanged, for the signed-knowledge label (K2c).
+          scope: evaluation.scope,
         },
       });
     }

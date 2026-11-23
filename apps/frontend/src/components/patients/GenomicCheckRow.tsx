@@ -5,6 +5,7 @@ import { GenomicContextNotices } from '@/components/patients/GenomicContextNotic
 import { GenomicNoticeEvidence } from '@/components/patients/GenomicNoticeEvidence';
 import { GenomicResultLayers } from '@/components/patients/GenomicResultLayers';
 import { GlossaryTerm } from '@/components/patients/GlossaryTerm';
+import { SIGNED_ASSESSMENT_SCOPE, SignedKnowledgeLabel, usesSignedKnowledge } from '@/components/SignedKnowledgeLabel';
 import { Button } from '@/components/ui/Button';
 import { checkSentence, conflictLine, PROFILE_WORDS, WORD_LABELS } from '@/lib/genomicProfileWords';
 import { showsWording } from '@/lib/resultStatus';
@@ -28,11 +29,14 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
   const [open, setOpen] = useState(false);
   const sentence = checkSentence(check);
   const conflict = conflictLine(check, genes);
+  // K2c's label (B2-D5), once per row: some result here was made with the signed, real knowledge.
+  const signed = check.results.some((result) => usesSignedKnowledge({ scope: result.scope ?? null }));
   return (
     <article aria-labelledby={`${id}-name`} className="flex flex-col gap-2 rounded-lg border border-border bg-panel p-4">
       <h4 id={`${id}-name`} className="text-base font-semibold wrap-anywhere">
         {name}
       </h4>
+      {signed && <SignedKnowledgeLabel evaluation={{ scope: SIGNED_ASSESSMENT_SCOPE }} />}
       <p className={`font-semibold ${WORD_TONE[check.word]}`}>
         <GlossaryTerm text={WORD_LABELS[check.word]} />
       </p>

@@ -82,6 +82,11 @@ export const genomicCheckResultSchema = z.strictObject({
   implication: z.string().nullable(),
   citation: z.looseObject({}).nullable(),
   genes: z.array(z.string()),
+  /**
+   * Spec 044 slice B part 2 (B2-D5): the scope its evaluation was stored with, so the screen can show K2c's signed-knowledge label. Copied
+   * unchanged; optional so a response from before it parses.
+   */
+  scope: z.string().nullable().optional(),
 });
 export type GenomicCheckResult = z.infer<typeof genomicCheckResultSchema>;
 

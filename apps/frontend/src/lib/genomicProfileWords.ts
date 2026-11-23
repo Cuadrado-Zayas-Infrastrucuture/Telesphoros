@@ -207,3 +207,10 @@ export function glossaryFoot(entry: Pick<GlossaryEntry, 'status' | 'signedBy'>):
   if (entry.status !== 'signed') return GLOSSARY_WORDS.draft;
   return `Reviewed and signed by ${entry.signedBy.map((signer) => `${signer.name}, ${signer.role}, on ${signer.date}`).join('; ')}.`;
 }
+
+/** Spec 044 D9 and slice B part 2 (B2-D4): "Record a decision" under a result's evidence (draft, G3). */
+export const DECISION_WORDS = {
+  record: 'Record a decision',
+  recordHere: 'Record a decision on this result',
+  off: 'Decisions are not switched on in this environment.',
+} as const;
