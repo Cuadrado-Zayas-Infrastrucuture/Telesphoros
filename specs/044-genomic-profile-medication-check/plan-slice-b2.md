@@ -1,6 +1,6 @@
 # Plan: spec 044, slice B part 2, the glossary, the decision control, the signed label and the browser tests
 
-**Status**: **draft, for the founder's approval.** Plan only: no code. Read against `main` after PR #446 (the phenoconversion notice on
+**Status**: **approved by the founder on 2026-11-23: B2-D1 to B2-D5 as recommended.** G3, P-D6 and the glossary text are still open: the code ships the draft text marked as not yet reviewed. Read against `main` after PR #446 (the phenoconversion notice on
 the screen). Part 1 (PR #440) built the screen. This part finishes what `plan-slice-b.md` lists and part 1 left out:
 
 | Left out of part 1 | Where in `plan-slice-b.md` | Here |
@@ -89,19 +89,19 @@ fixture is invented throughout: genes, phenotypes, a modifier list and placehold
 
 ## Decisions for the founders
 
-- **B2-D1. Where the glossary lives.** **Recommendation:** a small package, `packages/help-content`, with a JSON file and its schema, so
+- **B2-D1. Where the glossary lives.** **Decided 2026-11-23:** a small package, `packages/help-content`, with a JSON file and its schema, so
   the screen and the future help assistant read one source. The sign-off is recorded in the file: two named pharmacists and a date,
   enforced by a test. This is not a cryptographic signature: the knowledge-signing keys do not exist yet, and an entry is education, not
   clinical logic. A cryptographic signature can be added when the keys exist.
 - **B2-D2. Who writes the first text.**
-  - **Recommendation:** I draft each entry in plain words. It ships as `draft`, and the screen shows "Draft: not yet reviewed by a
+  - **Decided 2026-11-23:** I draft each entry in plain words. It ships as `draft`, and the screen shows "Draft: not yet reviewed by a
     pharmacist." on it. You then rewrite and sign each one in context.
   - **Alternative:** the glossary ships with no entries until you write them. Terms then stay plain text.
-- **B2-D3. How it opens.** **Recommendation:** from the word itself, into the side drawer the app already uses, plus an ⓘ for the full
+- **B2-D3. How it opens.** **Decided 2026-11-23:** from the word itself, into the side drawer the app already uses, plus an ⓘ for the full
   list. The alternative is a separate glossary page.
-- **B2-D4. "Record a decision" where decisions are on.** **Recommendation:** a link to the result in the results list, where the existing,
+- **B2-D4. "Record a decision" where decisions are on.** **Decided 2026-11-23:** a link to the result in the results list, where the existing,
   tested decision form is. The alternative is a second copy of the form inside the profile.
-- **B2-D5. Scope on profile results.** **Recommendation:** yes, the small optional API field, so the label is right on every row.
+- **B2-D5. Scope on profile results.** **Decided 2026-11-23:** yes, the small optional API field, so the label is right on every row.
 - **G3 and P-D6, still open.** The screen's wording and the notice's wording. B2-D2 adds the glossary text to that list.
 
 ## Touched
