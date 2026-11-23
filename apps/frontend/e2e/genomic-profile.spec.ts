@@ -96,8 +96,13 @@ async function openProfile(page: Page, colorScheme: 'light' | 'dark') {
     },
   );
   await openPatientPage(page, patient.label);
-  // toContainText, so a failure prints what the section says instead (an error, "not available", or the loading line).
-  await expect(section(page)).toContainText('1 of 1 current medication has guidance to review', { timeout: 15_000 });
+  try {
+    await expect(section(page)).toContainText('1 of 1 current medication has guidance to review', { timeout: 15_000 });
+  } catch (error) {
+    // Say where the browser was and what the page showed, so a failure in CI can be read without the screenshot.
+    const shown = (await page.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 2000);
+    throw new Error(`The genomic profile did not show at ${page.url()}. The page said: ${shown}`, { cause: error });
+  }
 }
 
 /** WCAG 2.0/2.1 A and AA violations inside the genomic profile section only, colour contrast included. */
