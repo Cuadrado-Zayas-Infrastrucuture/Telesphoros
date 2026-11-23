@@ -82,12 +82,22 @@ async function openPatientPage(page: Page, label: string) {
 async function openProfile(page: Page, colorScheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme });
   const patient = await signInWithPatient(page);
+  // The API is another origin than the app, so the browser reads a fulfilled response only with the CORS headers the real API would send.
   await page.route(
     (url) => url.pathname === `/api/v1/patients/${patient.id}/genomic-profile`,
-    (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profileFor(patient.id)) }),
+    (route) => {
+      const origin = route.request().headers()['origin'] ?? '*';
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true', vary: 'Origin' },
+        body: JSON.stringify(profileFor(patient.id)),
+      });
+    },
   );
   await openPatientPage(page, patient.label);
-  await expect(section(page).getByText('1 of 1 current medication has guidance to review')).toBeVisible({ timeout: 15_000 });
+  // toContainText, so a failure prints what the section says instead (an error, "not available", or the loading line).
+  await expect(section(page)).toContainText('1 of 1 current medication has guidance to review', { timeout: 15_000 });
 }
 
 /** WCAG 2.0/2.1 A and AA violations inside the genomic profile section only, colour contrast included. */
