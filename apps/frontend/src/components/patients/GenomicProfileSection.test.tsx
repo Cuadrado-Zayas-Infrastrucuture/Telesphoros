@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { REASON_MESSAGES, REVIEWER_ACTIONS } from '@telesphoros/cpic-schema/vocabulary';
+import { GLOSSARY_EN } from '@telesphoros/help-content';
 import { genomicProfileDtoSchema, type ContextNotice, type GenomicProfileDto } from '@telesphoros/shared-types';
 import { readGenomicProfile } from '@/lib/genomicProfile';
-import { NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
+import { GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
 import { GenomicProfileSection } from './GenomicProfileSection';
 
 const auth = vi.hoisted(() => ({ apiFetch: vi.fn(), roles: ['clinician'] as string[] }));
@@ -151,7 +152,7 @@ it('opens why and the evidence on request (layers 2 and 3)', async () => {
   expect(simvastatin.getByText('syn-guideline, version 1')).toBeInTheDocument();
   expect(simvastatin.getByText('Verified')).toBeInTheDocument();
   // a row with no matching result has nothing to open
-  expect(within(row('clopidogrel')).queryByRole('button')).not.toBeInTheDocument();
+  expect(within(row('clopidogrel')).queryByRole('button', { name: 'Why, and the evidence' })).not.toBeInTheDocument();
 });
 
 it('shows one card per gene, and "Not tested" for a gene a guideline needs that no confirmed report includes', async () => {
@@ -355,7 +356,14 @@ it('changes nothing else on the screen: without the notice texts, the page reads
   serve({ ...withNotices(), genes: profile.genes, medications: profile.medications });
   await show();
   const withoutText = document.body.textContent!;
-  const noticeTexts = [NOTICE_WORDS.lead, sertralineOnRow, simvastatinOnRow, sertralineOnCard, 'Source: Synthetic modifier table, version 2026-01, Table S1, row 4.'];
+  const noticeTexts = [
+    NOTICE_WORDS.lead,
+    GLOSSARY_WORDS.phenoconversion,
+    sertralineOnRow,
+    simvastatinOnRow,
+    sertralineOnCard,
+    'Source: Synthetic modifier table, version 2026-01, Table S1, row 4.',
+  ];
   const stripped = noticeTexts.reduce((text, notice) => text.split(notice).join(''), withText);
   expect(stripped).toBe(withoutText);
   // control: the notices were there to strip
@@ -372,4 +380,62 @@ it('never reassures with or without notices: no text says safe, no interaction, 
     expect(text).not.toMatch(/\bsafe\b|no interaction|not affected|\bnone\b/i);
     cleanup();
   }
+});
+
+// Spec 044 slice B part 2: the glossary. Its entries are the draft ones in packages/help-content (B2-D2); the fixture's genes stay invented.
+const entryOf = (id: string) => GLOSSARY_EN.find((item) => item.id === id)!;
+const drawer = () => within(document.getElementById('genomic-glossary')!);
+const withGlossaryPhenotype: GenomicProfileDto = {
+  ...profile,
+  genes: profile.genes.map((gene) => (gene.gene === 'GENEA' ? { ...gene, sources: [source(EVALUATION, 'Poor Metabolizer')] } : gene)),
+};
+
+it('opens a word on the row in the glossary drawer, says the entry is a draft, and returns focus to the word when closed', async () => {
+  await show();
+  const word = within(row('simvastatin')).getByRole('button', { name: 'Guidance to review' });
+  // the drawer's text is in the page only while it is open
+  expect(screen.queryByText(entryOf('guidance-to-review').body)).not.toBeInTheDocument();
+  await userEvent.click(word);
+  expect(drawer().getByText(entryOf('guidance-to-review').body)).toBeInTheDocument();
+  expect(drawer().getByText(GLOSSARY_WORDS.draft)).toBeInTheDocument();
+  await userEvent.click(drawer().getByRole('button', { name: GLOSSARY_WORDS.close }));
+  expect(screen.queryByText(entryOf('guidance-to-review').body)).not.toBeInTheDocument();
+  expect(word).toHaveFocus();
+});
+
+it("opens the gene's value from the row's because-line and from its card, and the sentence still reads whole", async () => {
+  serve(withGlossaryPhenotype);
+  await show();
+  const value = within(row('simvastatin')).getByRole('button', { name: 'Poor Metabolizer' });
+  expect(value.closest('p')).toHaveTextContent("Because GENEA is Poor Metabolizer in this patient's report.");
+  expect(geneCard('GENEA').getByRole('button', { name: 'Poor Metabolizer' })).toBeInTheDocument();
+  await userEvent.click(value);
+  expect(drawer().getByText(entryOf('poor-metabolizer').body)).toBeInTheDocument();
+});
+
+it('leaves a word with no entry as plain text, guessing nothing', async () => {
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  expect(simvastatin.queryByRole('button', { name: 'Synthetic Poor' })).not.toBeInTheDocument();
+  expect(simvastatin.getByText("Because GENEA is Synthetic Poor in this patient's report.")).toBeInTheDocument();
+  expect(geneCard('GENEA').queryByRole('button', { name: 'Synthetic Poor' })).not.toBeInTheDocument();
+});
+
+it('lists every term from the ⓘ, and moves between an entry and the list inside the drawer', async () => {
+  await show();
+  await userEvent.click(screen.getByRole('button', { name: GLOSSARY_WORDS.listTitle }));
+  for (const item of GLOSSARY_EN) expect(drawer().getByRole('button', { name: item.term })).toBeInTheDocument();
+  await userEvent.click(drawer().getByRole('button', { name: 'Diplotype' }));
+  expect(drawer().getByText(entryOf('diplotype').body)).toBeInTheDocument();
+  expect(drawer().getByRole('heading', { name: 'Diplotype' })).toHaveFocus();
+  await userEvent.click(drawer().getByRole('button', { name: GLOSSARY_WORDS.allTerms }));
+  expect(drawer().getByRole('button', { name: 'Phenoconversion' })).toBeInTheDocument();
+  expect(drawer().queryByText(entryOf('diplotype').body)).not.toBeInTheDocument();
+});
+
+it('opens Phenoconversion from the notice', async () => {
+  serve(withNotices());
+  await show();
+  await userEvent.click(within(row('simvastatin')).getByRole('button', { name: GLOSSARY_WORDS.phenoconversion }));
+  expect(drawer().getByText(entryOf('phenoconversion').body)).toBeInTheDocument();
 });

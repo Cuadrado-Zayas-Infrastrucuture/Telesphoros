@@ -1,0 +1,175 @@
+{
+  "language": "en",
+  "entries": [
+    {
+      "id": "phenotype",
+      "term": "Phenotype",
+      "aliases": [
+        "Phenotype"
+      ],
+      "body": "A phenotype says how well a gene's protein is expected to work, worked out from the genetic test result: for example \"Poor Metabolizer\" or \"Decreased Function\". It is a prediction from the genes alone. Other medications, illness and age can change how the body actually responds.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "diplotype",
+      "term": "Diplotype",
+      "aliases": [
+        "Diplotype"
+      ],
+      "body": "A diplotype is the pair of versions of a gene that a person carries, one from each parent, written for example as *1/*2. The phenotype is worked out from it.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "star-allele",
+      "term": "Star allele",
+      "aliases": [
+        "Star allele"
+      ],
+      "body": "A star allele is a named version of a gene, written with a star and a number, such as *2 or *17. Each one has a known effect on how well the gene's protein works: normal, decreased, increased, or no function.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "activity-score",
+      "term": "Activity score",
+      "aliases": [
+        "Activity score"
+      ],
+      "body": "For some genes, such as CYP2D6, each of the two versions a person carries is given a value for how well it works, and the two values are added up. The total places the person in a phenotype group.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "normal-metabolizer",
+      "term": "Normal Metabolizer",
+      "aliases": [
+        "Normal Metabolizer"
+      ],
+      "body": "The enzyme this gene makes is expected to work at the usual rate. CPIC can still give guidance for this group, so read the recommendation on the row.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "intermediate-metabolizer",
+      "term": "Intermediate Metabolizer",
+      "aliases": [
+        "Intermediate Metabolizer"
+      ],
+      "body": "The enzyme this gene makes is expected to work more slowly than usual. Drugs it breaks down can build up, and drugs it turns into their active form can work less well.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "poor-metabolizer",
+      "term": "Poor Metabolizer",
+      "aliases": [
+        "Poor Metabolizer"
+      ],
+      "body": "The enzyme this gene makes is expected to work very little or not at all. Drugs it breaks down can build up to higher levels, and drugs that need it to become active may not work.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "rapid-metabolizer",
+      "term": "Rapid Metabolizer",
+      "aliases": [
+        "Rapid Metabolizer"
+      ],
+      "body": "The enzyme this gene makes is expected to work faster than usual. Drugs it breaks down can be cleared sooner and have less effect.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "ultrarapid-metabolizer",
+      "term": "Ultrarapid Metabolizer",
+      "aliases": [
+        "Ultrarapid Metabolizer"
+      ],
+      "body": "The enzyme this gene makes is expected to work much faster than usual. Drugs it breaks down can be cleared before they work, and drugs it turns into their active form can reach higher levels than intended.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "normal-function",
+      "term": "Normal Function",
+      "aliases": [
+        "Normal Function"
+      ],
+      "body": "The protein this gene makes, often a transporter that moves drugs into or out of cells, is expected to work as usual. CPIC can still give guidance, so read the recommendation on the row.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "decreased-function",
+      "term": "Decreased Function",
+      "aliases": [
+        "Decreased Function"
+      ],
+      "body": "The protein this gene makes is expected to work less than usual. Depending on the drug, that can mean more of it stays in the blood, or that it has a weaker effect. The recommendation on the row says what CPIC advises.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "poor-function",
+      "term": "Poor Function",
+      "aliases": [
+        "Poor Function"
+      ],
+      "body": "The protein this gene makes is expected to work very little. The effect on a drug is usually larger than with decreased function.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "increased-function",
+      "term": "Increased Function",
+      "aliases": [
+        "Increased Function"
+      ],
+      "body": "The protein this gene makes is expected to work more than usual. The recommendation on the row says what that means for the drug.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "guidance-to-review",
+      "term": "Guidance to review",
+      "aliases": [
+        "Guidance to review"
+      ],
+      "body": "CPIC has a recommendation for this medication and this patient's genetic result. Read it, and how strong it is, before prescribing or dispensing.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "held",
+      "term": "Held",
+      "aliases": [
+        "Held"
+      ],
+      "body": "A result is held when it cannot be used as it stands, for example when a report lists a gene twice with different values. The row says why and what a reviewer can do. Nothing from a held result is used for guidance.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "no-guideline-loaded",
+      "term": "No guideline loaded",
+      "aliases": [
+        "No guideline loaded"
+      ],
+      "body": "The guidelines loaded in this app do not cover this medication. That does not mean genes do not matter for it: a guideline may not exist yet, or may not be loaded here.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "phenoconversion",
+      "term": "Phenoconversion",
+      "aliases": [
+        "Phenoconversion"
+      ],
+      "body": "Phenoconversion is when another medication, or a condition such as liver disease, makes a gene's protein work differently from what the genetic test predicts. For example, a strong inhibitor can make a Normal Metabolizer respond like a Poor Metabolizer while it is taken. The genetic result does not change; how the body responds now can.",
+      "status": "draft",
+      "signedBy": []
+    }
+  ]
+}

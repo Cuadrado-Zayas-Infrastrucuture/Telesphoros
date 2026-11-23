@@ -4,6 +4,7 @@ import { GenomicCheckLayerOne } from '@/components/patients/GenomicCheckLayerOne
 import { GenomicContextNotices } from '@/components/patients/GenomicContextNotices';
 import { GenomicNoticeEvidence } from '@/components/patients/GenomicNoticeEvidence';
 import { GenomicResultLayers } from '@/components/patients/GenomicResultLayers';
+import { GlossaryTerm } from '@/components/patients/GlossaryTerm';
 import { Button } from '@/components/ui/Button';
 import { checkSentence, conflictLine, PROFILE_WORDS, WORD_LABELS } from '@/lib/genomicProfileWords';
 import { showsWording } from '@/lib/resultStatus';
@@ -32,7 +33,9 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
       <h4 id={`${id}-name`} className="text-base font-semibold wrap-anywhere">
         {name}
       </h4>
-      <p className={`font-semibold ${WORD_TONE[check.word]}`}>{WORD_LABELS[check.word]}</p>
+      <p className={`font-semibold ${WORD_TONE[check.word]}`}>
+        <GlossaryTerm text={WORD_LABELS[check.word]} />
+      </p>
       {sentence && (
         <p className="text-sm text-muted-foreground">
           {sentence.message}
