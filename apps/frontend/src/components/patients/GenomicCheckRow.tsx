@@ -1,6 +1,8 @@
 import { useId, useState } from 'react';
 import type { GenomicCheck, GenomicGene } from '@telesphoros/shared-types';
 import { GenomicCheckLayerOne } from '@/components/patients/GenomicCheckLayerOne';
+import { GenomicContextNotices } from '@/components/patients/GenomicContextNotices';
+import { GenomicNoticeEvidence } from '@/components/patients/GenomicNoticeEvidence';
 import { GenomicResultLayers } from '@/components/patients/GenomicResultLayers';
 import { Button } from '@/components/ui/Button';
 import { checkSentence, conflictLine, PROFILE_WORDS, WORD_LABELS } from '@/lib/genomicProfileWords';
@@ -17,7 +19,8 @@ const WORD_TONE: Readonly<Record<GenomicCheck['word'], string>> = {
 /**
  * One medication, or one drug checked before prescribing, in three layers (spec 044 slice B, section 4). Layer 1 is always shown: the drug,
  * its word, the sentence that word carries and, where a verified cell gives one, CPIC's recommendation quoted exactly with its strength and
- * the gene it rests on. Layers 2 (why) and 3 (the evidence) open together.
+ * the gene it rests on, then any notice that a medication this patient takes can change that gene's effect (spec 045 N3). Layers 2 (why)
+ * and 3 (the evidence, with each notice's source) open together.
  */
 export function GenomicCheckRow({ check, name, genes, combination }: { check: GenomicCheck; name: string; genes: readonly GenomicGene[]; combination: boolean }) {
   const id = useId();
@@ -42,6 +45,7 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
       {check.results.filter(showsWording).map((result) => (
         <GenomicCheckLayerOne key={result.resultId} result={result} genes={genes} />
       ))}
+      <GenomicContextNotices notices={check.contextNotices} place="row" checkRxcui={check.rxcui} />
       {check.results.length > 0 && (
         <div>
           <Button variant="outline" size="sm" aria-expanded={open} aria-controls={`${id}-layers`} onClick={() => setOpen((value) => !value)}>
@@ -54,6 +58,7 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
           {check.results.map((result) => (
             <GenomicResultLayers key={result.resultId} result={result} genes={genes} knowledgeChanged={check.knowledgeChanged} />
           ))}
+          <GenomicNoticeEvidence notices={check.contextNotices} />
         </div>
       )}
     </article>

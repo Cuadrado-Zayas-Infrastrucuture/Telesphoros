@@ -1,5 +1,5 @@
 import { REASON_MESSAGES, REVIEWER_ACTIONS, RETIRED_REASON_CODES, type ReasonCode } from '@telesphoros/cpic-schema/vocabulary';
-import type { GenomicCheck, GenomicCheckResult, GenomicCheckWord, GenomicGene, GenomicProfileDto } from '@telesphoros/shared-types';
+import type { ContextNotice, GenomicCheck, GenomicCheckResult, GenomicCheckWord, GenomicGene, GenomicProfileDto } from '@telesphoros/shared-types';
 
 /**
  * Spec 044 slice B: every fixed string of the genomic profile screen, in one place, so the founders can rewrite and sign them (G3) without
@@ -126,4 +126,64 @@ export function untestedGenes(profile: Pick<GenomicProfileDto, 'genes' | 'medica
   const known = new Set(profile.genes.map((gene) => gene.gene));
   const named = [...profile.medications, ...(profile.check ? [profile.check] : [])].flatMap((check) => check.results.flatMap((result) => result.genes));
   return [...new Set(named)].filter((gene) => !known.has(gene)).sort();
+}
+
+// The ⓘ "About this check", as spec 045 D8 gives it.
+const ABOUT_SENTENCES = [
+  'This check names medications the FDA lists as strong or moderate inhibitors or inducers of the gene.',
+  'The list is not exhaustive, and stopped medications and other causes, such as liver disease, are not checked.',
+];
+
+/**
+ * Spec 045 slice N3: the words of the notice that a current medication can change a gene's effect (phenoconversion, step 1). **Draft
+ * wording, from plan-slice-n3.md, awaiting the founders' signature (P-D6).** Everyday verbs on the row ("lowers", "raises"), the source's
+ * own terms in the evidence (N3-D3). None of it says "safe", "no interaction", "not affected" or "none" (PN-5).
+ */
+export const NOTICE_WORDS = {
+  lead: 'A medication this patient takes can change this.',
+  rowEnd: 'The guidance above is based on the genes alone and does not take this into account.',
+  cardEnd: 'The result above is from the genes alone and does not take this into account.',
+  startNotRecorded: 'Its start date is not recorded.',
+  evidenceHeading: 'Medications that can change this result',
+  openSource: 'Open the source',
+  coverageLoaded: "Medications that can change a gene's effect are checked against the FDA list of strong and moderate ones. That list is not complete.",
+  coverageNotLoaded: "Medications that can change a gene's effect are not checked yet.",
+  aboutLabel: 'About this check',
+  about: ABOUT_SENTENCES.join(' '),
+} as const;
+
+const NOTICE_VERBS: Readonly<Record<ContextNotice['effect'], string>> = { inhibitor: 'lowers', inducer: 'raises' };
+const NOTICE_ADVERBS: Readonly<Record<ContextNotice['strength'], string>> = { strong: 'strongly', moderate: 'moderately' };
+
+function sentenceStart(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * One notice in everyday words: "Paroxetine, which this patient takes, strongly lowers CYP2D6 activity." then what the guidance (on a row)
+ * or the result (on a gene's card) does not account for. A drug that is its own modifier reads "Fluvoxamine itself ..." (N2 rule 2).
+ */
+export function noticeSentence(notice: ContextNotice, place: 'row' | 'card', checkRxcui?: string): string {
+  const name = sentenceStart(notice.medication.name);
+  const subject = notice.medication.rxcui === checkRxcui ? `${name} itself` : `${name}, which this patient takes,`;
+  const sentences = [`${subject} ${NOTICE_ADVERBS[notice.strength]} ${NOTICE_VERBS[notice.effect]} ${notice.gene} activity.`];
+  if (!notice.medication.startRecorded) sentences.push(NOTICE_WORDS.startNotRecorded);
+  sentences.push(place === 'row' ? NOTICE_WORDS.rowEnd : NOTICE_WORDS.cardEnd);
+  return sentences.join(' ');
+}
+
+/** The evidence: the source's own terms, "Paroxetine: listed as a strong inhibitor of CYP2D6." */
+export function noticeTerm(notice: ContextNotice): string {
+  return `${sentenceStart(notice.medication.name)}: listed as a ${notice.strength} ${notice.effect} of ${notice.gene}.`;
+}
+
+/** Where the list says it (PN-7): "Source: [source], version [v], [table], row [r]." */
+export function noticeSourceLine(notice: ContextNotice): string {
+  const { source, sourceVersion, table, row } = notice.source;
+  return `Source: ${[source, `version ${sourceVersion}`, table, row === null ? null : `row ${row}`].filter(Boolean).join(', ')}.`;
+}
+
+/** The line always shown under "Current medications, checked" (N3-D2): what the check covers, or that it is not running yet (PN-6). */
+export function coverageLine(profile: Pick<GenomicProfileDto, 'modifierLists'>): string {
+  return profile.modifierLists?.loaded === true ? NOTICE_WORDS.coverageLoaded : NOTICE_WORDS.coverageNotLoaded;
 }
