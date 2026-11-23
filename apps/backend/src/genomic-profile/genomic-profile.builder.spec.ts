@@ -22,6 +22,7 @@ interface EvaluationSpec {
   createdAt?: string;
   genes?: Array<{ gene: string; phenotype?: string | null; activityScore?: string | null; state?: string; reasonCode?: string | null }>;
   results?: ResultSpec[];
+  scope?: string | null;
 }
 
 /** Only the fields the builder reads are meaningful; the rest are filled so the object has the DTO's shape. */
@@ -47,6 +48,7 @@ function evaluation(spec: EvaluationSpec): ProfileEvaluation {
     current: spec.current ?? true,
     state: spec.state ?? 'active',
     createdAt: spec.createdAt ?? '2026-11-01T00:00:00.000Z',
+    scope: spec.scope ?? null,
     advisory: {
       activeDisputes: 0,
       patientLink: spec.link ?? 'verified',
@@ -375,5 +377,19 @@ describe('spec 045 N2: a notice when a current medication is listed against a ge
   it('never reassures (PN-5)', () => {
     const profile = withLists([usedGeneA()], [medication('111', 'drugx'), medication(MODIFIER, 'drugm')], lists({ [MODIFIER]: [modifier('GENEA')] }), '111');
     expect(JSON.stringify(profile)).not.toMatch(/\b(safe|no interaction|not affected|normal response|ok)\b/i);
+  });
+});
+
+describe("slice B part 2 (B2-D5): each matching result carries its evaluation's scope, unchanged", () => {
+  it('copies the scope of the evaluation each result came from, null included, and changes nothing else', () => {
+    const signed = evaluation({ scope: 'synthetic-patient-signed-knowledge', results: [{ outcome: 'shown', rxcui: '111' }] });
+    const plain = evaluation({ scope: null, results: [{ outcome: 'held', rxcui: '111' }] });
+    const check = build([signed, plain], [medication('111')]).medications[0]!;
+    const byOutcome = Object.fromEntries(check.results.map((r) => [r.outcome, r.scope]));
+    expect(byOutcome).toEqual({ shown: 'synthetic-patient-signed-knowledge', held: null });
+    // control: the rest of the row is what it was without a scope
+    const unscoped = build([evaluation({ results: [{ outcome: 'shown', rxcui: '111' }] }), evaluation({ results: [{ outcome: 'held', rxcui: '111' }] })], [medication('111')]);
+    expect(check.word).toBe(unscoped.medications[0]!.word);
+    expect(check.results.map((r) => r.outcome).sort()).toEqual(unscoped.medications[0]!.results.map((r) => r.outcome).sort());
   });
 });

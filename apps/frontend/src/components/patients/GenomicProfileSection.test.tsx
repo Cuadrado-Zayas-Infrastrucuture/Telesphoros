@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { REASON_MESSAGES, REVIEWER_ACTIONS } from '@telesphoros/cpic-schema/vocabulary';
 import { GLOSSARY_EN } from '@telesphoros/help-content';
 import { genomicProfileDtoSchema, type ContextNotice, type GenomicProfileDto } from '@telesphoros/shared-types';
 import { readGenomicProfile } from '@/lib/genomicProfile';
-import { GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
+import { SIGNED_ASSESSMENT_SCOPE, SIGNED_KNOWLEDGE_LABEL } from '@/components/SignedKnowledgeLabel';
+import { DECISION_WORDS, GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
 import { GenomicProfileSection } from './GenomicProfileSection';
 
 const auth = vi.hoisted(() => ({ apiFetch: vi.fn(), roles: ['clinician'] as string[] }));
@@ -90,7 +92,7 @@ const serve = (body: GenomicProfileDto) => {
   });
 };
 const show = async () => {
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   return screen.findByText('1 of 4 current medications has guidance to review');
 };
 const row = (name: string) => screen.getByRole('article', { name });
@@ -171,20 +173,20 @@ it('says when the profile does not include every report', async () => {
 
 it('says when no medication is recorded, without claiming anything else', async () => {
   serve({ ...profile, medications: [], awaitingLinkReview: [] });
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   expect(await screen.findAllByText('No current medications are recorded for this patient.')).toHaveLength(2);
 });
 
 it('answers in place when the environment does not serve the profile (503)', async () => {
   auth.apiFetch.mockImplementation(async () => json({}, 503));
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   expect(await screen.findByText('The genomic profile is not available in this environment.')).toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('answers in place when the read fails, with a retry that reads again', async () => {
   auth.apiFetch.mockImplementationOnce(async () => json({}, 500));
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the genomic profile.');
   fireEvent.click(screen.getByRole('button', { name: 'Retry the genomic profile' }));
   expect(await screen.findByText('1 of 4 current medications has guidance to review')).toBeInTheDocument();
@@ -438,4 +440,50 @@ it('opens Phenoconversion from the notice', async () => {
   await show();
   await userEvent.click(within(row('simvastatin')).getByRole('button', { name: GLOSSARY_WORDS.phenoconversion }));
   expect(drawer().getByText(entryOf('phenoconversion').body)).toBeInTheDocument();
+});
+
+// Spec 044 slice B part 2b: "Record a decision" (D9, B2-D4) and K2c's signed-knowledge label (B2-D5).
+afterEach(() => vi.unstubAllEnvs());
+const signedResults = reviewCheck.results.map((item) => ({ ...item, scope: SIGNED_ASSESSMENT_SCOPE }));
+const withSignedSimvastatin: GenomicProfileDto = {
+  ...profile,
+  medications: profile.medications.map((check) => (check.rxcui === SIMVASTATIN ? { ...check, results: signedResults } : check)),
+};
+
+it('offers "Record a decision" under the evidence, as a link to the result in the results list where decisions are on', async () => {
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  expect(simvastatin.queryByRole('link', { name: DECISION_WORDS.recordHere })).not.toBeInTheDocument();
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getByRole('link', { name: DECISION_WORDS.recordHere })).toHaveAttribute('href', '/?result=55555555-5555-4555-8555-555555555551');
+  // nothing is written from the profile
+  const calls = auth.apiFetch.mock.calls as [string, RequestInit | undefined][];
+  expect(calls.every(([, init]) => init?.method === undefined || init.method === 'GET')).toBe(true);
+});
+
+it('shows it disabled in the synthetic staging, with its sentence beside it in plain text', async () => {
+  vi.stubEnv('VITE_SYNTHETIC_ASSESSMENT', 'true');
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getByRole('button', { name: DECISION_WORDS.record })).toBeDisabled();
+  expect(simvastatin.getByText(DECISION_WORDS.off)).toBeInTheDocument();
+  expect(simvastatin.queryByRole('link', { name: DECISION_WORDS.recordHere })).not.toBeInTheDocument();
+});
+
+it("says once, under the drug's name, when a result on the row was made with the signed, real knowledge (K2c)", async () => {
+  serve(withSignedSimvastatin);
+  await show();
+  expect(within(row('simvastatin')).getAllByText(SIGNED_KNOWLEDGE_LABEL)).toHaveLength(1);
+  // a row whose results carry no scope, or another one, says nothing of the kind
+  expect(within(row('sertraline')).queryByText(SIGNED_KNOWLEDGE_LABEL)).not.toBeInTheDocument();
+  cleanup();
+  serve({ ...withSignedSimvastatin, medications: [{ ...reviewCheck, results: reviewCheck.results.map((item) => ({ ...item, scope: 'synthetic-patient' })) }] });
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
+  expect(await screen.findByRole('article', { name: 'simvastatin' })).toBeInTheDocument();
+  expect(screen.queryByText(SIGNED_KNOWLEDGE_LABEL)).not.toBeInTheDocument();
+});
+
+it('the signed fixture is a valid profile response', () => {
+  expect(() => genomicProfileDtoSchema.parse(withSignedSimvastatin)).not.toThrow();
 });
