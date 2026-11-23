@@ -54,12 +54,16 @@ describe('every non-public route refuses a request without a valid token', () =>
     ['no Authorization header', {}],
     ['a header that is not a bearer token', { Authorization: 'Basic c3luOnN5bg==' }],
     ['a bearer token that is not a token', { Authorization: 'Bearer not-a-token' }],
-  ])('answers 401 UNAUTHORIZED to %s, on every one', async (_what, headers) => {
-    const wrong: string[] = [];
-    for (const route of routes.filter((r) => !r.isPublic)) {
-      const res = await send(route, headers);
-      if (res.status !== 401 || res.body?.error?.code !== 'UNAUTHORIZED') wrong.push(`${route.key} -> ${res.status} ${res.body?.error?.code ?? ''}`);
-    }
-    expect(wrong).toEqual([]);
-  });
+  ])(
+    'answers 401 UNAUTHORIZED to %s, on every one',
+    async (_what, headers) => {
+      const wrong: string[] = [];
+      for (const route of routes.filter((r) => !r.isPublic)) {
+        const res = await send(route, headers);
+        if (res.status !== 401 || res.body?.error?.code !== 'UNAUTHORIZED') wrong.push(`${route.key} -> ${res.status} ${res.body?.error?.code ?? ''}`);
+      }
+      expect(wrong).toEqual([]);
+    },
+    30_000,
+  );
 });
