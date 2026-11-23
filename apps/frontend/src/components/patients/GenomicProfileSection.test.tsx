@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { REASON_MESSAGES, REVIEWER_ACTIONS } from '@telesphoros/cpic-schema/vocabulary';
-import { genomicProfileDtoSchema, type GenomicProfileDto } from '@telesphoros/shared-types';
+import { genomicProfileDtoSchema, type ContextNotice, type GenomicProfileDto } from '@telesphoros/shared-types';
 import { readGenomicProfile } from '@/lib/genomicProfile';
-import { NOT_SAFE_SENTENCE } from '@/lib/genomicProfileWords';
+import { NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
 import { GenomicProfileSection } from './GenomicProfileSection';
 
 const auth = vi.hoisted(() => ({ apiFetch: vi.fn(), roles: ['clinician'] as string[] }));
@@ -217,4 +217,159 @@ it('refuses a response for another patient, or a check for another drug, as a fa
   // control
   serve(profile);
   await expect(readGenomicProfile(auth.apiFetch, PATIENT, SIMVASTATIN)).resolves.toMatchObject({ kind: 'loaded' });
+});
+
+// Spec 045 slice N3. An invented modifier list: GENEA is not a real gene, and these drugs are not listed against anything by any real source.
+const modifier = (
+  medication: ContextNotice['medication'],
+  effect: ContextNotice['effect'],
+  strength: ContextNotice['strength'],
+  row: string | null = '4',
+  sourceUrl = 'https://synthetic.invalid/modifiers',
+): ContextNotice => ({
+  kind: 'gene-modifier',
+  gene: 'GENEA',
+  medication,
+  effect,
+  strength,
+  source: { listId: 'syn-modifiers', source: 'Synthetic modifier table', sourceVersion: '2026-01', sourceUrl, table: 'Table S1', row },
+});
+const sertralineLowers = modifier({ rxcui: SERTRALINE, name: 'sertraline', startRecorded: true }, 'inhibitor', 'strong');
+const simvastatinRaises = modifier({ rxcui: SIMVASTATIN, name: 'simvastatin', startRecorded: false }, 'inducer', 'moderate', null);
+const withNotices = (notices: ContextNotice[] = [sertralineLowers, simvastatinRaises]): GenomicProfileDto => ({
+  ...profile,
+  modifierLists: { loaded: true },
+  genes: profile.genes.map((gene) => (gene.gene === 'GENEA' ? { ...gene, contextNotices: [sertralineLowers] } : gene)),
+  medications: profile.medications.map((check) => (check.rxcui === SIMVASTATIN ? { ...check, contextNotices: notices } : check)),
+});
+const sertralineOnRow = `Sertraline, which this patient takes, strongly lowers GENEA activity. ${NOTICE_WORDS.rowEnd}`;
+const simvastatinOnRow = `Simvastatin itself moderately raises GENEA activity. ${NOTICE_WORDS.startNotRecorded} ${NOTICE_WORDS.rowEnd}`;
+const sertralineOnCard = `Sertraline, which this patient takes, strongly lowers GENEA activity. ${NOTICE_WORDS.cardEnd}`;
+const geneCard = (gene: string) => within(screen.getByRole('heading', { name: gene }).closest('li')!);
+
+it('the N3 fixture is a valid profile response', () => {
+  expect(() => genomicProfileDtoSchema.parse(withNotices())).not.toThrow();
+});
+
+it('says on the row, in everyday words and in the order sent, when a medication this patient takes can change the gene the guidance rests on', async () => {
+  serve(withNotices());
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  expect(simvastatin.getByText(NOTICE_WORDS.lead)).toBeInTheDocument();
+  expect(simvastatin.getByText(sertralineOnRow)).toBeInTheDocument();
+  // the checked drug as its own modifier, with no start recorded
+  expect(simvastatin.getByText(simvastatinOnRow)).toBeInTheDocument();
+  const text = row('simvastatin').textContent!;
+  expect(text.indexOf(sertralineOnRow)).toBeLessThan(text.indexOf(simvastatinOnRow));
+  // shown without opening anything, after the quoted recommendation
+  expect(simvastatin.getByRole('button', { name: 'Why, and the evidence' })).toHaveAttribute('aria-expanded', 'false');
+  expect(text.indexOf('[Synthetic recommendation text]')).toBeLessThan(text.indexOf(NOTICE_WORDS.lead));
+  // a row the server sent no notice for says nothing about modifiers
+  expect(within(row('sertraline')).queryByText(NOTICE_WORDS.lead)).not.toBeInTheDocument();
+  expect(within(row('clopidogrel')).queryByText(NOTICE_WORDS.lead)).not.toBeInTheDocument();
+});
+
+it("says it on the gene's card too, with the source on the line under it", async () => {
+  serve(withNotices());
+  await show();
+  const card = geneCard('GENEA');
+  expect(card.getByText(NOTICE_WORDS.lead)).toBeInTheDocument();
+  expect(card.getByText(sertralineOnCard)).toBeInTheDocument();
+  expect(card.getByText('Source: Synthetic modifier table, version 2026-01, Table S1, row 4.')).toBeInTheDocument();
+  expect(geneCard('GENEB').queryByText(NOTICE_WORDS.lead)).not.toBeInTheDocument();
+});
+
+it("puts the source's own terms and where the list says it under the evidence, one step away (PN-7)", async () => {
+  serve(withNotices());
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  expect(simvastatin.queryByText('Sertraline: listed as a strong inhibitor of GENEA.')).not.toBeInTheDocument();
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getByRole('heading', { name: NOTICE_WORDS.evidenceHeading })).toBeInTheDocument();
+  expect(simvastatin.getByText('Sertraline: listed as a strong inhibitor of GENEA.')).toBeInTheDocument();
+  expect(simvastatin.getByText('Simvastatin: listed as a moderate inducer of GENEA.')).toBeInTheDocument();
+  expect(simvastatin.getByText('Source: Synthetic modifier table, version 2026-01, Table S1, row 4.')).toBeInTheDocument();
+  // a null row is left out, not printed as "row null"
+  expect(simvastatin.getByText('Source: Synthetic modifier table, version 2026-01, Table S1.')).toBeInTheDocument();
+  const links = simvastatin.getAllByRole('link', { name: NOTICE_WORDS.openSource });
+  expect(links).toHaveLength(2);
+  expect(links[0]).toHaveAttribute('href', 'https://synthetic.invalid/modifiers');
+});
+
+it('links a source only over https, and still names it otherwise', async () => {
+  serve(withNotices([modifier({ rxcui: SERTRALINE, name: 'sertraline', startRecorded: true }, 'inhibitor', 'strong', '4', 'javascript:alert(1)')]));
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getByText('Source: Synthetic modifier table, version 2026-01, Table S1, row 4.')).toBeInTheDocument();
+  expect(simvastatin.queryByRole('link', { name: NOTICE_WORDS.openSource })).not.toBeInTheDocument();
+});
+
+it('says the same in the drug checked before prescribing', async () => {
+  auth.apiFetch.mockImplementation(async (path: string) => {
+    const rxcui = new URL(path, 'http://synthetic').searchParams.get('rxcui');
+    if (rxcui === null) return json(profile);
+    return json({ ...profile, modifierLists: { loaded: true }, check: { ...reviewCheck, rxcui, name: null, contextNotices: [sertralineLowers] } });
+  });
+  await show();
+  const check = within(screen.getByRole('heading', { name: 'Check a drug before prescribing' }).parentElement!);
+  await userEvent.type(check.getByRole('combobox', { name: 'Drug' }), 'zocor');
+  await userEvent.click(await check.findByRole('option', { name: /Zocor/ }));
+  const answer = within(await check.findByRole('article', { name: 'simvastatin' }));
+  expect(answer.getByText(sertralineOnRow)).toBeInTheDocument();
+});
+
+it('always says, under the medications heading, what the check covers or that it is not running yet (N3-D2, PN-6)', async () => {
+  serve(withNotices());
+  await show();
+  expect(screen.getByText(NOTICE_WORDS.coverageLoaded)).toBeInTheDocument();
+  expect(screen.queryByText(NOTICE_WORDS.coverageNotLoaded)).not.toBeInTheDocument();
+  cleanup();
+  serve({ ...profile, modifierLists: { loaded: false } });
+  await show();
+  expect(screen.getByText(NOTICE_WORDS.coverageNotLoaded)).toBeInTheDocument();
+  cleanup();
+  // an API that sends no modifierLists at all is not checking either
+  serve(profile);
+  await show();
+  expect(screen.getByText(NOTICE_WORDS.coverageNotLoaded)).toBeInTheDocument();
+  expect(screen.queryByText(NOTICE_WORDS.coverageLoaded)).not.toBeInTheDocument();
+});
+
+it('opens and closes "About this check" from the ⓘ', async () => {
+  await show();
+  expect(screen.queryByText(NOTICE_WORDS.about)).not.toBeInTheDocument();
+  const about = screen.getByRole('button', { name: NOTICE_WORDS.aboutLabel });
+  await userEvent.click(about);
+  expect(about).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByText(NOTICE_WORDS.about)).toBeInTheDocument();
+  await userEvent.click(about);
+  expect(screen.queryByText(NOTICE_WORDS.about)).not.toBeInTheDocument();
+});
+
+it('changes nothing else on the screen: without the notice texts, the page reads exactly as the same profile without notices (PN-4)', async () => {
+  serve(withNotices());
+  await show();
+  const withText = document.body.textContent!;
+  cleanup();
+  serve({ ...withNotices(), genes: profile.genes, medications: profile.medications });
+  await show();
+  const withoutText = document.body.textContent!;
+  const noticeTexts = [NOTICE_WORDS.lead, sertralineOnRow, simvastatinOnRow, sertralineOnCard, 'Source: Synthetic modifier table, version 2026-01, Table S1, row 4.'];
+  const stripped = noticeTexts.reduce((text, notice) => text.split(notice).join(''), withText);
+  expect(stripped).toBe(withoutText);
+  // control: the notices were there to strip
+  expect(withText).not.toBe(withoutText);
+});
+
+it('never reassures with or without notices: no text says safe, no interaction, not affected or none (PN-5)', async () => {
+  for (const body of [withNotices(), { ...profile, modifierLists: { loaded: true } }, { ...profile, modifierLists: { loaded: false } }]) {
+    serve(body);
+    await show();
+    await userEvent.click(screen.getByRole('button', { name: NOTICE_WORDS.aboutLabel }));
+    for (const button of screen.getAllByRole('button', { name: 'Why, and the evidence' })) await userEvent.click(button);
+    const text = document.body.textContent!.split(NOT_SAFE_SENTENCE).join(' ');
+    expect(text).not.toMatch(/\bsafe\b|no interaction|not affected|\bnone\b/i);
+    cleanup();
+  }
 });
