@@ -1,4 +1,5 @@
 import { REASON_MESSAGES, REVIEWER_ACTIONS, RETIRED_REASON_CODES, type ReasonCode } from '@telesphoros/cpic-schema/vocabulary';
+import type { GlossaryEntry } from '@telesphoros/help-content';
 import type { ContextNotice, GenomicCheck, GenomicCheckResult, GenomicCheckWord, GenomicGene, GenomicProfileDto } from '@telesphoros/shared-types';
 
 /**
@@ -108,17 +109,18 @@ export function geneValue(gene: GenomicGene): string | null {
   return source.phenotype ?? `Activity score ${source.activityScore}`;
 }
 
-/** Layer 1's one line: "Because SLCO1B1 is Decreased function in this patient's report." One clause per resolved gene the result used. */
-export function becauseLine(result: Pick<GenomicCheckResult, 'genes'>, genes: readonly GenomicGene[]): string | null {
-  const clauses = result.genes
+/**
+ * Layer 1's one line, in parts so each value can open its glossary entry: "Because SLCO1B1 is Decreased Function in this patient's report."
+ * One clause per resolved gene the result used; none when no gene has a value.
+ */
+export function becauseClauses(result: Pick<GenomicCheckResult, 'genes'>, genes: readonly GenomicGene[]): Array<{ gene: string; value: string }> {
+  return result.genes
     .map((name) => {
       const gene = genes.find((item) => item.gene === name);
       const value = gene ? geneValue(gene) : null;
-      return value ? `${name} is ${value}` : null;
+      return value ? { gene: name, value } : null;
     })
-    .filter((clause): clause is string => clause !== null);
-  if (clauses.length === 0) return null;
-  return `Because ${clauses.join(' and ')} in this patient's report.`;
+    .filter((clause): clause is { gene: string; value: string } => clause !== null);
 }
 
 /** Genes a medication's results name that no confirmed report includes: their card reads "Not tested". */
@@ -186,4 +188,22 @@ export function noticeSourceLine(notice: ContextNotice): string {
 /** The line always shown under "Current medications, checked" (N3-D2): what the check covers, or that it is not running yet (PN-6). */
 export function coverageLine(profile: Pick<GenomicProfileDto, 'modifierLists'>): string {
   return profile.modifierLists?.loaded === true ? NOTICE_WORDS.coverageLoaded : NOTICE_WORDS.coverageNotLoaded;
+}
+
+/**
+ * Spec 044 slice B part 2: the glossary drawer's own words (draft, G3). The entries themselves are in `packages/help-content`, shared with
+ * the help assistant.
+ */
+export const GLOSSARY_WORDS = {
+  listTitle: 'Words used here',
+  allTerms: 'All terms',
+  close: 'Close the glossary',
+  draft: 'Draft: not yet reviewed by a pharmacist.',
+  phenoconversion: 'What is phenoconversion?',
+} as const;
+
+/** The foot of an entry: who reviewed and signed it and when, or that it is a draft (B2-D2). */
+export function glossaryFoot(entry: Pick<GlossaryEntry, 'status' | 'signedBy'>): string {
+  if (entry.status !== 'signed') return GLOSSARY_WORDS.draft;
+  return `Reviewed and signed by ${entry.signedBy.map((signer) => `${signer.name}, ${signer.role}, on ${signer.date}`).join('; ')}.`;
 }
