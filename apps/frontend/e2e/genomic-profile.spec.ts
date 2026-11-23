@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { openPatients, signInWithPatient } from './helpers';
 
 const require = createRequire(import.meta.url);
@@ -83,17 +83,22 @@ async function openProfile(page: Page, colorScheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme });
   const patient = await signInWithPatient(page);
   // The API is another origin than the app, so the browser reads a fulfilled response only with the CORS headers the real API would send.
+  const fulfil = (route: Route, status: number, body: unknown) =>
+    route.fulfill({
+      status,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': route.request().headers()['origin'] ?? '*', 'access-control-allow-credentials': 'true', vary: 'Origin' },
+      body: JSON.stringify(body),
+    });
   await page.route(
     (url) => url.pathname === `/api/v1/patients/${patient.id}/genomic-profile`,
-    (route) => {
-      const origin = route.request().headers()['origin'] ?? '*';
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true', vary: 'Origin' },
-        body: JSON.stringify(profileFor(patient.id)),
-      });
-    },
+    (route) => fulfil(route, 200, profileFor(patient.id)),
+  );
+  // The e2e API does not serve demographics, and the patient page stops at its own error without them: answer as the API does for a patient
+  // with none recorded yet.
+  await page.route(
+    (url) => url.pathname === `/api/v1/patients/${patient.id}/demographics`,
+    (route) => fulfil(route, 404, { error: { code: 'not-found', message: 'No demographics are recorded.', details: [{ reason: 'no-demographics' }] } }),
   );
   await openPatientPage(page, patient.label);
   try {
