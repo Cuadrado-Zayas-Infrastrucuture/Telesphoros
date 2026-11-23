@@ -25,7 +25,7 @@ The restricted table stores event/outcome, validated tenant and actor identifier
 ## Review by an organisation administrator (spec 046)
 
 An administrator reads their own organisation's `private-read` and `download-link` rows in Settings, "Access review", or through
-`GET /api/v1/access-review` and its CSV export. The database function `security_audit_review` (migration 0076) checks that the caller is a current
+`GET /api/v1/access-review` and its CSV export. The database function `security_audit_review` (migration 0077) checks that the caller is a current
 admin of the bound organisation; the table itself stays readable only by `telesphoros_ledger_verifier`, and nothing about how rows are written
 changed. Rows are shown by patient or by member over at most 92 days, with ids, route keys, outcomes and times; no patient label, because the
 admin role sees no clinical data. The patient of a row is its path id for patient routes, the evaluation's or report's patient for

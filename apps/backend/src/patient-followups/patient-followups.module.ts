@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Inject, Injectable, Module, Param, Post, Query } from '@nestjs/common';
 import {
+  followupClosureAckInputSchema,
   followupInputSchema,
   followupInboxQuerySchema,
   followupQuerySchema,
@@ -7,6 +8,7 @@ import {
   idParamSchema,
   FOLLOWUP_WRITES_PAUSED,
   type FollowupAvailability,
+  type FollowupClosureAckInput,
   type FollowupInput,
   type FollowupInboxQuery,
   type FollowupQuery,
@@ -40,6 +42,14 @@ class FollowupsService {
       throw AppException.unavailable(message, [{ field: 'request', reason: FOLLOWUP_WRITES_PAUSED, message }]);
     }
     return this.records.record(principal.tenantId, principal.sub, id, input);
+  }
+  /** Spec 047 FN-3: behind the same switch as every follow-up write. */
+  async acknowledge(principal: Principal, thread: string, input: FollowupClosureAckInput) {
+    if (!this.recordingEnabled()) {
+      const message = 'Follow-up recording is paused. Your entries can be retried later.';
+      throw AppException.unavailable(message, [{ field: 'request', reason: FOLLOWUP_WRITES_PAUSED, message }]);
+    }
+    return this.records.acknowledge(principal.tenantId, principal.sub, thread, input);
   }
 }
 @Controller('patients/:id/followups')
@@ -85,6 +95,23 @@ class FollowupsController {
   @Roles('clinician', 'reviewer')
   availability(): FollowupAvailability {
     return { recording: this.service.recordingEnabled() ? 'enabled' : 'paused' };
+  }
+  /** Spec 047 FN-2: the caller's reminders that someone else closed, until the caller acknowledges each. */
+  @Get('closures')
+  @Roles('clinician', 'reviewer')
+  closures(@CurrentPrincipal() principal: Principal) {
+    return this.service.records.closures(principal.tenantId, principal.sub);
+  }
+  /** Spec 047 FN-3: `:id` is the thread; the body names the dismiss version. */
+  @Post(':id/acknowledge')
+  @Roles('clinician')
+  @HttpCode(201)
+  acknowledge(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+    @Body(new ZodValidationPipe(followupClosureAckInputSchema)) input: FollowupClosureAckInput,
+  ) {
+    return this.service.acknowledge(principal, id, input);
   }
   @Get()
   @Roles('clinician', 'reviewer')

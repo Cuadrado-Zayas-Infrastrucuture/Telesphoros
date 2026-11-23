@@ -382,6 +382,18 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       note: note(r.note_id, r.note_digest),
     }),
   },
+  patient_followup_closure_acks: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      followup_id::text AS followup_id, thread_id::text AS thread_id, patient_id::text AS patient_id
+      FROM patient_followup_closure_acks WHERE id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-followup-closure-ack',
+      ...common(r),
+      followupId: r.followup_id,
+      threadId: r.thread_id,
+      patientId: r.patient_id,
+    }),
+  },
   patient_medications: {
     sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
       patient_id::text AS patient_id, entry_id::text AS entry_id, version, drug_rxcui, drug_name, list_version, status, start_month, stop_month, source

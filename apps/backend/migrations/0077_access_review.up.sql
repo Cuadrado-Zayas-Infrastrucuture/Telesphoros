@@ -10,8 +10,8 @@
 --     organisation's private-read and download-link rows, newest first, at most 201 per call. The application role may call it; it still cannot
 --     read the table itself. Patients are resolved by the API, under its own row-level security, so the ledger role reads no other table.
 --
--- Working number: the local follow-up closure branch (spec 045) also holds 0076; whichever merges later renumbers (versions are contiguous,
--- apps/backend/src/db/migrator.ts:81).
+-- Numbered 0077: the follow-up closure notice (spec 047, #437) took 0076 first, and versions are contiguous
+-- (apps/backend/src/db/migrator.ts:81).
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '30s';
 

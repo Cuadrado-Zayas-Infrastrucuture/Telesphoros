@@ -22,6 +22,12 @@ const image = () => base({ api_image: NEW, api_migrate_image: NEW }, [td('api', 
 const alarm = (address, actions) => ({ address, mode: 'managed', type: 'aws_cloudwatch_metric_alarm', change: { actions, before: actions[0] === 'create' ? null : {}, after: actions[0] === 'delete' ? null : {} } });
 const infra = () => base({ api_image: OLD, api_migrate_image: OLD }, [alarm('aws_cloudwatch_metric_alarm.sweep_failing[0]', ['create'])]);
 const find = (p, a) => p.resource_changes.find((c) => c.address === a);
+// The knowledge signer keys (knowledge-signing.tf): created in an INFRA plan with knowledge_signer_keys_on_api off, then carried to the API by the next
+// IMAGE plan's new task definition. These cases pin why they cannot go out in one plan. Invented signer ids.
+const signerKeys = () => ['jan', 'kevin'].flatMap((id) => [
+  { address: `aws_kms_key.knowledge_signer["${id}"]`, mode: 'managed', type: 'aws_kms_key', change: { actions: ['create'], before: null, after: {} } },
+  { address: `aws_kms_alias.knowledge_signer["${id}"]`, mode: 'managed', type: 'aws_kms_alias', change: { actions: ['create'], before: null, after: {} } },
+]);
 const drift = (address, type, before, after) => [{ address, mode: 'managed', type, change: { actions: ['update'], before, after } }];
 // A role whose own aws_iam_role_policy reads back as an inline policy (the freshness role, first INFRA plan after it was applied), invented names.
 const POLICY = JSON.stringify({ Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: ['sns:Publish'], Resource: 'arn:aws:sns:us-east-2:111122223333:example' }] });
@@ -65,6 +71,9 @@ const cases = [
   ['INFRA: an image variable moved', 'INFRA', () => { const p = infra(); p.variables.api_image.value = NEW; return p; }, false],
   ['INFRA: a task definition changes', 'INFRA', () => { const p = infra(); p.resource_changes.push(td('worker', OLD)); return p; }, false],
   ['INFRA: the database is replaced', 'INFRA', () => { const p = infra(); p.resource_changes.push({ address: 'aws_db_instance.main[0]', mode: 'managed', type: 'aws_db_instance', change: { actions: ['delete', 'create'], before: {}, after: {} } }); return p; }, false],
+  ['INFRA good: the knowledge signer keys alone, the API task untouched (knowledge_signer_keys_on_api off)', 'INFRA', () => { const p = infra(); p.resource_changes.push(...signerKeys()); return p; }, true],
+  ['INFRA: the signer keys with the API task carrying them (the switch on too early): refused', 'INFRA', () => { const p = infra(); p.resource_changes.push(...signerKeys(), td('api', OLD)); return p; }, false],
+  ['IMAGE: the signer keys created in an image release: refused, plan INFRA first', 'IMAGE', () => { const p = image(); p.resource_changes.push(...signerKeys()); return p; }, false],
   ['INFRA: a bucket is deleted', 'INFRA', () => { const p = infra(); p.resource_changes.push({ address: 'aws_s3_bucket.reports', mode: 'managed', type: 'aws_s3_bucket', change: { actions: ['delete'], before: {}, after: null } }); return p; }, false],
   ['INFRA with nothing to do', 'INFRA', () => base({ api_image: OLD, api_migrate_image: OLD }, []), false],
   ['INFRA good: the only change is a new output', 'INFRA', () => { const p = base({ api_image: OLD, api_migrate_image: OLD }, []); p.output_changes = { new_output: { actions: ['create'] } }; return p; }, true],

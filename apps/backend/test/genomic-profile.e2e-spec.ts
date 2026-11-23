@@ -5,6 +5,7 @@ import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';
 import request from 'supertest';
 import { createTestApp, usingPostgres, usingS3 } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
+import { cleanupTempDirs, MODIFIER_TEST_IDS, signedModifierCopy, signerKeysJson } from './helpers/knowledge';
 import { LabPipeline, type Person } from './helpers/lab-pipeline';
 import { structuredFixtures } from './helpers/structured-fixtures';
 import { bearer, signToken } from './helpers/tokens';
@@ -116,5 +117,71 @@ describe('the genomic profile with both evaluation switches off (the default)', 
     await profile(s.patientId, outsider).expect(404);
     await profile(s.patientId, reader, '?rxcui=syn-rxcui-drugq').expect(400);
     await profile(s.patientId, reader, '?rxcui=0123').expect(400);
+  });
+});
+
+// Spec 045 N2 over the real stores: a signed gene modifier list loaded under the production rules (test signers only). The list names an invented
+// gene, GENEA, so no drug here is said to affect a real one; the drug is the bundled list's, because a medication can only record a listed drug.
+(usingPostgres() && usingS3() ? describe : describe.skip)('the genomic profile with a signed gene modifier list (spec 045 N2)', () => {
+  let app: NestExpressApplication;
+  let db: EphemeralDatabase;
+  let lab: LabPipeline;
+  let prepare: ReturnType<typeof structuredFixtures>['prepare'];
+
+  beforeAll(async () => {
+    const dir = await signedModifierCopy({
+      edit: (file) => {
+        if (file.id !== 'syn-modifiers-a') return;
+        const listed = { ingredient: 'hydralazine', rxcui: '5470', gene: 'GENEA', hgncId: MODIFIER_TEST_IDS.hgncId.GENEA, effect: 'inhibitor', strength: 'strong' } as const;
+        file.entries = [{ ...listed, locator: { table: 'Synthetic Table 1' } }];
+      },
+    });
+    db = await createEphemeralDatabase();
+    const geneModifiers = { dir, signerKeys: signerKeysJson() };
+    app = await createTestApp({ postgresUrl: db.appUrl, ownerUrl: db.adminUrl, syntheticAssessment: true, medicationWrites: 'enabled', geneModifiers });
+    lab = new LabPipeline(app, db.adminUrl);
+    prepare = structuredFixtures(lab).prepare;
+  });
+  afterAll(async () => {
+    await app?.close();
+    await db?.drop();
+    await cleanupTempDirs();
+  });
+
+  it('names the recorded medication on the card of the gene it is listed against, and nowhere else, and writes nothing', async () => {
+    const s = await prepare({ a: '*1/*1', b: '*3/*3' }, { reviews: REVIEWS });
+    await lab.api().post(`/api/v1/reports/${s.reportId}/structured-assessment`).set(bearer(s.uploader.token)).expect(201);
+    await lab.api().post(`/api/v1/patients/${s.patientId}/medications`).set(bearer(s.uploader.token)).send(medicationBody()).expect(201);
+    const evaluationsBefore = await lab.count('evaluations', 'patient_id = $1', [s.patientId]);
+    const medicationsBefore = await lab.count('patient_medications', 'patient_id = $1', [s.patientId]);
+
+    const reader = await lab.person('reader', ['reader']);
+    const response = await lab.api().get(`/api/v1/patients/${s.patientId}/genomic-profile`).set(bearer(reader.token)).expect(200);
+    const body = genomicProfileDtoSchema.parse(response.body);
+    expect(body.modifierLists).toEqual({ loaded: true });
+    expect(body.genes.find((gene) => gene.gene === 'GENEA')!.contextNotices).toEqual([
+      {
+        kind: 'gene-modifier',
+        gene: 'GENEA',
+        medication: { rxcui: '5470', name: 'hydralazine', startRecorded: true },
+        effect: 'inhibitor',
+        strength: 'strong',
+        source: {
+          listId: 'syn-modifiers-a',
+          source: 'SYNTHETIC TEST FIXTURE - not FDA content',
+          sourceVersion: 'synthetic-1',
+          sourceUrl: 'https://example.invalid/synthetic',
+          table: 'Synthetic Table 1',
+          row: null,
+        },
+      },
+    ]);
+    expect(body.genes.find((gene) => gene.gene === 'GENEB')!.contextNotices).toEqual([]);
+    // The synthetic knowledge is schema 1.2: no result matches the medication, so its row has no gene to rest on and no notice (rule 3).
+    expect(body.medications).toMatchObject([{ rxcui: '5470', word: 'no-guideline-loaded', contextNotices: [] }]);
+
+    // PN-8: reading stored nothing.
+    expect(await lab.count('evaluations', 'patient_id = $1', [s.patientId])).toBe(evaluationsBefore);
+    expect(await lab.count('patient_medications', 'patient_id = $1', [s.patientId])).toBe(medicationsBefore);
   });
 });

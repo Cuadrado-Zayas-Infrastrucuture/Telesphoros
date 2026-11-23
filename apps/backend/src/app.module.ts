@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { SecurityAuditInterceptor } from './auth/security-audit.interceptor';
 import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
+import { GeneModifiersModule } from './gene-modifiers/gene-modifiers.module';
 import { HealthModule } from './health/health.module';
 import { LabReportsModule } from './lab-reports/lab-reports.module';
 import { LedgerModule } from './ledger/ledger.module';
@@ -45,6 +46,7 @@ export class AppModule {
         StorageModule.register(env),
         ObjectStorageModule.register(env, recovery),
         LabReportsModule,
+        GeneModifiersModule,
         PatientsModule,
         PatientDemographicsModule,
         PatientMedicationsModule,

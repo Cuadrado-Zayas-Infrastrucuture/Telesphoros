@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { GetPublicKeyCommand, KMSClient, SignCommand } from '@aws-sdk/client-kms';
 import { resolve } from 'node:path';
-import { KNOWLEDGE_SIGNATURE_ALGORITHM, knowledgeFileSchema } from '@telesphoros/cpic-schema';
+import { KNOWLEDGE_SIGNATURE_ALGORITHM, signableKnowledgeFileSchema } from '@telesphoros/cpic-schema';
 import { createPublicKey, verify } from 'node:crypto';
 import { contentSha256 } from './content-hash';
+import { loadGeneModifiers } from './gene-modifier-loader';
 import { KnowledgeLoadError, loadKnowledge } from './knowledge-loader';
 import { KNOWLEDGE_SET_ID, locateKnowledgeSet } from './knowledge-locate';
 import { coverageDiff } from './coverage-diff';
@@ -16,11 +17,14 @@ const USAGE = `Usage: node dist/services/knowledge/cli.js <command>
                                        load the knowledge directory and report every problem
                                        (default DIR: KNOWLEDGE_DIR, else ../../knowledge/cpic); in production
                                        an empty set is refused unless --allow-empty accepts it on purpose
+  verify-modifiers --dir DIR [--production]
+                                       load a gene modifier directory (GENE_MODIFIERS_DIR) and report every
+                                       problem; the API always loads it under the production rules
   diff OLD NEW                         list the phenotype combinations each guideline covers that NEW added
                                        or removed compared with OLD; exits 1 when any coverage was lost
   sign FILE --key-id ID --kms-key ARN  sign one file's id and content hash with a KMS key (ECC_NIST_P256) and print the
                                        signature entry to add to its review.signatures; writes nothing
-  hash FILE                           print the content hash a reviewer signs for one knowledge file
+  hash FILE                           print the content hash a reviewer signs for one knowledge file or gene modifier list
                                        (put it in review.contentSha256 after reviewing the file);
                                        refuses real content whose license or redistribution is "unknown"
   locate ID [--repo PATH] [--dir REL] [--production] [--all-refs] [--limit N]
@@ -60,6 +64,12 @@ export async function runKnowledgeCli(
       if (set.isEmpty) write('Note: no guidelines are loaded, so every drug will report NO_MATCHING_GUIDELINE.');
       return 0;
     }
+    if (command === 'verify-modifiers' && flagOf(rest, '--dir') !== undefined) {
+      const mode = rest.includes('--production') ? 'production' : 'non-production';
+      const set = await loadGeneModifiers({ directory: resolve(flagOf(rest, '--dir')!), mode, signerKeys: parseSignerKeys(env.KNOWLEDGE_SIGNER_KEYS) });
+      write(`OK (${mode}): ${set.files.length} gene modifier list${set.files.length === 1 ? '' : 's'}, set ${set.id}`);
+      return 0;
+    }
     if (command === 'diff' && rest[0] !== undefined && rest[1] !== undefined) {
       const sides: KnowledgeSet[] = [];
       for (const [label, directory] of [
@@ -82,7 +92,7 @@ export async function runKnowledgeCli(
       return 1;
     }
     if (command === 'hash' && rest[0] !== undefined) {
-      const parsed = knowledgeFileSchema.safeParse(JSON.parse(await readFile(rest[0], 'utf8')));
+      const parsed = signableKnowledgeFileSchema.safeParse(JSON.parse(await readFile(rest[0], 'utf8')));
       if (!parsed.success) {
         write('The file is not a valid knowledge file. Run "verify" to see why.');
         return 1;
@@ -97,7 +107,7 @@ export async function runKnowledgeCli(
       return 0;
     }
     if (command === 'sign' && rest[0] !== undefined && flagOf(rest, '--key-id') !== undefined && flagOf(rest, '--kms-key') !== undefined) {
-      const parsed = knowledgeFileSchema.safeParse(JSON.parse(await readFile(rest[0], 'utf8')));
+      const parsed = signableKnowledgeFileSchema.safeParse(JSON.parse(await readFile(rest[0], 'utf8')));
       if (!parsed.success) {
         write('The file is not a valid knowledge file. Run "verify" to see why.');
         return 1;
