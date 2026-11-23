@@ -1,7 +1,7 @@
 # Plan: spec 045, slice N2, the notice in the genomic profile
 
-**Status**: **draft, awaiting founder approval.** Plan only: no code. Read against `main` at `5916aec`, which has spec 045 (PR #433), slice
-A of spec 044 (the profile route, PR #427) and slice N1 (the gene modifier lists and their loader, PR #434).
+**Status**: **approved by the founder on 2026-11-21** (PR #439 merged; N2-D1 and N2-D2 decided below). Read against `main` at `5916aec`, which
+has spec 045 (PR #433), slice A of spec 044 (the profile route, PR #427) and slice N1 (the gene modifier lists and their loader, PR #434).
 
 ## What N2 delivers
 
@@ -84,9 +84,12 @@ As for slice A, N1 and K2: the code is written here and **not run here** (founde
 
 ## Decisions for the founders
 
-- **N2-D1. A drug being considered as a modifier of current medications.** Rule 2 covers a current medication that changes the gene a row
-  rests on. The reverse, "prescribing this drug would change the gene that a current medication's guidance rests on", is not in spec 045.
-  **Recommended: not in N2**; a later slice, with its own wording.
-- **N2-D2. Inducers.** P-D5 approved inhibitors and inducers together. N2 builds both. Confirm (no change recommended).
+- **N2-D1. A drug being considered as a modifier of current medications.** **Decided 2026-11-21 (founder): a later slice**, with its own
+  wording. N2 covers only current medications that change the gene a row rests on.
+- **N2-D2. Inducers.** **Decided 2026-11-21 (founder): inhibitors and inducers both**, each named as what it is.
+
+**Founder direction for the wording (N3, 2026-11-21):** the notice must be clear to a prescriber or pharmacist with no background in PGx, and
+simple and enjoyable to work with. N2 serves that by sending plain facts in small parts (the gene, the medication, inhibitor or inducer,
+strong or moderate, where the list says it), so N3 can say it in everyday words, with the technical evidence one step away.
 
 P-D6 (the wording, English and Spanish) stays open and belongs to N3.

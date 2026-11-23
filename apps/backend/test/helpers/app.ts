@@ -64,6 +64,8 @@ export interface TestAppOptions {
   syntheticKnowledgeDir?: string;
   /** With `syntheticAssessment`: ASSESSMENT_KNOWLEDGE=signed, reading this signed set with these signers' public keys (spec 044 K2). Test keys only. */
   signedKnowledge?: { dir: string; signerKeys: string };
+  /** GENE_MODIFIERS_DIR (spec 045 N1), loaded under the production rules, so a signed copy with these signers' public keys. Test keys only. */
+  geneModifiers?: { dir: string; signerKeys: string };
   followupWrites?: 'enabled' | 'disabled';
   /**
    * Read reports with the private report-reader engine and its own captures, instead of the test stand-in and the public fixtures. Only specs on the
@@ -214,6 +216,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
               : {}),
           }
         : {}),
+      ...(options.geneModifiers ? { GENE_MODIFIERS_DIR: options.geneModifiers.dir, KNOWLEDGE_SIGNER_KEYS: options.geneModifiers.signerKeys } : {}),
       ...(options.evaluationRequests === undefined ? {} : { EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: options.evaluationRequests }),
       ...(options.labReportPipeline
         ? {

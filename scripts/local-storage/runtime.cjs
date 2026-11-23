@@ -137,7 +137,8 @@ async function teardown(id) {
     const m = o.load(id);
     // Preflight the entire removal plan before the first signal; never partially clean a tampered run.
     for (const p of m.processes) { o.live(p); const c = ['postgres', 'moto'].includes(p.name) && childReceipt(m, p.name); if (c) o.live(c); }
-    o.checkTree(m.root);
+    // Services are still running here, so their own deletions are expected; tampering is not.
+    o.checkTree(m.root, { live: true });
     m.phase = 'stopping'; o.seal(m);
     for (const name of ['api', 'web', 'idp', 'moto', 'postgres']) {
       const p = m.processes.find(p => p.name === name); if (!p) continue;
