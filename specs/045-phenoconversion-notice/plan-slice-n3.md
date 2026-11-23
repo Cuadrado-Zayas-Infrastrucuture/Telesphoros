@@ -1,6 +1,6 @@
 # Plan: spec 045, slice N3, the notice on the screen
 
-**Status**: **draft, for the founder's approval.** Plan only: no code. Read against `main` at `90721a9`, which has slice N2 (the notices in
+**Status**: **approved by the founder on 2026-11-23: N3-D1 to N3-D3 as recommended.** P-D6, the wording, is still open: the code carries the draft text marked as awaiting the founders' signature. Read against `main` at `90721a9`, which has slice N2 (the notices in
 the profile response, PR #443) and the first part of spec 044 slice B (the screen, PR #440).
 
 ## What N3 delivers
@@ -52,12 +52,12 @@ The word "phenoconversion" is not used on the row: it is the glossary's word (N3
 ## Decisions for the founders
 
 - **N3-D1. The glossary entry "Phenoconversion".** The glossary does not exist yet: it is slice B part 2, with entries the founders write and
-  sign (B-D4). **Recommendation: N3 ships without it, and the entry joins the glossary's first set** when slice B part 2 builds it. The
+  sign (B-D4). **Decided 2026-11-23: N3 ships without it, and the entry joins the glossary's first set** when slice B part 2 builds it. The
   alternative is to build the glossary here for one entry, which makes N3 the larger slice.
 - **N3-D2. A line that is always visible, as well as the ⓘ.** D8 put the About text behind an ⓘ, but the screen's rule is that safety
   statements never go behind one (spec 041 D7), and "the list is not complete" and "not checked yet" are what stop an empty row reading as
-  "no interaction". **Recommendation: yes**, the one-line summary under the heading is always shown, and the ⓘ keeps the full text.
-- **N3-D3. Everyday verbs first.** "Lowers" and "raises" on the row, "inhibitor" and "inducer" in the evidence. **Recommendation: yes**, as the
+  "no interaction". **Decided 2026-11-23: yes**, the one-line summary under the heading is always shown, and the ⓘ keeps the full text.
+- **N3-D3. Everyday verbs first.** "Lowers" and "raises" on the row, "inhibitor" and "inducer" in the evidence. **Decided 2026-11-23: yes**, as the
   founder's direction asks. The alternative is the technical words on the row.
 - **P-D6, still open.** All the text in the table above, and its Spanish. It stays marked as draft wording in the code until signed, as G3's
   is.
