@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { signInWithPatient } from './helpers';
+import { openPatients, signInWithPatient } from './helpers';
 
 const require = createRequire(import.meta.url);
 
@@ -64,18 +64,30 @@ const profileFor = (patientId: string) => ({
 
 const section = (page: Page) => page.locator('section[aria-labelledby="genomic-profile-heading"]');
 
-/** Signs in, creates a synthetic patient, serves its profile from the fixture and opens its page without a reload (the session is in memory). */
+/** Opens the patient's page the way a person does: the Patients list, then the patient's link (a reload would lose the in-memory session). */
+async function openPatientPage(page: Page, label: string) {
+  await openPatients(page);
+  await expect(page.getByRole('list', { name: 'Patients' })).toBeVisible();
+  const link = page.getByRole('link', { name: label, exact: true });
+  const more = page.getByRole('button', { name: 'More patients', exact: true });
+  for (let attempts = 0; attempts < 100 && (await link.count()) === 0; attempts++) {
+    if ((await more.count()) === 0) break;
+    await more.click();
+    await expect.poll(async () => (await link.count()) > 0 || (await more.count()) === 0 || (await more.isEnabled())).toBe(true);
+  }
+  await link.click();
+}
+
+/** Signs in, creates a synthetic patient, serves its profile from the fixture and opens its page. */
 async function openProfile(page: Page, colorScheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme });
   const patient = await signInWithPatient(page);
-  await page.route('**/api/v1/patients/*/genomic-profile*', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profileFor(patient.id)) }),
+  await page.route(
+    (url) => url.pathname === `/api/v1/patients/${patient.id}/genomic-profile`,
+    (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profileFor(patient.id)) }),
   );
-  await page.evaluate((path) => {
-    window.history.pushState({}, '', path);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, `/patients/${patient.id}`);
-  await expect(section(page).getByText('1 of 1 current medication has guidance to review')).toBeVisible();
+  await openPatientPage(page, patient.label);
+  await expect(section(page).getByText('1 of 1 current medication has guidance to review')).toBeVisible({ timeout: 15_000 });
 }
 
 /** WCAG 2.0/2.1 A and AA violations inside the genomic profile section only, colour contrast included. */
