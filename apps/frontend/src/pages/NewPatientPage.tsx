@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BackToChatLink } from '@/components/layout/BackToChatLink';
+import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
 import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { PatientCreateForm } from '@/components/patients/PatientCreateForm';
 import { InfoButton } from '@/components/ui/InfoButton';
@@ -13,7 +13,7 @@ export default function NewPatientPage() {
     <div className="flex max-w-3xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4">
         <Breadcrumb trail={[{ to: '/patients', label: 'Patients' }]} current="New patient" />
-        <BackToChatLink />
+        <BackToHomeLink />
       </div>
       <div className="flex items-center gap-1">
         <h1 className="text-2xl font-semibold">New patient</h1>

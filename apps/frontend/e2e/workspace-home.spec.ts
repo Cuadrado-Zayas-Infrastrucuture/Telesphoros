@@ -1,16 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, type Persona } from './helpers';
+import { axeViolations, openChat, openPatients, openWorkspaceNavigation, signInAs, type Persona } from './helpers';
 
-// Spec 024: the chat-first home in a production-mode build (`vite build --mode e2e`, so `import.meta.env.DEV` is false and the local preview gate is off
+// Spec 024: the chat, at /chat since the worklist became the home (spec 049), in a production-mode build (`vite build --mode e2e`, so `import.meta.env.DEV` is false and the local preview gate is off
 // whatever the host name). The fake identity provider's redirect address fixes the host at 127.0.0.1; the unit tests cover `localhost` and a deployed host.
 
 const NOTE = 'Interpretation is not available in the prototype yet.';
 const HEADING = 'Start with a synthetic report.';
 const primary = (page: Page) => page.getByRole('navigation', { name: 'Primary', exact: true });
-/** Back to the conversation in progress: "New chat" in the sidebar would start a new one (specs/041 C4). */
-async function backToChat(page: Page) {
-  await page.getByRole('link', { name: 'Back to chat' }).click();
-}
+/** Back to the conversation in progress: Chat in the sidebar (spec 049; it was the page's "Back to chat", specs/041 C4). */
+const backToChat = openChat;
 
 /** Signs in from the sign-in page, as a person arriving at the home page would, and waits until the callback has moved on. */
 async function signInFromHome(page: Page, persona: Persona) {
@@ -29,12 +27,13 @@ test.describe('where signing in lands (CH-1)', () => {
     test(`${persona} lands on ${path}`, async ({ page }) => {
       await signInFromHome(page, persona);
       expect(new URL(page.url()).pathname).toBe(path);
-      if (path === '/workspace') await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
+      // Spec 049 W-D5: the home is the worklist.
+      if (path === '/workspace') await expect(page.getByRole('heading', { level: 1, name: 'Your worklist' })).toBeVisible();
     });
   }
 
-  test('/workspace opens on this host for a signed-in member, with the notice, and the local workspace is still absent', async ({ page }) => {
-    await signInAs(page, 'dave', '/workspace');
+  test('/chat opens on this host for a signed-in member, with the notice, and the local workspace is still absent', async ({ page }) => {
+    await signInAs(page, 'dave', '/chat');
     await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
     await expect(page.getByText('Synthetic data only. Not for clinical use.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Attach a report' })).toHaveCount(0);
@@ -45,9 +44,9 @@ test.describe('where signing in lands (CH-1)', () => {
 
 test.describe('the feature panel (CH-2, specs/034 D1)', () => {
   const cases = [
-    ['alice', ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
-    ['bob', ['New chat', 'Patients', 'Reports', 'Recents']],
-    ['carol', ['New chat', 'Usage']],
+    ['alice', ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+    ['bob', ['Home', 'Chat', 'Patients', 'Reports', 'Recents']],
+    ['carol', ['Chat', 'Usage']],
   ] as const;
   for (const [persona, expected] of cases) {
     test(`lists, in order, only what ${persona} may use`, async ({ page }) => {
@@ -59,27 +58,27 @@ test.describe('the feature panel (CH-2, specs/034 D1)', () => {
   }
 
   test('recent reports come from the API, and patients have their own page (specs/034 D2, D3)', async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     await openWorkspaceNavigation(page);
     await expect(primary(page).getByText('Recents', { exact: true })).toBeVisible();
     await openPatients(page);
     await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
   });
 
-  test('New chat opens an empty conversation', async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+  test('Chat on the chat itself opens an empty conversation, as New chat did (spec 049)', async ({ page }) => {
+    await signInAs(page, 'alice', '/chat');
     await page.getByRole('textbox', { name: 'Question' }).fill('A first question');
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.getByText(NOTE)).toBeVisible();
     await openWorkspaceNavigation(page);
-    await primary(page).getByRole('link', { name: 'New chat', exact: true }).click();
+    await primary(page).getByRole('link', { name: 'Chat', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
     await expect(page.getByText('A first question')).toHaveCount(0);
   });
 
   test('on a desktop the collapse is remembered while navigating', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the collapse is a desktop control');
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     await page.getByRole('button', { name: 'Collapse sidebar' }).click();
     const sidebar = page.locator('header.workspace-navigation');
     await expect(sidebar).toHaveClass(/is-collapsed/);
@@ -93,7 +92,7 @@ test.describe('the feature panel (CH-2, specs/034 D1)', () => {
 
   test('on a phone it is a drawer: Tab stays inside it, and Escape closes it and returns focus to the menu button', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'phone layout only');
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     const toggle = page.getByRole('button', { name: 'Workspace navigation', exact: true });
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -113,7 +112,7 @@ test.describe('the feature panel (CH-2, specs/034 D1)', () => {
 
 test.describe('the conversation', () => {
   test('a typed question gets the note, never an answer, and sends no request (CH-4, CH-5)', async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     await expect(page.getByRole('button', { name: 'Attach a report' })).toBeVisible();
     await page.waitForLoadState('networkidle');
     const requests: string[] = [];
@@ -131,7 +130,7 @@ test.describe('the conversation', () => {
   });
 
   test('a JSON report goes up once with the confirmation, shows its status word, and "Check status" reloads it (CH-3)', async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     const declarations: string[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/reports') declarations.push(request.url());
@@ -183,7 +182,7 @@ test.describe('the conversation', () => {
   });
 
   test('a PDF is refused with a message naming the local preview, and nothing is uploaded (CH-6)', async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     const posts: string[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST') posts.push(request.url());
@@ -201,7 +200,7 @@ test.describe('accessibility and layout (CH-7)', () => {
   for (const dark of [false, true]) {
     test(`no WCAG A/AA violations: empty, file attached, and with a note (${dark ? 'dark' : 'light'})`, async ({ page }) => {
       if (dark) await page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
-      await signInAs(page, 'alice', '/workspace');
+      await signInAs(page, 'alice', '/chat');
       await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
       await openWorkspaceNavigation(page); // on a phone the panel is a drawer; open it so axe sees the lists too
       await expect(primary(page).getByText('Recents', { exact: true })).toBeVisible();
@@ -220,7 +219,7 @@ test.describe('accessibility and layout (CH-7)', () => {
   for (const width of [390, 768, 1280]) {
     test(`nothing scrolls sideways at ${width} px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
-      await signInAs(page, 'alice', '/workspace');
+      await signInAs(page, 'alice', '/chat');
       await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
       const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(await overflow(), 'empty state').toBeLessThanOrEqual(0);
@@ -238,7 +237,7 @@ test.describe('accessibility and layout (CH-7)', () => {
 
 test.describe('Add patient from chat (CH-9)', () => {
   test('a writer adds one synthetic patient; it shows on the Patients page and in the chat choice; a bad label sends nothing', async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     await page.locator('input[type=file]').setInputFiles({ name: 'p.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
     const section = page.getByRole('region', { name: 'Patient records' });
     const posts: string[] = [];
@@ -259,14 +258,14 @@ test.describe('Add patient from chat (CH-9)', () => {
     await expect(section.getByRole('list', { name: 'Patients' }).getByText(created)).toBeVisible();
     // Back to the same conversation: the chat stays in memory while a page is open.
     await page.goBack();
-    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(page).toHaveURL(/\/chat$/);
     await page.getByRole('button', { name: 'Report details' }).click();
     expect(posts).toHaveLength(1);
     await expect(page.getByRole('combobox', { name: 'Patient' }).locator('option', { hasText: created })).toHaveCount(1);
   });
 
   test('a reader sees the Patients page without the control', async ({ page }) => {
-    await signInAs(page, 'bob', '/workspace');
+    await signInAs(page, 'bob', '/chat');
     await openPatients(page);
     await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Add patient' })).toHaveCount(0);
@@ -290,7 +289,7 @@ test('a lost patient-create response locks creation, then retries the same ident
       await route.abort('failed'); // The real API created it; only its response is lost.
     } else await route.fulfill({ response: stored });
   });
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const name = `replay-${crypto.randomUUID().slice(0, 8)}.json`;
   await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
   await page.getByRole('dialog', { name: 'Report details' }).getByRole('link', { name: 'Add patient' }).click();
@@ -333,7 +332,7 @@ test('a lost patient-create response locks creation, then retries the same ident
 });
 
 test('attachment Undo restores the file, pauses for keyboard focus and expires without a request', async ({ page }, info) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   await page.clock.install();
   // Freeze before creating the timer: wall-clock time must not leak into the 7999/8000ms boundary.
   await page.clock.pauseAt(new Date(Date.now() + 60_000));
