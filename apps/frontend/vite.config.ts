@@ -16,6 +16,8 @@ export default defineConfig({
       '@telesphoros/shared-types': fileURLToPath(new URL('../../packages/shared-types/src/index.ts', import.meta.url)),
       // Only the outcome and reason vocabulary: the package index would also pull in the engine's guideline data.
       '@telesphoros/cpic-schema/vocabulary': fileURLToPath(new URL('../../packages/cpic-schema/src/vocabulary.ts', import.meta.url)),
+      // The glossary (spec 044 slice B part 2), read from source like the shared contract.
+      '@telesphoros/help-content': fileURLToPath(new URL('../../packages/help-content/src/index.ts', import.meta.url)),
     },
   },
   build: {

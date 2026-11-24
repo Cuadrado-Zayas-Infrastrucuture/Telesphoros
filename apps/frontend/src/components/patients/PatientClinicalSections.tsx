@@ -30,8 +30,15 @@ export function PatientClinicalSections({ patientId }: { patientId: string }) {
   }, [outcome]);
   return (
     <>
-      {/* The results use the page's full width, so a result's evidence can sit beside it (specs/038 D7). */}
-      <PatientResults patientId={patientId} followupBusy={otherFormOpen || !!decision} onFollowup={startFollowup} initialResultId={params.get('result')} />
+      {/* The results use the page's full width, so a result's evidence can sit beside it (specs/038 D7). A new `?result=` (the genomic
+          profile's "Record a decision", spec 044 B2-D4) reads the list again, which opens that result. */}
+      <PatientResults
+        key={params.get('result') ?? ''}
+        patientId={patientId}
+        followupBusy={otherFormOpen || !!decision}
+        onFollowup={startFollowup}
+        initialResultId={params.get('result')}
+      />
       <div className="flex max-w-3xl flex-col gap-2">
         {waiting && (
           <p role="status" className="text-sm">

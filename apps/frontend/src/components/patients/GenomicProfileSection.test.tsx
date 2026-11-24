@@ -1,10 +1,13 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { REASON_MESSAGES, REVIEWER_ACTIONS } from '@telesphoros/cpic-schema/vocabulary';
+import { GLOSSARY_EN } from '@telesphoros/help-content';
 import { genomicProfileDtoSchema, type ContextNotice, type GenomicProfileDto } from '@telesphoros/shared-types';
 import { readGenomicProfile } from '@/lib/genomicProfile';
-import { NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
+import { SIGNED_ASSESSMENT_SCOPE, SIGNED_KNOWLEDGE_LABEL } from '@/components/SignedKnowledgeLabel';
+import { DECISION_WORDS, GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
 import { GenomicProfileSection } from './GenomicProfileSection';
 
 const auth = vi.hoisted(() => ({ apiFetch: vi.fn(), roles: ['clinician'] as string[] }));
@@ -89,7 +92,7 @@ const serve = (body: GenomicProfileDto) => {
   });
 };
 const show = async () => {
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   return screen.findByText('1 of 4 current medications has guidance to review');
 };
 const row = (name: string) => screen.getByRole('article', { name });
@@ -151,7 +154,7 @@ it('opens why and the evidence on request (layers 2 and 3)', async () => {
   expect(simvastatin.getByText('syn-guideline, version 1')).toBeInTheDocument();
   expect(simvastatin.getByText('Verified')).toBeInTheDocument();
   // a row with no matching result has nothing to open
-  expect(within(row('clopidogrel')).queryByRole('button')).not.toBeInTheDocument();
+  expect(within(row('clopidogrel')).queryByRole('button', { name: 'Why, and the evidence' })).not.toBeInTheDocument();
 });
 
 it('shows one card per gene, and "Not tested" for a gene a guideline needs that no confirmed report includes', async () => {
@@ -170,20 +173,20 @@ it('says when the profile does not include every report', async () => {
 
 it('says when no medication is recorded, without claiming anything else', async () => {
   serve({ ...profile, medications: [], awaitingLinkReview: [] });
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   expect(await screen.findAllByText('No current medications are recorded for this patient.')).toHaveLength(2);
 });
 
 it('answers in place when the environment does not serve the profile (503)', async () => {
   auth.apiFetch.mockImplementation(async () => json({}, 503));
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   expect(await screen.findByText('The genomic profile is not available in this environment.')).toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('answers in place when the read fails, with a retry that reads again', async () => {
   auth.apiFetch.mockImplementationOnce(async () => json({}, 500));
-  render(<GenomicProfileSection patientId={PATIENT} />);
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the genomic profile.');
   fireEvent.click(screen.getByRole('button', { name: 'Retry the genomic profile' }));
   expect(await screen.findByText('1 of 4 current medications has guidance to review')).toBeInTheDocument();
@@ -355,7 +358,14 @@ it('changes nothing else on the screen: without the notice texts, the page reads
   serve({ ...withNotices(), genes: profile.genes, medications: profile.medications });
   await show();
   const withoutText = document.body.textContent!;
-  const noticeTexts = [NOTICE_WORDS.lead, sertralineOnRow, simvastatinOnRow, sertralineOnCard, 'Source: Synthetic modifier table, version 2026-01, Table S1, row 4.'];
+  const noticeTexts = [
+    NOTICE_WORDS.lead,
+    GLOSSARY_WORDS.phenoconversion,
+    sertralineOnRow,
+    simvastatinOnRow,
+    sertralineOnCard,
+    'Source: Synthetic modifier table, version 2026-01, Table S1, row 4.',
+  ];
   const stripped = noticeTexts.reduce((text, notice) => text.split(notice).join(''), withText);
   expect(stripped).toBe(withoutText);
   // control: the notices were there to strip
@@ -372,4 +382,108 @@ it('never reassures with or without notices: no text says safe, no interaction, 
     expect(text).not.toMatch(/\bsafe\b|no interaction|not affected|\bnone\b/i);
     cleanup();
   }
+});
+
+// Spec 044 slice B part 2: the glossary. Its entries are the draft ones in packages/help-content (B2-D2); the fixture's genes stay invented.
+const entryOf = (id: string) => GLOSSARY_EN.find((item) => item.id === id)!;
+const drawer = () => within(document.getElementById('genomic-glossary')!);
+const withGlossaryPhenotype: GenomicProfileDto = {
+  ...profile,
+  genes: profile.genes.map((gene) => (gene.gene === 'GENEA' ? { ...gene, sources: [source(EVALUATION, 'Poor Metabolizer')] } : gene)),
+};
+
+it('opens a word on the row in the glossary drawer, says the entry is a draft, and returns focus to the word when closed', async () => {
+  await show();
+  const word = within(row('simvastatin')).getByRole('button', { name: 'Guidance to review' });
+  // the drawer's text is in the page only while it is open
+  expect(screen.queryByText(entryOf('guidance-to-review').body)).not.toBeInTheDocument();
+  await userEvent.click(word);
+  expect(drawer().getByText(entryOf('guidance-to-review').body)).toBeInTheDocument();
+  expect(drawer().getByText(GLOSSARY_WORDS.draft)).toBeInTheDocument();
+  await userEvent.click(drawer().getByRole('button', { name: GLOSSARY_WORDS.close }));
+  expect(screen.queryByText(entryOf('guidance-to-review').body)).not.toBeInTheDocument();
+  expect(word).toHaveFocus();
+});
+
+it("opens the gene's value from the row's because-line and from its card, and the sentence still reads whole", async () => {
+  serve(withGlossaryPhenotype);
+  await show();
+  const value = within(row('simvastatin')).getByRole('button', { name: 'Poor Metabolizer' });
+  expect(value.closest('p')).toHaveTextContent("Because GENEA is Poor Metabolizer in this patient's report.");
+  expect(geneCard('GENEA').getByRole('button', { name: 'Poor Metabolizer' })).toBeInTheDocument();
+  await userEvent.click(value);
+  expect(drawer().getByText(entryOf('poor-metabolizer').body)).toBeInTheDocument();
+});
+
+it('leaves a word with no entry as plain text, guessing nothing', async () => {
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  expect(simvastatin.queryByRole('button', { name: 'Synthetic Poor' })).not.toBeInTheDocument();
+  expect(simvastatin.getByText("Because GENEA is Synthetic Poor in this patient's report.")).toBeInTheDocument();
+  expect(geneCard('GENEA').queryByRole('button', { name: 'Synthetic Poor' })).not.toBeInTheDocument();
+});
+
+it('lists every term from the ⓘ, and moves between an entry and the list inside the drawer', async () => {
+  await show();
+  await userEvent.click(screen.getByRole('button', { name: GLOSSARY_WORDS.listTitle }));
+  for (const item of GLOSSARY_EN) expect(drawer().getByRole('button', { name: item.term })).toBeInTheDocument();
+  await userEvent.click(drawer().getByRole('button', { name: 'Diplotype' }));
+  expect(drawer().getByText(entryOf('diplotype').body)).toBeInTheDocument();
+  expect(drawer().getByRole('heading', { name: 'Diplotype' })).toHaveFocus();
+  await userEvent.click(drawer().getByRole('button', { name: GLOSSARY_WORDS.allTerms }));
+  expect(drawer().getByRole('button', { name: 'Phenoconversion' })).toBeInTheDocument();
+  expect(drawer().queryByText(entryOf('diplotype').body)).not.toBeInTheDocument();
+});
+
+it('opens Phenoconversion from the notice', async () => {
+  serve(withNotices());
+  await show();
+  await userEvent.click(within(row('simvastatin')).getByRole('button', { name: GLOSSARY_WORDS.phenoconversion }));
+  expect(drawer().getByText(entryOf('phenoconversion').body)).toBeInTheDocument();
+});
+
+// Spec 044 slice B part 2b: "Record a decision" (D9, B2-D4) and K2c's signed-knowledge label (B2-D5).
+afterEach(() => vi.unstubAllEnvs());
+const signedResults = reviewCheck.results.map((item) => ({ ...item, scope: SIGNED_ASSESSMENT_SCOPE }));
+const withSignedSimvastatin: GenomicProfileDto = {
+  ...profile,
+  medications: profile.medications.map((check) => (check.rxcui === SIMVASTATIN ? { ...check, results: signedResults } : check)),
+};
+
+it('offers "Record a decision" under the evidence, as a link to the result in the results list where decisions are on', async () => {
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  expect(simvastatin.queryByRole('link', { name: DECISION_WORDS.recordHere })).not.toBeInTheDocument();
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getByRole('link', { name: DECISION_WORDS.recordHere })).toHaveAttribute('href', '/?result=55555555-5555-4555-8555-555555555551');
+  // nothing is written from the profile
+  const calls = auth.apiFetch.mock.calls as [string, RequestInit | undefined][];
+  expect(calls.every(([, init]) => init?.method === undefined || init.method === 'GET')).toBe(true);
+});
+
+it('shows it disabled in the synthetic staging, with its sentence beside it in plain text', async () => {
+  vi.stubEnv('VITE_SYNTHETIC_ASSESSMENT', 'true');
+  await show();
+  const simvastatin = within(row('simvastatin'));
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getByRole('button', { name: DECISION_WORDS.record })).toBeDisabled();
+  expect(simvastatin.getByText(DECISION_WORDS.off)).toBeInTheDocument();
+  expect(simvastatin.queryByRole('link', { name: DECISION_WORDS.recordHere })).not.toBeInTheDocument();
+});
+
+it("says once, under the drug's name, when a result on the row was made with the signed, real knowledge (K2c)", async () => {
+  serve(withSignedSimvastatin);
+  await show();
+  expect(within(row('simvastatin')).getAllByText(SIGNED_KNOWLEDGE_LABEL)).toHaveLength(1);
+  // a row whose results carry no scope, or another one, says nothing of the kind
+  expect(within(row('sertraline')).queryByText(SIGNED_KNOWLEDGE_LABEL)).not.toBeInTheDocument();
+  cleanup();
+  serve({ ...withSignedSimvastatin, medications: [{ ...reviewCheck, results: reviewCheck.results.map((item) => ({ ...item, scope: 'synthetic-patient' })) }] });
+  render(<GenomicProfileSection patientId={PATIENT} />, { wrapper: MemoryRouter });
+  expect(await screen.findByRole('article', { name: 'simvastatin' })).toBeInTheDocument();
+  expect(screen.queryByText(SIGNED_KNOWLEDGE_LABEL)).not.toBeInTheDocument();
+});
+
+it('the signed fixture is a valid profile response', () => {
+  expect(() => genomicProfileDtoSchema.parse(withSignedSimvastatin)).not.toThrow();
 });

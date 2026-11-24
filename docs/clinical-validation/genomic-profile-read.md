@@ -93,3 +93,41 @@ Clinical claims, each with a test in `GenomicProfileSection.test.tsx` (invented 
 On staging no list is loaded (`GENE_MODIFIERS_DIR` is unset until N0's signed list exists), so every profile says "not checked yet". The
 glossary entry "Phenoconversion" waits for the glossary itself (slice B part 2, N3-D1). As before, the tests run first in CI (founder
 decision P2); the defect injections are still to do.
+
+## Spec 044 slice B part 2a: the glossary (draft entries)
+
+The genomic profile's words now open a glossary in the side drawer (plan `specs/044-genomic-profile-medication-check/plan-slice-b2.md`,
+founder decisions B2-D1 to B2-D3, 2026-11-23). The entries live in `packages/help-content/src/glossary.en.json`. **Every entry is a draft,
+not yet reviewed by a pharmacist (B2-D2), and the drawer says so on each one.**
+
+Claims, each with a test (`packages/help-content/src/glossary.test.ts` and `GenomicProfileSection.test.tsx`; invented genes and patients):
+
+- **General education, never reassurance.** No entry says "safe", "no interaction", "not affected" or "none". Entries are plain text,
+  with no markup or links.
+- **Signed means two named pharmacists and a date.** A signed entry with fewer is refused at load, and so is a draft that names a signer.
+  The foot of each entry says which it is.
+- **Nothing is guessed.** A screen word opens an entry only when it equals one of the entry's aliases, ignoring letter case and repeated
+  spaces. "Synthetic Poor", "Poor" and "Likely Poor Metabolizer" stay plain text.
+- **The screen's sentences are unchanged.** "Because GENEA is Poor Metabolizer in this patient's report." reads whole with the value as a
+  button, and the drawer's text is in the page only while it is open.
+
+As before, the tests run first in CI (founder decision P2).
+
+## Spec 044 slice B part 2b: "Record a decision", the signed-knowledge label and the browser tests
+
+Founder decisions B2-D4 and B2-D5, 2026-11-23. Claims, each with a test (`GenomicProfileSection.test.tsx`, `genomic-profile.builder.spec.ts`,
+`e2e/genomic-profile.spec.ts`; invented genes, patients and wording):
+
+- **A decision is recorded in one place.** Under each result's evidence, "Record a decision on this result" opens that result in the
+  patient's results list (`?result=`), where the existing decision form is. The profile itself writes nothing.
+- **Where decisions are off, the screen says so.** In the synthetic staging the control is a disabled button, with "Decisions are not
+  switched on in this environment." beside it in plain text.
+- **The signed-knowledge label is where it is true.** Each profile result carries its evaluation's stored `scope`, copied unchanged. A row
+  with a result made with the signed, real knowledge shows K2c's approved label once, under the drug's name. A row whose results carry
+  another scope or none does not.
+- **In a real browser,** at 375 and 1280 px and in light and dark, the section has no sideways scroll and no WCAG A or AA violation (axe,
+  colour contrast included). Every control is a 44 px target, and the headings go down one level at a time. By keyboard, the evidence,
+  a glossary word and the list of words open, and Escape returns focus to where it was.
+
+The mobile width is the browser suite's 375 px baseline, narrower than the plan's 390 px. As before, the tests run first in CI (founder
+decision P2).

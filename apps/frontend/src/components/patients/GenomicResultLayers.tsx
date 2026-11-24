@@ -1,10 +1,14 @@
 import type { GenomicCheckResult, GenomicGene } from '@telesphoros/shared-types';
+import { GenomicDecisionControl } from '@/components/patients/GenomicDecisionControl';
 import { GenomicGeneEvidence } from '@/components/patients/GenomicGeneEvidence';
 import { citationView } from '@/lib/citationView';
 import { PROFILE_WORDS } from '@/lib/genomicProfileWords';
 import { outcomeLabel } from '@/lib/resultStatus';
 
-/** Layers 2 and 3 for one matching result. Every matching result is listed, so a held result beside a shown one is visible (P1). */
+/**
+ * Layers 2 and 3 for one matching result. Every matching result is listed, so a held result beside a shown one is visible (P1). Under the
+ * evidence, "Record a decision" (spec 044 D9, B2-D4).
+ */
 export function GenomicResultLayers({ result, genes, knowledgeChanged }: { result: GenomicCheckResult; genes: readonly GenomicGene[]; knowledgeChanged: boolean }) {
   const citation = citationView(result.citation);
   const guideline = citation?.guideline ? `${citation.guideline}${citation.version ? `, version ${citation.version}` : ''}` : null;
@@ -43,6 +47,7 @@ export function GenomicResultLayers({ result, genes, knowledgeChanged }: { resul
           </a>
         )}
       </section>
+      <GenomicDecisionControl resultId={result.resultId} />
     </div>
   );
 }
