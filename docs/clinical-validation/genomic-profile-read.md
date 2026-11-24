@@ -131,3 +131,28 @@ Founder decisions B2-D4 and B2-D5, 2026-11-23. Claims, each with a test (`Genomi
 
 The mobile width is the browser suite's 375 px baseline, narrower than the plan's 390 px. As before, the tests run first in CI (founder
 decision P2).
+
+## Spec 045 N4: a drug being considered that would change a gene's effect (draft wording)
+
+Plan `specs/045-phenoconversion-notice/plan-slice-n4.md`, founder decisions N4-D1 and N4-D2 (2026-11-24). **The wording is a draft
+awaiting the founders' signature (P-D6).**
+
+Claims, each with a test (`genomic-profile.builder.spec.ts`, `GenomicProfileSection.test.tsx`, `test/genomic-profile.e2e-spec.ts`;
+invented genes and lists):
+
+- **Only for the drug being considered.** A `?rxcui=` check of a drug listed against gene G names:
+  - the current, active medications whose matching results rest on G, in name order;
+  - the checked drug itself, when its own results rest on G.
+
+  The current medications' rows never carry it (N4-D2).
+- **Only when it matters (N4-D1).** With nothing affected there is no notice. A stopped medication, a row with no matching result, and
+  another drug in the list are never counted.
+- **Not for a drug already taken.** A checked drug the patient already takes gets no candidate notice. Its effect is N2's notice on the
+  rows (rule 8, an addition to the plan made while building it).
+- **In everyday words, with the source one step away.** For example: "Fluvoxamine strongly lowers CYP2C19 activity. The guidance for
+  clopidogrel, which this patient takes, is based on CYP2C19 and does not take this into account." The source's own terms, list, version,
+  table and row are under "Why, and the evidence". No rendered text says "safe", "no interaction", "not affected" or "none".
+- **Nothing else changes** (PN-4, the N2 comparison now also removes `candidateNotices`). With no list loaded there is none (PN-6). Reading
+  writes nothing (PN-8).
+
+As before, the tests run first in CI (founder decision P2).

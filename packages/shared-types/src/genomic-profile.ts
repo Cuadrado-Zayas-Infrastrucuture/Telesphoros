@@ -34,6 +34,16 @@ export const genomicGeneSourceSchema = z.strictObject({
 });
 export type GenomicGeneSource = z.infer<typeof genomicGeneSourceSchema>;
 
+/** Spec 045: where a signed gene modifier list says it (PN-7). */
+const modifierSourceSchema = z.strictObject({
+  listId: z.string(),
+  source: z.string(),
+  sourceVersion: z.string(),
+  sourceUrl: z.string(),
+  table: z.string(),
+  row: z.string().nullable(),
+});
+
 /**
  * Spec 045 N2: a current, active medication of this patient that a signed gene modifier list names as an inhibitor or inducer of the protein a
  * gene encodes (phenoconversion, step 1: a notice only). Facts, never sentences: the wording is the founders' (P-D6). The genotype, the word and
@@ -51,16 +61,25 @@ export const contextNoticeSchema = z.strictObject({
   effect: z.enum(['inhibitor', 'inducer']),
   strength: z.enum(['strong', 'moderate']),
   /** Where the list says it (PN-7). */
-  source: z.strictObject({
-    listId: z.string(),
-    source: z.string(),
-    sourceVersion: z.string(),
-    sourceUrl: z.string(),
-    table: z.string(),
-    row: z.string().nullable(),
-  }),
+  source: modifierSourceSchema,
 });
 export type ContextNotice = z.infer<typeof contextNoticeSchema>;
+
+/**
+ * Spec 045 N4: the drug checked before prescribing is listed as an inhibitor or inducer of a gene that guidance for this patient rests on:
+ * current medications whose matching results used the gene, and the checked drug itself (`self`) when its own results did. Only on the
+ * `?rxcui=` check, only when something is affected (N4-D1), and never for a drug the patient already takes (N2 covers it). Facts only.
+ */
+export const candidateNoticeSchema = z.strictObject({
+  kind: z.literal('candidate-modifier'),
+  gene: z.string(),
+  effect: z.enum(['inhibitor', 'inducer']),
+  strength: z.enum(['strong', 'moderate']),
+  /** In medication name order, the checked drug last; its own name is the caller's (null), as for the check itself. */
+  affected: z.array(z.strictObject({ rxcui: z.string(), name: z.string().nullable(), self: z.boolean() })).min(1),
+  source: modifierSourceSchema,
+});
+export type CandidateNotice = z.infer<typeof candidateNoticeSchema>;
 
 export const genomicGeneSchema = z.strictObject({
   gene: z.string(),
@@ -103,6 +122,8 @@ export const genomicCheckSchema = z.strictObject({
   results: z.array(genomicCheckResultSchema),
   /** Spec 045 N2: current medications listed against a gene these results used. Absent while no gene modifier list is loaded. */
   contextNotices: z.array(contextNoticeSchema).optional(),
+  /** Spec 045 N4: on the `?rxcui=` check only, the checked drug as a modifier of genes this patient's guidance rests on. */
+  candidateNotices: z.array(candidateNoticeSchema).optional(),
 });
 export type GenomicCheck = z.infer<typeof genomicCheckSchema>;
 

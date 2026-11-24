@@ -180,6 +180,10 @@ describe('the genomic profile with both evaluation switches off (the default)', 
     // The synthetic knowledge is schema 1.2: no result matches the medication, so its row has no gene to rest on and no notice (rule 3).
     expect(body.medications).toMatchObject([{ rxcui: '5470', word: 'no-guideline-loaded', contextNotices: [] }]);
 
+    // Spec 045 N4, rule 8: checking a listed drug the patient already takes adds no candidate notice; its effect is the notice above.
+    const checked = await lab.api().get(`/api/v1/patients/${s.patientId}/genomic-profile?rxcui=5470`).set(bearer(reader.token)).expect(200);
+    expect(genomicProfileDtoSchema.parse(checked.body).check!.candidateNotices).toEqual([]);
+
     // PN-8: reading stored nothing.
     expect(await lab.count('evaluations', 'patient_id = $1', [s.patientId])).toBe(evaluationsBefore);
     expect(await lab.count('patient_medications', 'patient_id = $1', [s.patientId])).toBe(medicationsBefore);
