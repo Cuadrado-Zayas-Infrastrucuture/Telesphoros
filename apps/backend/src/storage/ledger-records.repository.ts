@@ -49,6 +49,14 @@ export class DisputeRequestReusedError extends Error {
  * checks) cannot be honoured by an in-memory store, so with STORAGE_DRIVER=memory these are not registered at all.
  * Every method is tenant-scoped; `actor` is the authenticated individual.
  */
+/** The filters of the evaluation list; each one narrows it, and they compose. */
+export interface EvaluationListFilter {
+  reportId?: string;
+  patientId?: string;
+  current?: boolean;
+  disposition?: 'held' | 'evaluated';
+}
+
 export abstract class LedgerRecordsRepository {
   /**
    * For a repository that owns the table of one record type (patient demographics, spec 025): appends the ledger event of a record just inserted in `client`'s
@@ -111,10 +119,13 @@ export abstract class LedgerRecordsRepository {
   /** With `completion`, also completes that evaluation request in the same transaction, or stores nothing (see EvaluationCompletion). */
   abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput, completion?: EvaluationCompletion): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
-  /** `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the result further. */
-  abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>>;
+  /**
+   * `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the
+   * result further. `disposition` keeps only held or only evaluated ones (spec 049 W1).
+   */
+  abstract listEvaluations(tenantId: string, filter: EvaluationListFilter, page: PageRequest): Promise<Page<Projected>>;
   /** `listEvaluations` and everything the list shows beside the page (contexts, current ids, link states, the dispute count), in ONE transaction. */
-  abstract evaluationPage(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<EvaluationPageView>;
+  abstract evaluationPage(tenantId: string, filter: EvaluationListFilter, page: PageRequest): Promise<EvaluationPageView>;
   /** Batch the named acceptance/current-decision comparison and complete corrections for selected tenant evaluations. Unknown/foreign IDs are absent. */
   abstract evaluationContexts(tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>>;
   /** For each report, the id of its current evaluation (its newest, if that is active), or null when it has none. Every asked report has an entry. */

@@ -228,4 +228,34 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
     for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'pageSize=nope'])
       await get(bad).expect(400);
   });
+
+  // Spec 049 W1: the worklist's "Held results". The oracle is the hand-written expectation of each report (golden.json), in the order they were stored.
+  it('filters by disposition: exactly the evaluations the hand-written expectations say were held, or evaluated, with exact totals, for this tenant only', async () => {
+    const who = await lab.person('disposition-reader', ['reader']);
+    const rows = await lab.row<{ id: string }>('SELECT id FROM evaluations WHERE tenant_id = $1 ORDER BY seq', [lab.tenant]);
+    expect(rows).toHaveLength(golden.length);
+    const expected = {
+      held: rows.filter((_, i) => golden[i]!.disposition === 'held').map((r) => r.id),
+      evaluated: rows.filter((_, i) => golden[i]!.disposition === 'evaluated').map((r) => r.id),
+    };
+    expect(expected.held.length).toBeGreaterThan(0); // the filter has something to keep and something to drop
+    expect(expected.evaluated.length).toBeGreaterThan(0);
+    const get = (person: { token: string }, query: string) => lab.api().get(`/api/v1/evaluations?${query}`).set(bearer(person.token));
+    for (const value of ['held', 'evaluated'] as const) {
+      for (const query of [`disposition=${value}`, `disposition=${value}&current=true`]) {
+        const res = await get(who, query).expect(200);
+        expect(res.body.data.map((e: { id: string }) => e.id)).toEqual(expected[value]); // each report was evaluated once, so each is current
+        expect(res.body.data.map((e: { disposition: string }) => e.disposition)).toEqual(expected[value].map(() => value));
+        expect(res.body.meta.total).toBe(expected[value].length);
+      }
+      const paged = await get(who, `disposition=${value}&page=1&pageSize=1`).expect(200);
+      expect(paged.body.data.map((e: { id: string }) => e.id)).toEqual(expected[value].slice(0, 1));
+      expect(paged.body.meta).toEqual({ page: 1, pageSize: 1, total: expected[value].length, totalPages: expected[value].length });
+    }
+    const stranger = await lab.person('disposition-stranger', ['clinician'], 'tenant-two');
+    expect((await get(stranger, 'disposition=held&current=true').expect(200)).body).toEqual({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
+    for (const bad of ['disposition=HELD', 'disposition=', 'disposition=retracted', 'disposition=held&disposition=evaluated']) await get(who, bad).expect(400);
+    const adminOnly = await lab.person('disposition-admin', ['admin']);
+    await get(adminOnly, 'disposition=held').expect(403); // the route's roles, unchanged
+  });
 });
