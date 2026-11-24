@@ -991,7 +991,8 @@ describe('follow-up closure acknowledgements down guard as the non-superuser mig
       const types = (await f.migrator.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname='ledger_events_type_valid'")).rows[0].def;
       expect(types).toContain('patient-followup');
       expect(types).not.toContain('patient-followup-closure-ack');
-      expect(await migrateUp(f.migrator)).toEqual(['0076']);
+      // 0076 comes back first, then every migration this test reverted above it (none while 0076 was the newest).
+      expect(await migrateUp(f.migrator)).toEqual(['0076', ...[...above.reverted].reverse()]);
     } finally {
       await connection.onModuleDestroy();
       await f.drop();

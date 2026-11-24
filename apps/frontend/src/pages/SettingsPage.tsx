@@ -9,6 +9,7 @@ import { AppearanceChoice } from '@/components/settings/AppearanceChoice';
 import { OrganizationValue } from '@/components/settings/OrganizationValue';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsSection } from '@/components/settings/SettingsSection';
+import { AccessReviewSection } from '@/components/settings/AccessReviewSection';
 import { Button } from '@/components/ui/Button';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { NO_ROLE_DESCRIPTION, ROLE_DESCRIPTIONS } from '@/lib/roleDescriptions';
@@ -77,6 +78,8 @@ export default function SettingsPage() {
           </Button>
         </SettingsSection>
       )}
+
+      {roles.some((role) => ADMIN_ROLES.includes(role)) && <AccessReviewSection apiFetch={apiFetch} />}
 
       <SettingsSection id="settings-appearance" title="Appearance">
         <AppearanceChoice />

@@ -4,6 +4,8 @@
   { "route": "DELETE /api/v1/patients/:id", "access": ["clinician"], "gate": "always" },
   { "route": "DELETE /api/v1/patients/:id/identifiers/:identifierId", "access": ["clinician"], "gate": "always" },
   { "route": "DELETE /api/v1/reports/:id", "access": ["clinician"], "gate": "always" },
+  { "route": "GET /api/v1/access-review", "access": ["admin"], "gate": "always" },
+  { "route": "GET /api/v1/access-review/export", "access": ["admin"], "gate": "always" },
   { "route": "GET /api/v1/captures/:id", "access": ["clinician", "reader", "reviewer"], "gate": "pipeline" },
   { "route": "GET /api/v1/captures/:id/text-url", "access": ["clinician", "reviewer"], "gate": "pipeline" },
   { "route": "GET /api/v1/cell-disputes", "access": ["clinician", "reader", "reviewer"], "gate": "pipeline" },
