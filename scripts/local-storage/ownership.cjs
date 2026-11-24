@@ -46,13 +46,32 @@ function read(file, limit = 262144) {
 }
 function location(id) { if (!uuid.test(id)) refuse(); return path.join(base, 'runs', id); }
 function control(id) { location(id); return path.join(base, 'control', id + '.json'); }
+// The start of a process as the kernel counts it: clock ticks since boot, /proc/PID/stat field 22. On Linux, ps's lstart
+// is these ticks added to the kernel's boot time, which moves when the wall clock is stepped (time sync on a fresh VM),
+// so a recorded lstart can stop matching a process that never changed. The command name may hold spaces and ')'.
+function procStart(text) {
+  const close = text.lastIndexOf(')');
+  const fields = close < 0 ? [] : text.slice(close + 2).trim().split(' ');
+  if (fields.length < 20 || !/^\d+$/.test(fields[19])) refuse();
+  return fields[19];
+}
 function identity(pid) {
   if (!Number.isSafeInteger(pid) || pid < 2) refuse();
+  const linux = process.platform === 'linux';
   try {
-    const result = execFileSync('ps', ['-p', String(pid), '-o', 'stat=', '-o', 'lstart=', '-o', 'command='], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const result = execFileSync('ps', ['-p', String(pid), '-o', 'stat=', ...(linux ? [] : ['-o', 'lstart=']), '-o', 'command='], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     const match = /^(\S+)\s+(.+)$/.exec(result);
-    return !match || /^[ZX]/.test(match[1]) ? null : match[2];
+    if (!match || /^[ZX]/.test(match[1])) return null;
+    if (!linux) return match[2];
+    let stat;
+    try { stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); } catch (e) { if (e.code === 'ENOENT' || e.code === 'ESRCH') return null; throw e; }
+    return 'start-ticks:' + procStart(stat) + ' ' + match[2];
   } catch (e) { if (e.status === 1) return null; throw e; }
+}
+// An identity is its start (Linux: start-ticks:N; elsewhere ps's 24-character lstart), a space, then the command.
+function identityParts(id) {
+  const cut = id.startsWith('start-ticks:') ? id.indexOf(' ') : 24;
+  return cut < 0 ? [id, ''] : [id.slice(0, cut), id.slice(cut + 1)];
 }
 function seal(m) {
   ensureBase();
@@ -85,7 +104,11 @@ function load(id) {
 }
 function live(p) {
   const current = identity(p.pid);
-  if (current && current !== p.identity) throw new Error('Local process identity mismatch; resources retained.');
+  if (current && current !== p.identity) {
+    const [start, command] = identityParts(current), [savedStart, savedCommand] = identityParts(String(p.identity));
+    const which = [start !== savedStart && 'start', command !== savedCommand && 'command'].filter(Boolean).join(', ') || 'start, command';
+    throw new Error(`Local process identity mismatch (${which}); resources retained.`);
+  }
   return !!current;
 }
 async function free(port) {
@@ -140,4 +163,4 @@ function lock(id) {
     fs.unlinkSync(temp);
   }
 }
-module.exports = { root, base, names, uuid, ensureBase, location, privateDir, atomic, read, identity, seal, load, validate, live, free, checkTree, remove, lock, OperationBusyError };
+module.exports = { root, base, names, uuid, ensureBase, location, privateDir, atomic, read, identity, procStart, seal, load, validate, live, free, checkTree, remove, lock, OperationBusyError };
