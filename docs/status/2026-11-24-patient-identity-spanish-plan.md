@@ -11,4 +11,5 @@ shown. Three decisions are put to the founder:
 - S-D2, a separate spec for Spanish in the signed-in app.
 - S-D3, who writes and signs. The recommendation is the two pharmacist founders, with no machine translation.
 
-The plan proposes no Spanish text. Not approved yet. No code change.
+The plan proposes no Spanish text. The founder approved S-D1 to S-D3 as recommended on 2026-11-24. The next step waits for the founders'
+signed Spanish. No code change.

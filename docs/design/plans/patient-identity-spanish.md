@@ -1,6 +1,7 @@
 # Plan: Spanish for the "identity could not be loaded" wording
 
-**Status**: **proposed, 2026-11-24. Not approved.** No code until the founder approves S-D1 to S-D3 and writes the Spanish. Read against
+**Status**: **approved by the founder on 2026-11-24: S-D1 to S-D3 as recommended** (record the signed Spanish, not shown; a separate
+spec for the app's language layer; the two pharmacist founders write and sign). Waiting for the signed text, before any code. Read against
 `main` after PR #454 (`docs/design/plans/patient-page-identity-outage.md`, B-D2: "English only").
 
 ## 1. What exists today
