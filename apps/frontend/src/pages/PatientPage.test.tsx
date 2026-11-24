@@ -1,8 +1,9 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Role } from '@telesphoros/shared-types';
+import type { GenomicProfileDto, Role } from '@telesphoros/shared-types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
+import { DECISION_WORDS } from '@/lib/genomicProfileWords';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
@@ -300,7 +301,57 @@ describe('moving to another patient', () => {
 // When the identity cannot be read now (docs/design/plans/patient-page-identity-outage.md, B-D1 to B-D3): the page stays up with a warning in
 // the banner's place, it never looks like "none recorded", and nothing that records something for this patient is offered until it is read.
 type IdentityAnswer = 'found' | 'none' | 'unavailable' | 'unavailable-once' | 'network' | 'forbidden' | 'not-available' | 'version-missing';
-function identityApi(roles: Role[], answer: IdentityAnswer) {
+// A synthetic profile with one result to review, so the profile has a "Record a decision" to offer. An invented gene and placeholder wording:
+// nothing here is CPIC content. The drug id is the bundled list's.
+const EVALUATION = '66666666-6666-4666-8666-666666666666';
+const PROFILE: GenomicProfileDto = {
+  patientId: ID,
+  clinicalUse: 'not-approved',
+  capped: false,
+  genes: [
+    {
+      gene: 'GENEA',
+      status: 'resolved',
+      sources: [
+        {
+          evaluationId: EVALUATION,
+          reportId: '11111111-1111-4111-8111-111111111111',
+          evaluatedAt: '2026-11-04T00:00:00Z',
+          state: 'canonical',
+          phenotype: 'Synthetic Poor',
+          diplotype: '*2/*2',
+          activityScore: null,
+          reasonCode: null,
+        },
+      ],
+    },
+  ],
+  awaitingLinkReview: [],
+  medications: [
+    {
+      rxcui: '36567',
+      name: 'simvastatin',
+      word: 'review',
+      knowledgeChanged: false,
+      conflict: false,
+      results: [
+        {
+          evaluationId: EVALUATION,
+          resultId: '55555555-5555-4555-8555-555555555551',
+          outcome: 'shown',
+          reasonCode: null,
+          strength: 'Strong',
+          recommendationText: '[Synthetic recommendation text]',
+          implication: null,
+          citation: { guidelineId: 'syn-guideline', guidelineVersion: '1', locator: { table: 'Table 2', row: 'Synthetic Poor' }, verification: 'verified' },
+          genes: ['GENEA'],
+        },
+      ],
+    },
+  ],
+  check: null,
+};
+function identityApi(roles: Role[], answer: IdentityAnswer, withProfile = false) {
   let reads = 0;
   const impl = vi.fn<typeof fetch>(async (input) => {
     const url = new URL(String(input), 'http://x');
@@ -315,6 +366,7 @@ function identityApi(roles: Role[], answer: IdentityAnswer) {
       return json(200, CURRENT);
     }
     if (url.pathname === `/api/v1/patients/${ID}/medications`) return json(200, { items: [] });
+    if (withProfile && url.pathname === `/api/v1/patients/${ID}/genomic-profile`) return json(200, PROFILE);
     if (url.pathname === `/api/v1/patients/${ID}`) return json(200, PATIENT);
     if (url.pathname.endsWith('/api/v1/me/recovery-scope')) return json(200, { recoveryScope: RECOVERY_SCOPE });
     if (url.pathname.includes('/api/v1/patients') || url.pathname.includes('/api/v1/reports'))
@@ -323,8 +375,8 @@ function identityApi(roles: Role[], answer: IdentityAnswer) {
   });
   return impl;
 }
-function renderIdentity(roles: Role[], answer: IdentityAnswer) {
-  const impl = identityApi(roles, answer);
+function renderIdentity(roles: Role[], answer: IdentityAnswer, withProfile = false) {
+  const impl = identityApi(roles, answer, withProfile);
   const view = renderApp(`/patients/${ID}`, { signedInAs: roles, fetchImpl: impl as unknown as typeof fetch });
   return { impl, view };
 }
@@ -364,6 +416,26 @@ describe('when the identity cannot be read now (B-D1 to B-D3)', () => {
     expect(await screen.findByRole('button', { name: 'Add medication' })).toBeInTheDocument();
     expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
     expect(screen.queryByText(HELD)).not.toBeInTheDocument();
+  });
+
+  // The hold reaches the genomic profile: its "Record a decision" leads to the results, which wait. The profile's own test supplies the hold
+  // itself; this one shows that the page passes it on.
+  it('holds the profile\'s "Record a decision" too: a result\'s evidence opens, and offers no way to record', async () => {
+    renderIdentity(['clinician'], 'unavailable', true);
+    await screen.findByText(WARNING);
+    const simvastatin = within(await screen.findByRole('article', { name: 'simvastatin' }));
+    await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+    expect(simvastatin.getAllByRole('heading', { name: 'The evidence' }).length).toBeGreaterThan(0);
+    expect(simvastatin.queryByRole('link', { name: DECISION_WORDS.recordHere })).not.toBeInTheDocument();
+    expect(simvastatin.queryByRole('button', { name: DECISION_WORDS.record })).not.toBeInTheDocument();
+  });
+
+  it('control: with the identity read, the same result offers "Record a decision"', async () => {
+    renderIdentity(['clinician'], 'found', true);
+    expect(await screen.findByRole('group', { name: 'Patient identity' })).toHaveTextContent(NAME);
+    const simvastatin = within(await screen.findByRole('article', { name: 'simvastatin' }));
+    await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+    expect(simvastatin.getByRole('link', { name: DECISION_WORDS.recordHere })).toBeInTheDocument();
   });
 
   it('control: with none recorded, the page says so and offers the first version, and shows no warning', async () => {
