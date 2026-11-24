@@ -2,11 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { DrugList } from '@telesphoros/shared-types';
 const BUNDLED_DRUG_LIST: DrugList = JSON.parse(readFileSync(new URL('../../../packages/shared-types/src/drug-list/bundled.json', import.meta.url), 'utf8'));
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openWorkspaceNavigation, signInAs, openChat } from '../e2e/helpers';
 
 async function fixture(page: Page, count = 1) {
   const me = page.waitForResponse((response) => response.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const auth = await me;
   const api = new URL(auth.url()).origin;
   const headers = { Authorization: auth.request().headers().authorization! };
@@ -51,7 +51,7 @@ async function fixture(page: Page, count = 1) {
   }
   await page.reload();
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.waitForURL('**/workspace');
+  await page.waitForURL('**/chat');
   return { api, headers, patient, target, payload, medication, label };
 }
 async function openTarget(page: Page, patient: string, thread: string, label: string) {
@@ -101,7 +101,7 @@ test('a reminder opens its latest form beyond page one and saves only the select
   await expect(page.getByText('Follow-up saved.', { exact: true })).toBeVisible();
   const history = await page.request.get(`${f.api}/api/v1/patients/${f.patient}/followups?threadId=${f.target.threadId}`, { headers: f.headers });
   expect((await history.json()).items[0]).toMatchObject({ threadId: f.target.threadId, version: 3, note: 'Synthetic direct-entry documentation', next: null });
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openChat(page);
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep the synthetic direct-entry discussion');
 });
 

@@ -72,7 +72,8 @@ async function attach(name = 'earlier-synthetic.json') {
   await userEvent.click(screen.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }));
 }
 const send = () => userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
-const newChat = () => userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'New chat' }));
+/** Chat in the sidebar, on the chat itself: a new conversation, as "New chat" was (spec 049). */
+const newChat = () => userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat' }));
 const details = () => within(screen.getByRole('dialog', { name: 'Report details' }));
 
 beforeEach(() => {
@@ -106,7 +107,7 @@ it.each([
       return cancellation.promise;
     }
   });
-  renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+  renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
   await attach();
   await send();
   await reached.promise;
@@ -143,7 +144,7 @@ it.each(['cancelled', 'cleaned'])('Stop reports cancellation only after the serv
     }
     if (path.endsWith('/cancel')) return cancellation.promise;
   });
-  renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+  renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
   await attach();
   await send();
   await reached.promise;
@@ -172,7 +173,7 @@ it('keeps the original attempt through unconfirmed Stop and refuses fresh work u
     if (path.endsWith('/cancel')) return response(attempt(cancelState));
     if (path === `/api/v1/reports/${OLD_ID}` && init?.method === 'DELETE') return new Response(null, { status: 204 });
   });
-  renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+  renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
   await attach();
   await send();
   await reached.promise;
@@ -219,7 +220,7 @@ it.each(['response', 'body'] as const)('New chat retires a pending registration 
     // Leave the newer report recoverable, without declaring or transmitting bytes.
     if (path.endsWith('/upload-state')) return response({}, 503);
   });
-  renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+  renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
   await attach();
   await send();
   await reached.promise;
@@ -249,7 +250,7 @@ it('New chat aborts the old byte transfer, retains recovery, and never requests 
       });
     }
   });
-  renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+  renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
   await attach();
   await send();
   await reached.promise;
@@ -275,7 +276,7 @@ it('patient navigation keeps the owning conversation and its upload alive', asyn
     }
     if (path === `/api/v1/reports/${OLD_ID}`) return response(report(OLD_ID, 'earlier-synthetic.json', uploaded));
   });
-  const { router } = renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+  const { router } = renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
   await attach();
   await send();
   await reached.promise;
@@ -289,7 +290,8 @@ it('patient navigation keeps the owning conversation and its upload alive', asyn
     release.resolve(response(attempt('committed')));
   });
   await waitFor(() => expect(stored()).toBeNull());
-  await userEvent.click(screen.getByRole('link', { name: 'Back to chat' }));
+  // Back to the chat from the sidebar (spec 049; the page's link is Back to home now).
+  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat' }));
   expect(await within(screen.getByRole('region', { name: 'Conversation' })).findByText('Received')).toBeVisible();
   expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);

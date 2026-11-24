@@ -63,7 +63,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
   it('frames Settings with the sidebar, holding the feature panel for a clinician', async () => {
     open('/settings', ['clinician']);
     // Follow-ups is a link to its page now (specs/041 C2), not a button that opened a drawer.
-    expect(await linkNames()).toEqual(['New chat', 'Patients', 'Reports', 'Follow-ups']);
+    expect(await linkNames()).toEqual(['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups']);
     expect(sidebar()).not.toBeNull();
   });
 
@@ -72,7 +72,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     try {
       open('/settings', ['clinician']);
       // Recents loads on its own and may already show its rows: compare only the destinations above it, as linkNames() does.
-      expect(await linkNames()).toEqual(['New chat', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
+      expect(await linkNames()).toEqual(['Home', 'Chat', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
       const nav = await primary();
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {
@@ -82,8 +82,8 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
 
   it('gives an administrator Usage and no clinical link that would lead to "no access"', async () => {
     open('/usage', ['admin']);
-    expect(await linkNames()).toEqual(['New chat', 'Usage']);
-    expect(await panelItems()).toEqual(['New chat', 'Usage']);
+    expect(await linkNames()).toEqual(['Chat', 'Usage']);
+    expect(await panelItems()).toEqual(['Chat', 'Usage']);
   });
 
   it('keeps the site header on the public landing page, even when signed in', async () => {
@@ -231,15 +231,16 @@ describe('the sidebar width (specs/034 D8)', () => {
 describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
   it('lists, in order, only the items the role may use', async () => {
     const cases: [Role[], string[]][] = [
-      [['clinician'], ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
-      [['reader'], ['New chat', 'Patients', 'Reports', 'Recents']],
-      [['reviewer'], ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
-      [['admin'], ['New chat', 'Usage']],
+      // Spec 049: Home (the worklist) for the clinical read roles, and Chat for every signed-in member, where New chat was.
+      [['clinician'], ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+      [['reader'], ['Home', 'Chat', 'Patients', 'Reports', 'Recents']],
+      [['reviewer'], ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+      [['admin'], ['Chat', 'Usage']],
       [
         ['admin', 'clinician'],
-        ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Usage', 'Recents'],
+        ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Usage', 'Recents'],
       ],
-      [[], ['New chat']],
+      [[], ['Chat']],
     ];
     for (const [roles, expected] of cases) {
       const { unmount } = open('/settings', roles);
@@ -258,12 +259,13 @@ describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
     });
   });
 
-  it('points each link where the old pages are, New chat at /workspace (specs/024 D7) and Patients at its page (D2)', async () => {
+  it('points each link where its page is: Home at /workspace and Chat at /chat (spec 049), Patients at its page (specs/034 D2)', async () => {
     open('/settings', ['admin', 'clinician']);
     const nav = await primary();
     const href = (name: string) => nav.getByRole('link', { name }).getAttribute('href');
-    expect({ chat: href('New chat'), patients: href('Patients'), reports: href('Reports'), usage: href('Usage') }).toEqual({
-      chat: '/workspace',
+    expect({ home: href('Home'), chat: href('Chat'), patients: href('Patients'), reports: href('Reports'), usage: href('Usage') }).toEqual({
+      home: '/workspace',
+      chat: '/chat',
       patients: '/patients',
       reports: '/reports',
       usage: '/usage',

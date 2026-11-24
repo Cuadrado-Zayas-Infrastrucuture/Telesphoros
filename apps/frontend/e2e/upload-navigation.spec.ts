@@ -26,7 +26,8 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
 }
 async function navigateAwayAndBack(page: Page) {
   await page.getByRole('button', { name: 'Close resume report upload', exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace$/);
+  // The panel opens over the chat, so closing it returns there (spec 049: the chat is at /chat, the home is the worklist).
+  await expect(page).toHaveURL(/\/chat$/);
   // History updates before React commits the route. Back must follow the actual unmount,
   // otherwise both navigations can retain the submitting form instead of exercising recovery.
   const panel = page.getByRole('dialog', { name: 'Resume report upload', exact: true });

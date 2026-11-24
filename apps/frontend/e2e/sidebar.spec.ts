@@ -6,9 +6,10 @@ const primary = (page: import('@playwright/test').Page) => page.getByRole('navig
 test('workspace panels return to the shared sidebar and chat attachment action', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');
   await openWorkspaceNavigation(page);
-  for (const name of ['New chat', 'Patients', 'Reports']) await expect(primary(page).getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['Home', 'Chat', 'Patients', 'Reports']) await expect(primary(page).getByRole('link', { name, exact: true })).toBeVisible();
   await expect(page.locator('header.workspace-navigation')).toBeVisible();
-  await primary(page).getByRole('link', { name: 'New chat', exact: true }).click();
+  // Closing the panel returned to the chat; Chat there starts a new conversation (spec 049, as New chat did).
+  await primary(page).getByRole('link', { name: 'Chat', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Attach a report', exact: true })).toBeVisible();
 });
 

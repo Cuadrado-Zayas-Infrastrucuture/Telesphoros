@@ -32,11 +32,13 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
-          // Specs/024: the chat-first home, in every build, for any signed-in member. Attaching is for writers; the panel's lists are for clinical readers.
+          // The signed-in frame, in every build, for any signed-in member: it keeps the chat (specs/024) in memory while other pages are visited.
+          // Spec 049: the home at /workspace is the worklist, and the chat has its own address, /chat, until the help assistant replaces it (W-D2).
           {
             lazy: async () => ({ Component: (await import('@/pages/WorkspacePage')).default }),
             children: [
-              { path: 'workspace', element: null },
+              { path: 'workspace', lazy: async () => ({ Component: (await import('@/pages/WorklistPage')).default }) },
+              { path: 'chat', element: null },
               // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
               { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
               // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).

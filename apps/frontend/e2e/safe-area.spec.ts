@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from './helpers';
+import { axeViolations, openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient, openChat } from './helpers';
 
 const insets = { top: 24, right: 32, bottom: 34, left: 32 };
 async function cutout(page: Page) {
@@ -39,6 +39,8 @@ test('the page, navigation and chat controls stay inside device safe areas', asy
   // A second sign-in would use the identity provider's existing session and skip its persona picker.
   await page.locator('header.workspace-navigation a[href="/"]').click();
   await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
+  // "Open workspace" opens the worklist home (spec 049); the chat's controls are on Chat.
+  await openChat(page);
   await openWorkspaceNavigation(page);
   await expect(page.getByRole('list', { name: 'Recent reports' }).getByRole('listitem')).toHaveCount(20);
   if (page.viewportSize()!.width < 1024) await page.getByRole('button', { name: 'Workspace navigation', exact: true }).click();

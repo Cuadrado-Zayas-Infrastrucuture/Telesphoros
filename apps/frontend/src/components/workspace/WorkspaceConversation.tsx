@@ -434,7 +434,6 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
             canAttach={canAttach}
             onAttach={() => picker.current?.click()}
             canReadRecords={roles.some((role) => CLINICAL_READ_ROLES.includes(role))}
-            canFollowUp={roles.some((role) => role === 'clinician' || role === 'reviewer')}
           />
         ) : (
           <ConversationEntries entries={entries} onCheckStatus={(entry) => void readStatus(entry.id, entry.reportId!, true)} />

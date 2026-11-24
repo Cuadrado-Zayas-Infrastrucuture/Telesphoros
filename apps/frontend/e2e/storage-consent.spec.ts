@@ -73,7 +73,7 @@ test('the first-visit bar leaves chat controls usable without deciding and gives
   const insets = { top: 24, right: 16, bottom: 34, left: 16 };
   const device = await page.context().newCDPSession(page);
   await device.send('Emulation.setSafeAreaInsetsOverride', { insets });
-  await signInAs(page, 'alice', '/workspace', 'unanswered');
+  await signInAs(page, 'alice', '/chat', 'unanswered');
   const bar = page.getByRole('region', { name: 'Cookies and browser storage', exact: true });
   await expect(bar).toBeVisible();
   const reject = bar.getByRole('button', { name: 'Use necessary only', exact: true });

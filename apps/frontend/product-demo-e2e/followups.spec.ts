@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { axeViolations, openPatients, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, openChat } from '../e2e/helpers';
 
 /** The sidebar link opens the Follow-ups page (specs/041 C2); its content is the page's main area. */
 async function openFollowups(page: Page) {
@@ -8,12 +8,9 @@ async function openFollowups(page: Page) {
   await expect(page.getByRole('heading', { level: 1, name: 'Follow-ups', exact: true })).toBeVisible();
   return page.getByRole('main');
 }
-async function openChat(page: Page) {
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
-}
 
 test('a treatment follow-up saves its reminder, opens from chat and survives retry and reload', async ({ page }) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   await page.getByRole('textbox', { name: 'Question' }).fill('Keep this synthetic patient discussion');
   await openPatients(page); // specs/034 D2
   await page.getByRole('link', { name: 'Add patient', exact: true }).click();

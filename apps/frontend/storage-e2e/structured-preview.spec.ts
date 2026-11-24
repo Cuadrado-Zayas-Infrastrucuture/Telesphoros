@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { signInAs, openWorkspaceNavigation, selectReportsPatient } from '../e2e/helpers';
+import { signInAs, openWorkspaceNavigation, selectReportsPatient, openChat } from '../e2e/helpers';
 
 test('chat upload, stored uncertain findings, and independent patient-link review', async ({ page, browser }) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const filename = `synthetic-${crypto.randomUUID().slice(0, 8)}.json`;
   // Each browser case represents a different synthetic issuer, so its identifiers never collide across patients.
   const source = JSON.parse(readFileSync(new URL('../../../data/fixtures/pgx-contracts/uncertain/package.json', import.meta.url), 'utf8'));
@@ -24,7 +24,7 @@ test('chat upload, stored uncertain findings, and independent patient-link revie
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   const createdPatient = await (await creation).json() as { id: string; label: string };
   await expect(page.getByRole('heading', { name: label, exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openChat(page);
   await page.getByRole('button', { name: 'Report details', exact: true }).click();
   const picker = dialog.getByRole('combobox', { name: 'Patient', exact: true });
   await expect(picker.getByRole('option', { name: label, exact: true })).toBeAttached();

@@ -102,7 +102,7 @@ describe('protected pages', () => {
   it('show chat, the role and a sign-out control in the sidebar to a clinician', async () => {
     renderApp('/settings', { signedInAs: ['clinician'] });
     await screen.findByRole('button', { name: 'Collapse sidebar' });
-    expect(screen.getByRole('link', { name: 'New chat' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Chat', exact: true })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
     // Specs/034 D4: the role names the account row at the bottom, whose menu holds Sign out.
