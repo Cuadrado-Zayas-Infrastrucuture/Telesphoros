@@ -6,10 +6,12 @@ import { DemographicsVersions } from '@/components/patients/DemographicsVersions
 import { Button } from '@/components/ui/Button';
 import { draftFrom, EMPTY_DRAFT } from '@/lib/demographicsDraft';
 import type { DemographicsRead } from '@/lib/patientDemographics';
+import { IDENTITY_WORDS } from '@/lib/patientIdentity';
 
 export function DemographicsSection(props: {
   patientId: string;
-  read: DemographicsRead;
+  /** `unknown`: the identity could not be read now. Never shown as "none recorded", and nothing can be recorded from it. */
+  read: DemographicsRead | { kind: 'unknown' };
   version: number | undefined;
   canWrite: boolean;
   onViewVersion: (version: number | undefined) => void;
@@ -22,6 +24,15 @@ export function DemographicsSection(props: {
       Demographics
     </h2>
   );
+
+  if (read.kind === 'unknown') {
+    return (
+      <section aria-labelledby="demographics-heading" className="flex flex-col gap-2">
+        {heading}
+        <p className="text-sm text-muted-foreground">{IDENTITY_WORDS.section}</p>
+      </section>
+    );
+  }
 
   if (read.kind === 'erased') {
     return (
