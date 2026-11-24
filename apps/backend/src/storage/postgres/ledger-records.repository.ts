@@ -18,7 +18,7 @@ import {
 } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
-import { CaptureDecisionRequestReusedError, DisputeRequestReusedError, LedgerRecordsRepository } from '../ledger-records.repository';
+import { CaptureDecisionRequestReusedError, DisputeRequestReusedError, type EvaluationListFilter, LedgerRecordsRepository } from '../ledger-records.repository';
 import type { ClinicianDecisionInput, ResultBasis } from '../clinician-decisions';
 import { assertDecisionBasis, clinicianDecisionError, insertDecisionRow, resultBasis } from './clinician-decisions';
 import type { ResultAcknowledgementInput } from '../result-acknowledgements';
@@ -607,20 +607,20 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.read(tenantId, (client) => this.one(client, tenantId, 'evaluations', id));
   }
 
-  listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
+  listEvaluations(tenantId: string, filter: EvaluationListFilter, page: PageRequest): Promise<Page<Projected>> {
     return this.read(tenantId, (client) => this.listIn(client, tenantId, filter, page));
   }
 
-  private async listIn(client: PoolClient, tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
+  private async listIn(client: PoolClient, tenantId: string, filter: EvaluationListFilter, page: PageRequest): Promise<Page<Projected>> {
     // Count and page use ONE statement snapshot, including when the requested page is empty.
     const { rows } = await client.query<{ id: string | null; total: number }>(
       `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
           WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id IN (SELECT patient_group_ids($1, $3::uuid)))
-            AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))),
+            AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL})) AND ($7::text IS NULL OR e.disposition = $7::text)),
           page AS (SELECT id, seq FROM matching ORDER BY seq LIMIT $5 OFFSET $6)
           SELECT page.id::text AS id, totals.total FROM (SELECT count(*)::int AS total FROM matching) totals
             LEFT JOIN page ON true ORDER BY page.seq`,
-      [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
+      [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset, filter.disposition ?? null],
     );
     return {
       items: await this.many(
@@ -634,7 +634,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   /** The list's reads on one client: one checkout, one BEGIN and one COMMIT however many facts the page needs. Nothing is read for reports a page does not have. */
-  evaluationPage(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<EvaluationPageView> {
+  evaluationPage(tenantId: string, filter: EvaluationListFilter, page: PageRequest): Promise<EvaluationPageView> {
     return this.read(tenantId, async (client) => {
       const listed = await this.listIn(client, tenantId, filter, page);
       const ids = listed.items.map((r) => r.id);
