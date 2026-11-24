@@ -4,10 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { REASON_MESSAGES, REVIEWER_ACTIONS } from '@telesphoros/cpic-schema/vocabulary';
 import { GLOSSARY_EN } from '@telesphoros/help-content';
-import { genomicProfileDtoSchema, type ContextNotice, type GenomicProfileDto } from '@telesphoros/shared-types';
+import { genomicProfileDtoSchema, type CandidateNotice, type ContextNotice, type GenomicProfileDto } from '@telesphoros/shared-types';
 import { readGenomicProfile } from '@/lib/genomicProfile';
 import { SIGNED_ASSESSMENT_SCOPE, SIGNED_KNOWLEDGE_LABEL } from '@/components/SignedKnowledgeLabel';
-import { DECISION_WORDS, GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
+import { CANDIDATE_WORDS, DECISION_WORDS, GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
 import { GenomicProfileSection } from './GenomicProfileSection';
 
 const auth = vi.hoisted(() => ({ apiFetch: vi.fn(), roles: ['clinician'] as string[] }));
@@ -486,4 +486,82 @@ it("says once, under the drug's name, when a result on the row was made with the
 
 it('the signed fixture is a valid profile response', () => {
   expect(() => genomicProfileDtoSchema.parse(withSignedSimvastatin)).not.toThrow();
+});
+
+// Spec 045 slice N4: the drug being checked as a modifier. An invented list; no drug here is listed against anything real.
+const candidateSource: CandidateNotice['source'] = {
+  listId: 'syn-modifiers',
+  source: 'Synthetic modifier table',
+  sourceVersion: '2026-01',
+  sourceUrl: 'https://synthetic.invalid/modifiers',
+  table: 'Table S2',
+  row: null,
+};
+function candidate(affected: CandidateNotice['affected'], effect: CandidateNotice['effect'] = 'inhibitor', strength: CandidateNotice['strength'] = 'strong'): CandidateNotice {
+  return { kind: 'candidate-modifier', gene: 'GENEA', effect, strength, affected, source: candidateSource };
+}
+const sertralineAffected = { rxcui: SERTRALINE, name: 'sertraline', self: false };
+const clopidogrelAffected = { rxcui: CLOPIDOGREL, name: 'clopidogrel', self: false };
+const selfAffected = { rxcui: SIMVASTATIN, name: null, self: true };
+const checkedWith = (notices: CandidateNotice[]): GenomicProfileDto => ({
+  ...profile,
+  modifierLists: { loaded: true },
+  check: { ...reviewCheck, name: null, candidateNotices: notices },
+});
+/** Checks simvastatin (by its brand) before prescribing, with the given candidate notices on the answer, and returns its row. */
+const checkDrug = async (notices: CandidateNotice[]) => {
+  auth.apiFetch.mockImplementation(async (path: string) => {
+    const rxcui = new URL(path, 'http://synthetic').searchParams.get('rxcui');
+    return json(rxcui === null ? profile : checkedWith(notices));
+  });
+  await show();
+  const check = within(screen.getByRole('heading', { name: 'Check a drug before prescribing' }).parentElement!);
+  await userEvent.type(check.getByRole('combobox', { name: 'Drug' }), 'zocor');
+  await userEvent.click(await check.findByRole('option', { name: /Zocor/ }));
+  return within(await check.findByRole('article', { name: 'simvastatin' }));
+};
+const othersEnd = 'which this patient takes, is based on GENEA and does not take this into account.';
+
+it('the N4 fixture is a valid profile response', () => {
+  expect(() => genomicProfileDtoSchema.parse(checkedWith([candidate([sertralineAffected, clopidogrelAffected, selfAffected])]))).not.toThrow();
+});
+
+it('says on the drug being checked which current guidance rests on a gene it changes, in everyday words', async () => {
+  const answer = await checkDrug([candidate([sertralineAffected])]);
+  expect(answer.getByText(CANDIDATE_WORDS.lead)).toBeInTheDocument();
+  expect(answer.getByText(`Simvastatin strongly lowers GENEA activity. The guidance for sertraline, ${othersEnd}`)).toBeInTheDocument();
+  // the current medications' own rows are unchanged (N4-D2)
+  for (const name of ['sertraline', 'clopidogrel']) expect(within(row(name)).queryByText(CANDIDATE_WORDS.lead)).not.toBeInTheDocument();
+});
+
+it("names several current medications in the order sent, and says when the drug's own guidance rests on the gene too", async () => {
+  const answer = await checkDrug([candidate([sertralineAffected, clopidogrelAffected, selfAffected])]);
+  const several = `Simvastatin strongly lowers GENEA activity. The guidance for sertraline and clopidogrel, ${othersEnd}`;
+  const selfToo = 'Its own guidance above is based on GENEA as well, and does not take this into account either.';
+  expect(answer.getByText(`${several} ${selfToo}`)).toBeInTheDocument();
+});
+
+it('says "raises" and "moderately" for a moderate inducer, and speaks of the drug\'s own guidance alone when only it is affected', async () => {
+  const answer = await checkDrug([candidate([selfAffected], 'inducer', 'moderate')]);
+  expect(answer.getByText('Simvastatin moderately raises GENEA activity. Its own guidance above is based on GENEA and does not take this into account.')).toBeInTheDocument();
+});
+
+it("puts the source's own terms and where the list says it under the drug's evidence (PN-7)", async () => {
+  const answer = await checkDrug([candidate([sertralineAffected])]);
+  expect(answer.queryByText('Simvastatin: listed as a strong inhibitor of GENEA.')).not.toBeInTheDocument();
+  await userEvent.click(answer.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(answer.getByText('Simvastatin: listed as a strong inhibitor of GENEA.')).toBeInTheDocument();
+  expect(answer.getByText('Source: Synthetic modifier table, version 2026-01, Table S2.')).toBeInTheDocument();
+});
+
+it('says nothing of the kind when the check carries no candidate notice', async () => {
+  const answer = await checkDrug([]);
+  expect(answer.queryByText(CANDIDATE_WORDS.lead)).not.toBeInTheDocument();
+});
+
+it('never reassures in the N4 notice (PN-5)', async () => {
+  const answer = await checkDrug([candidate([sertralineAffected, selfAffected])]);
+  await userEvent.click(answer.getByRole('button', { name: 'Why, and the evidence' }));
+  const text = document.body.textContent!.split(NOT_SAFE_SENTENCE).join(' ');
+  expect(text).not.toMatch(/\bsafe\b|no interaction|not affected|\bnone\b/i);
 });

@@ -359,7 +359,7 @@ describe('spec 045 N2: a notice when a current medication is listed against a ge
     function strip(value: unknown): unknown {
       if (Array.isArray(value)) return value.map(strip);
       if (value === null || typeof value !== 'object') return value;
-      const kept = Object.entries(value).filter(([key]) => key !== 'contextNotices' && key !== 'modifierLists');
+      const kept = Object.entries(value).filter(([key]) => key !== 'contextNotices' && key !== 'candidateNotices' && key !== 'modifierLists');
       return Object.fromEntries(kept.map(([key, inner]) => [key, strip(inner)]));
     }
     const before = buildGenomicProfile({ patientId: PATIENT, evaluations, medications, checkRxcui: '111', capped: false });
@@ -391,5 +391,108 @@ describe("slice B part 2 (B2-D5): each matching result carries its evaluation's 
     const unscoped = build([evaluation({ results: [{ outcome: 'shown', rxcui: '111' }] }), evaluation({ results: [{ outcome: 'held', rxcui: '111' }] })], [medication('111')]);
     expect(check.word).toBe(unscoped.medications[0]!.word);
     expect(check.results.map((r) => r.outcome).sort()).toEqual(unscoped.medications[0]!.results.map((r) => r.outcome).sort());
+  });
+});
+
+// Spec 045 N4, rules of plan-slice-n4.md: the drug being considered as a modifier. Invented genes and lists; every expectation by hand.
+describe("spec 045 N4: the drug being checked is listed against a gene this patient's guidance rests on", () => {
+  const CANDIDATE = '950';
+  const entry = (gene: string, over: Partial<ProfileModifier> = {}): ProfileModifier => ({
+    gene,
+    effect: 'inhibitor',
+    strength: 'strong',
+    locator: { table: 'Synthetic Table 2' },
+    listId: 'syn-modifiers-b',
+    source: 'SYNTHETIC TEST FIXTURE',
+    sourceVersion: 'synthetic-1',
+    sourceUrl: 'https://example.invalid/synthetic',
+    ...over,
+  });
+  const lookup =
+    (entries: Record<string, ProfileModifier[]>): ModifierLookup =>
+    (rxcui) =>
+      entries[rxcui] ?? [];
+  // Two current medications rest on GENEA (111, 222); one rests on GENEB (333); the candidate's own result rests on GENEA.
+  const evaluations = () => [
+    evaluation({
+      genes: [
+        { gene: 'GENEA', phenotype: 'Poor' },
+        { gene: 'GENEB', phenotype: 'Normal' },
+      ],
+      results: [
+        { outcome: 'shown', rxcui: '111', genes: ['GENEA'] },
+        { outcome: 'shown', rxcui: '222', genes: ['GENEA'] },
+        { outcome: 'shown', rxcui: '333', genes: ['GENEB'] },
+        { outcome: 'shown', rxcui: CANDIDATE, genes: ['GENEA'] },
+      ],
+    }),
+  ];
+  const current = [medication('222', 'drugy'), medication('111', 'drugx'), medication('333', 'drugz'), medication('444', 'drugw')];
+  const profileWith = (entries: Record<string, ProfileModifier[]>, medications = current, checkRxcui = CANDIDATE) =>
+    buildGenomicProfile({ patientId: PATIENT, evaluations: evaluations(), medications, checkRxcui, capped: false, modifiersOf: lookup(entries) });
+  const checkWith = (...args: Parameters<typeof profileWith>) => profileWith(...args).check!;
+
+  it('names the current medications resting on the gene, in name order, then the checked drug itself (rules 2 and 4, PN-7)', () => {
+    const check = checkWith({ [CANDIDATE]: [entry('GENEA')] });
+    expect(check.candidateNotices).toEqual([
+      {
+        kind: 'candidate-modifier',
+        gene: 'GENEA',
+        effect: 'inhibitor',
+        strength: 'strong',
+        affected: [
+          { rxcui: '111', name: 'drugx', self: false },
+          { rxcui: '222', name: 'drugy', self: false },
+          { rxcui: CANDIDATE, name: null, self: true },
+        ],
+        source: {
+          listId: 'syn-modifiers-b',
+          source: 'SYNTHETIC TEST FIXTURE',
+          sourceVersion: 'synthetic-1',
+          sourceUrl: 'https://example.invalid/synthetic',
+          table: 'Synthetic Table 2',
+          row: null,
+        },
+      },
+    ]);
+    expect(() => genomicProfileDtoSchema.parse(profileWith({ [CANDIDATE]: [entry('GENEA')] }))).not.toThrow();
+  });
+
+  it('gives one notice per gene, in gene order, with its own effect and strength', () => {
+    const check = checkWith({ [CANDIDATE]: [entry('GENEB', { effect: 'inducer', strength: 'moderate' }), entry('GENEA'), entry('GENEA', { strength: 'moderate' })] });
+    expect(check.candidateNotices!.map((n) => [n.gene, n.effect, n.strength, n.affected.map((a) => a.rxcui)])).toEqual([
+      ['GENEA', 'inhibitor', 'strong', ['111', '222', CANDIDATE]],
+      ['GENEB', 'inducer', 'moderate', ['333']],
+    ]);
+  });
+
+  it('gives no notice when nothing this patient takes, nor the checked drug, rests on the gene (N4-D1)', () => {
+    expect(checkWith({ [CANDIDATE]: [entry('GENEC')] }).candidateNotices).toEqual([]);
+    // control
+    expect(checkWith({ [CANDIDATE]: [entry('GENEB')] }).candidateNotices).toHaveLength(1);
+  });
+
+  it('does not count a stopped medication, a row with no matching result, or another drug in the list (rule 2, PN-2, PN-3)', () => {
+    const medications = [medication('111', 'drugx', { status: 'stopped' }), medication('444', 'drugw')];
+    const affected = checkWith({ [CANDIDATE]: [entry('GENEA')], '111': [entry('GENEA')] }, medications).candidateNotices![0]!.affected;
+    expect(affected).toEqual([{ rxcui: CANDIDATE, name: null, self: true }]);
+    // a different checked drug, not in the list, gets nothing
+    expect(checkWith({ [CANDIDATE]: [entry('GENEA')] }, current, '555').candidateNotices).toEqual([]);
+  });
+
+  it("gives none for a drug the patient already takes: its effect is N2's notice on the rows (rule 8)", () => {
+    const medications = [...current, medication(CANDIDATE, 'drugc')];
+    expect(checkWith({ [CANDIDATE]: [entry('GENEA')] }, medications).candidateNotices).toEqual([]);
+  });
+
+  it("puts candidate notices on the check only, never on a current medication's row (rule 1, N4-D2)", () => {
+    const profile = profileWith({ [CANDIDATE]: [entry('GENEA')] });
+    for (const row of profile.medications) expect(row).not.toHaveProperty('candidateNotices');
+    expect(profile.check!.candidateNotices).toHaveLength(1);
+  });
+
+  it('with no list loaded, carries no candidate notice (rule 6, PN-6)', () => {
+    const profile = buildGenomicProfile({ patientId: PATIENT, evaluations: evaluations(), medications: current, checkRxcui: CANDIDATE, capped: false });
+    expect(profile.check).not.toHaveProperty('candidateNotices');
   });
 });

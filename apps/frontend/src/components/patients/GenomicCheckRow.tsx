@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import type { GenomicCheck, GenomicGene } from '@telesphoros/shared-types';
+import { GenomicCandidateNotices } from '@/components/patients/GenomicCandidateNotices';
 import { GenomicCheckLayerOne } from '@/components/patients/GenomicCheckLayerOne';
 import { GenomicContextNotices } from '@/components/patients/GenomicContextNotices';
 import { GenomicNoticeEvidence } from '@/components/patients/GenomicNoticeEvidence';
@@ -7,7 +8,7 @@ import { GenomicResultLayers } from '@/components/patients/GenomicResultLayers';
 import { GlossaryTerm } from '@/components/patients/GlossaryTerm';
 import { SIGNED_ASSESSMENT_SCOPE, SignedKnowledgeLabel, usesSignedKnowledge } from '@/components/SignedKnowledgeLabel';
 import { Button } from '@/components/ui/Button';
-import { checkSentence, conflictLine, PROFILE_WORDS, WORD_LABELS } from '@/lib/genomicProfileWords';
+import { checkSentence, conflictLine, noticeEvidenceOf, PROFILE_WORDS, WORD_LABELS } from '@/lib/genomicProfileWords';
 import { showsWording } from '@/lib/resultStatus';
 
 const WORD_TONE: Readonly<Record<GenomicCheck['word'], string>> = {
@@ -53,6 +54,7 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
         <GenomicCheckLayerOne key={result.resultId} result={result} genes={genes} />
       ))}
       <GenomicContextNotices notices={check.contextNotices} place="row" checkRxcui={check.rxcui} />
+      <GenomicCandidateNotices notices={check.candidateNotices} name={name} />
       {check.results.length > 0 && (
         <div>
           <Button variant="outline" size="sm" aria-expanded={open} aria-controls={`${id}-layers`} onClick={() => setOpen((value) => !value)}>
@@ -65,7 +67,7 @@ export function GenomicCheckRow({ check, name, genes, combination }: { check: Ge
           {check.results.map((result) => (
             <GenomicResultLayers key={result.resultId} result={result} genes={genes} knowledgeChanged={check.knowledgeChanged} />
           ))}
-          <GenomicNoticeEvidence notices={check.contextNotices} />
+          <GenomicNoticeEvidence items={noticeEvidenceOf(check, name)} />
         </div>
       )}
     </article>
