@@ -16,7 +16,9 @@ point where engine output reaches clinicians is the release, so the review is re
 ## Decisions
 
 - **D1, the gate is at the image step.** `image.sh` already knows the candidate commit and the running image before it pushes anything
-  to ECR (its section 1); nothing in AWS has changed when it refuses. Merge rules and `CODEOWNERS` are not changed.
+  to ECR (its section 1); nothing in AWS has changed when it refuses. Merge rules are not changed. `CODEOWNERS` gains two lines in its clinical block (founder,
+  2026-11-24, "Add them first"): `apps/backend/src/genomic-profile/` and `apps/backend/src/gene-modifiers/`, so the block names where clinical
+  logic now lives. The rulesets require no code-owner review, so this changes who must review a release, not who may merge.
 - **D2, the reviewer is Kevin.** Only the knowledge-signer key with id `kevin` (spec 033-14 SR-1: a signer's key id is that curator's
   handle) can approve. The founder's key, or any other, is refused.
 - **D3, staging exception (founder, 2026-11-19).** On staging only, a release may go out without the review when the founder writes a
