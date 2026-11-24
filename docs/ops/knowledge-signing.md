@@ -9,7 +9,7 @@ This runbook creates one KMS key per signer and gives the API their public keys.
 - **Keys:** one asymmetric KMS key per named signer: `ECC_NIST_P256`, `SIGN_VERIFY`, alias `alias/<name>-knowledge-signer-<id>`.
 - **Who can sign:** the key policy denies `kms:Sign` to every principal except that signer's role or user. Account administration stays with the account root, as for every key here.
 - **What the API gets:** `KNOWLEDGE_SIGNER_KEYS` on the API task, built from the keys' public halves, once `knowledge_signer_keys_on_api` is on. It is not a secret.
-- **Two releases, not one:** an INFRA plan may create the keys but never changes a task definition, and an IMAGE plan replaces the task definitions but never creates a key (`scripts/staging/release/release-check.mjs`). So the keys go out first with the switch off, and the switch goes on in the next IMAGE release.
+- **Two plans, not one:** an INFRA plan may create the keys but never changes a task definition, and an IMAGE plan replaces the task definitions but never creates a key or turns on the switch: its variables may differ from `current.tfvars` by the two image lines only (`scripts/staging/release/release-check.mjs`). So the keys go out first with the switch off, and then the one-flag release mode `SIGNER-KEYS-ON` turns the switch on, on the running image (step 4).
 - **Nothing by default:** with `knowledge_signers` empty, nothing is created and the variable is absent, so the API refuses any signed real file.
 - **Cost:** about **$1 per key per month**, so **about $2/month** for two signers. Signing is a few KMS requests per released file.
 
