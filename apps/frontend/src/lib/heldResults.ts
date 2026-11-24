@@ -30,10 +30,10 @@ export async function readHeldResults(apiFetch: ApiFetch, signal: AbortSignal): 
   }
   const page = paginatedSchema(evaluationSummaryDtoSchema).parse(await response.json());
   // An answer that is not what was asked for is shown as a failure, never as a list.
-  if (page.meta.page !== 1 || page.data.length > HELD_SHOWN || page.data.some((evaluation) => evaluation.disposition !== 'held' || !evaluation.current))
-    throw new SubmitError('Held results could not be loaded.');
+  const unexpected = page.meta.page !== 1 || page.data.length > HELD_SHOWN || page.data.some((evaluation) => evaluation.disposition !== 'held' || !evaluation.current);
+  if (unexpected) throw new SubmitError('Held results could not be loaded.');
   const patients = [...new Set(page.data.map((evaluation) => evaluation.patientId))];
-  const labels = new Map(await Promise.all(patients.map(async (id) => [id, await getPatient(apiFetch, id, signal).then((patient) => patient.label, () => null)] as const)));
+  const labels = new Map(await Promise.all(patients.map(async (id) => [id, await labelOf(apiFetch, id, signal)] as const)));
   return {
     state: 'listed',
     total: page.meta.total,
@@ -44,4 +44,13 @@ export async function readHeldResults(apiFetch: ApiFetch, signal: AbortSignal): 
       hold: evaluation.hold ? `${evaluation.hold.message} ${evaluation.hold.reviewerAction}` : 'On hold.',
     })),
   };
+}
+
+/** The patient's synthetic label, or null when it cannot be read: the row then shows the identifier (WL-9). */
+async function labelOf(apiFetch: ApiFetch, id: string, signal: AbortSignal): Promise<string | null> {
+  try {
+    return (await getPatient(apiFetch, id, signal)).label;
+  } catch {
+    return null;
+  }
 }
