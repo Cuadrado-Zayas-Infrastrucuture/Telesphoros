@@ -43,9 +43,10 @@ The founder runs these steps; an agent only prepares them.
    ```
    `aws sts get-caller-identity --profile <id>-signer` asks for the MFA code and shows the signing role.
 
-**The keys themselves are the next step, in two releases.** Once each person can take on their signing role, name the signers in
-`knowledge_signers` with those roles' ARNs: an INFRA plan creates the keys and leaves the API task alone, and the next IMAGE release turns on
-`knowledge_signer_keys_on_api` so the API receives `KNOWLEDGE_SIGNER_KEYS` (steps below).
+**The keys themselves are the next step, in two plans.** Once each person can take on their signing role, name the signers in
+`knowledge_signers` with those roles' ARNs: an INFRA plan creates the keys and leaves the API task alone, and then the one-flag release mode
+`SIGNER-KEYS-ON` turns on `knowledge_signer_keys_on_api` so the API receives `KNOWLEDGE_SIGNER_KEYS` (steps below). An IMAGE release cannot do
+the second step: the switch would also change the API task definition in its MIGRATE plan, which the release check refuses.
 
 ## Steps
 
@@ -60,7 +61,14 @@ The founder runs these steps; an agent only prepares them.
    **Each id is that signer's handle**, the short name they sign reviews under, and it is the same everywhere: here, in `KNOWLEDGE_SIGNER_KEYS`, and as `--key-id` when they sign. A file whose signatures use any other id is refused before release.
 2. **Review the plan:** an INFRA plan with two keys and two aliases, and no task definition or service change (`knowledge_signer_keys_on_api` stays off). Then apply, as for any change in [deployment.md](deployment.md) and [staging-release.md](staging-release.md).
 3. **Look up the key ARNs** with `terraform output knowledge_signer_key_arns`. Each signer uses only their own. The keys can sign from now on (for example a clinical release review); the API does not yet accept signed real files.
-4. **Give the API the public keys** in the next IMAGE release: set `knowledge_signer_keys_on_api = true` in the same variables. That release's new API task definition carries `KNOWLEDGE_SIGNER_KEYS`; the plan refuses the switch while no signer is named.
+4. **Give the API the public keys** with the one-flag release mode ([staging-release.md](staging-release.md), step 6a), on the running image:
+   `plan.sh SIGNER-KEYS-ON COMMIT OPERATION_ID`, read it, `apply.sh SIGNER-KEYS-ON COMMIT SHA256 OPERATION_ID`, then `verify.sh SIGNER-KEYS-ON COMMIT OPERATION_ID`.
+   COMMIT is the release now running, and it must contain the keys' Terraform: the mode refuses to plan until that release's IMAGE apply finished,
+   its migrations are complete and the running image has a verification record (a signature, or a break-glass record with a written reason).
+   It writes only `knowledge_signer_keys_on_api = true` into a copy of `current.tfvars`, and the plan may replace only the API task definition,
+   adding `KNOWLEDGE_SIGNER_KEYS` with exactly one public key per signer `knowledge_signers` names; Terraform refuses the switch while no signer is named.
+   `verify.sh` then compares each signer's key in the running task with the public key KMS holds for it. `SIGNER-KEYS-OFF` takes the keys away
+   again and waits for nothing; from then on the API refuses every signed real file.
 5. **To sign a file**, each signer runs this with their own AWS credentials, from `apps/backend` after `pnpm build`:
    `pnpm --filter @telesphoros/backend knowledge:sign -- <file> --key-id <their id> --kms-key <their ARN>`
    Then they add the printed entry to the file's `review.signatures`. The command checks the signature against the key's public key before printing anything, and writes nothing itself.

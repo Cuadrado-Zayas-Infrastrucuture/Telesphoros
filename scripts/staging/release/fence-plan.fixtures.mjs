@@ -38,6 +38,29 @@ export function assessmentPlan(mode = 'ASSESSMENT-ON', runningImage = FENCE_IMAG
   return plan;
 }
 
+/** Invented signers and public keys, in the shape aws_kms_public_key gives (a SubjectPublicKeyInfo PEM): never a real key or account. */
+export const SIGNERS = { jan: 'arn:aws:iam::111122223333:role/example-knowledge-signer-jan', kevin: 'arn:aws:iam::111122223333:role/example-knowledge-signer-kevin' };
+export const signerPem = (letter) => {
+  const body = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' + letter.repeat(52);
+  return `-----BEGIN PUBLIC KEY-----\n${body.slice(0, 64)}\n${body.slice(64)}\n-----END PUBLIC KEY-----\n`;
+};
+/** KNOWLEDGE_SIGNER_KEYS as Terraform writes it: jsonencode of signer id => PEM, one entry per knowledge_signers id. */
+export const signerKeysValue = (ids = Object.keys(SIGNERS)) => JSON.stringify(Object.fromEntries(ids.map((id, i) => [id, signerPem('ABCDEFGHIJKLMNOPQRST'[i])])));
+/** The same resources as fencePlan, for the signer keys: SIGNER-KEYS-ON adds KNOWLEDGE_SIGNER_KEYS to the API task, SIGNER-KEYS-OFF removes it. */
+export function signerKeysPlan(mode = 'SIGNER-KEYS-ON', runningImage = FENCE_IMAGE) {
+  const on = mode === 'SIGNER-KEYS-ON';
+  const plan = fencePlan('FENCE-CLOSE', false, runningImage);
+  const { before, after } = plan.resource_changes[0].change;
+  const containers = (withKeys) => JSON.stringify([{ name: 'api', image: runningImage, environment: [{ name: 'NODE_ENV', value: 'production' },
+    { name: 'MEDICATION_WRITES', value: 'disabled' }, ...(withKeys ? [{ name: 'KNOWLEDGE_SIGNER_KEYS', value: signerKeysValue() }] : [])], secrets: [], readonlyRootFilesystem: true }]);
+  before.container_definitions = containers(!on);
+  after.container_definitions = containers(on);
+  delete plan.variables.medication_writes_enabled;
+  plan.variables.knowledge_signer_keys_on_api = { value: on };
+  plan.variables.knowledge_signers = { value: { ...SIGNERS } };
+  return plan;
+}
+
 /** What the provider reads back on a real replacement (the first live FENCE-CLOSE plan, 2026-11-02), with invented values. */
 export function providerReadBack(plan) {
   const task = plan.resource_changes[0].change;

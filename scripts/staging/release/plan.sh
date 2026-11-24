@@ -5,6 +5,7 @@
 #   CLAIM_OWNER=NAME scripts/staging/release/plan.sh INFRA COMMIT     the canonical var file unchanged: merged Terraform alone, before a release
 #   CLAIM_OWNER=NAME scripts/staging/release/plan.sh FENCE-CLOSE|FENCE-OPEN COMMIT OPERATION_ID  same image, exact medication flag delta only
 #   CLAIM_OWNER=NAME scripts/staging/release/plan.sh ASSESSMENT-ON|ASSESSMENT-OFF COMMIT OPERATION_ID  same image, exact synthetic assessment flag delta only
+#   CLAIM_OWNER=NAME scripts/staging/release/plan.sh SIGNER-KEYS-ON|SIGNER-KEYS-OFF COMMIT OPERATION_ID  same image, the API's signer public keys only
 # Reads only current.tfvars (and, for IMAGE, the file made from it); the clone must be at exactly COMMIT. Each plan is checked by release-check.mjs
 # and recorded next to itself (state serial and lineage, clone HEAD, var file and plan sha256). Read the plan text, then apply.sh with its sha256.
 # Every plan first builds each Lambda bundle in the clone (lib.sh build_lambdas) and records the zips it made (PLAN.bundles).
@@ -13,7 +14,7 @@ umask 077
 # shellcheck source=scripts/staging/release/lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 MODE="${1:-}"; COMMIT="${2:-}"
-case "$MODE" in MIGRATE) T=m ;; IMAGE) T=i ;; INFRA) T=x ;; FENCE-CLOSE) T=fc ;; FENCE-OPEN) T=fo ;; ASSESSMENT-ON) T=ae ;; ASSESSMENT-OFF) T=ad ;; *) die "usage: plan.sh MIGRATE|IMAGE|INFRA|FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF COMMIT" ;; esac
+case "$MODE" in MIGRATE) T=m ;; IMAGE) T=i ;; INFRA) T=x ;; FENCE-CLOSE) T=fc ;; FENCE-OPEN) T=fo ;; ASSESSMENT-ON) T=ae ;; ASSESSMENT-OFF) T=ad ;; SIGNER-KEYS-ON) T=ke ;; SIGNER-KEYS-OFF) T=kd ;; *) die "usage: plan.sh MIGRATE|IMAGE|INFRA|FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF|SIGNER-KEYS-ON|SIGNER-KEYS-OFF COMMIT" ;; esac
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "COMMIT must be a full 40-character commit id"
 load_stack
 RELEASE_OUT="$PRIVATE/releases/$COMMIT"
@@ -47,7 +48,7 @@ fi
 if flag_needs_release "$MODE"; then
   [ -f "$RELEASE_OUT/verified-image.json" ] && [ "$(cat "$RELEASE_OUT/new_image.txt" 2>/dev/null)" = "$OLD" ] || die "$MODE needs the running image's verified release at this commit"
   IMAGE_POLICY=()
-  if [ "$MODE" = ASSESSMENT-ON ]; then IMAGE_POLICY=(--allow-break-glass); fi # a signature, or a break-glass record with a written reason; the fence stays signature-only
+  if flag_allows_break_glass "$MODE"; then IMAGE_POLICY=(--allow-break-glass); fi # a signature, or a break-glass record with a written reason; the fence stays signature-only
   node "$HERE/fence-image-record.mjs" "$RELEASE_OUT/verified-image.json" "$OLD" ${IMAGE_POLICY[@]+"${IMAGE_POLICY[@]}"} || die "running image verification record refused"
   grep -qx '== apply exit status: 0' "$RELEASE_OUT/i-apply.txt" 2>/dev/null || die "$MODE needs the coordinated IMAGE apply to finish first"
   grep -qx 'pending: (none)' "$RELEASE_OUT/migrate-status.txt" 2>/dev/null || die "$MODE needs migrations confirmed complete"
@@ -60,7 +61,7 @@ echo "ok: running ${OLD##*@}$([ "$MODE" = INFRA ] || echo ", new ${NEW##*@}")"
 echo "== 2. Var file"
 SOURCE_ARGS=()
 case "$MODE" in
-  FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF)
+  FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF|SIGNER-KEYS-ON|SIGNER-KEYS-OFF)
     VARFILE="$OUT/$T.tfvars"; EXTRA=()
     [ ! -e "$OUT/source.tfvars" ] || die "fence source evidence already exists: use a new operation id"
     cp "$CURRENT" "$OUT/source.tfvars"
