@@ -500,6 +500,7 @@ test('the only code that reads documentation is code the documentation-only run 
     'apps/frontend/e2e/landing.spec.ts', // writes PNG screenshots into docs/design/previews; reads no documentation, and a PNG is not a docsPath
     'infrastructure/terraform/guard.test.mjs', // docs/ops/break-glass.md (pnpm test:infra)
     'infrastructure/terraform/staging.guard.test.mjs', // docs/ops/staging-plan-review.md (pnpm test:infra)
+    'scripts/staging/release/clinical-review.test.mjs', // docs/ops/staging-expected.json of a throwaway repository, as the gate reads the clone's (pnpm test:infra)
     'scripts/status-index.mjs', // docs/status/ fragments (pnpm test:ci-config, status-fragments.test.mjs)
   ]);
 });
