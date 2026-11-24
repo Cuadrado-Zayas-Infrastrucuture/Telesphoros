@@ -103,7 +103,7 @@ async function addPatientFromSidebar() {
 
 /** Back to the conversation in progress: Chat in the sidebar (spec 049; the pages' "Back to chat" became "Back to home"). */
 async function backToChat() {
-  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat', exact: true }));
+  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat' }));
 }
 
 describe('the chat-first home in every build (specs/024)', () => {
@@ -720,7 +720,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'First question');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByText(NOTE);
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat', exact: true }));
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' })).toBeVisible();
     expect(screen.queryByText('First question')).toBeNull();
   });

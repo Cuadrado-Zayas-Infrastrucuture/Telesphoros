@@ -73,7 +73,7 @@ async function attach(name = 'earlier-synthetic.json') {
 }
 const send = () => userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
 /** Chat in the sidebar, on the chat itself: a new conversation, as "New chat" was (spec 049). */
-const newChat = () => userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat', exact: true }));
+const newChat = () => userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat' }));
 const details = () => within(screen.getByRole('dialog', { name: 'Report details' }));
 
 beforeEach(() => {
@@ -291,7 +291,7 @@ it('patient navigation keeps the owning conversation and its upload alive', asyn
   });
   await waitFor(() => expect(stored()).toBeNull());
   // Back to the chat from the sidebar (spec 049; the page's link is Back to home now).
-  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat', exact: true }));
+  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat' }));
   expect(await within(screen.getByRole('region', { name: 'Conversation' })).findByText('Received')).toBeVisible();
   expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);

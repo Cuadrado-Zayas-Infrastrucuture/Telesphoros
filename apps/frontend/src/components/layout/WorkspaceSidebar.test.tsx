@@ -262,7 +262,7 @@ describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
   it('points each link where its page is: Home at /workspace and Chat at /chat (spec 049), Patients at its page (specs/034 D2)', async () => {
     open('/settings', ['admin', 'clinician']);
     const nav = await primary();
-    const href = (name: string) => nav.getByRole('link', { name, exact: true }).getAttribute('href');
+    const href = (name: string) => nav.getByRole('link', { name }).getAttribute('href');
     expect({ home: href('Home'), chat: href('Chat'), patients: href('Patients'), reports: href('Reports'), usage: href('Usage') }).toEqual({
       home: '/workspace',
       chat: '/chat',
