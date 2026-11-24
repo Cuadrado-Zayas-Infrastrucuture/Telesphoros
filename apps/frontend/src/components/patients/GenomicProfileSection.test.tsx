@@ -8,6 +8,7 @@ import { genomicProfileDtoSchema, type CandidateNotice, type ContextNotice, type
 import { readGenomicProfile } from '@/lib/genomicProfile';
 import { SIGNED_ASSESSMENT_SCOPE, SIGNED_KNOWLEDGE_LABEL } from '@/components/SignedKnowledgeLabel';
 import { CANDIDATE_WORDS, DECISION_WORDS, GLOSSARY_WORDS, NOT_SAFE_SENTENCE, NOTICE_WORDS } from '@/lib/genomicProfileWords';
+import { RecordingHeldContext } from '@/lib/patientIdentity';
 import { GenomicProfileSection } from './GenomicProfileSection';
 
 const auth = vi.hoisted(() => ({ apiFetch: vi.fn(), roles: ['clinician'] as string[] }));
@@ -486,6 +487,22 @@ it("says once, under the drug's name, when a result on the row was made with the
 
 it('the signed fixture is a valid profile response', () => {
   expect(() => genomicProfileDtoSchema.parse(withSignedSimvastatin)).not.toThrow();
+});
+
+// docs/design/plans/patient-page-identity-outage.md, B-D3: while the patient's identity could not be read, the link to the held results is not offered.
+it('does not offer "Record a decision" while the patient page holds recording, and still shows the evidence', async () => {
+  render(
+    <RecordingHeldContext.Provider value={true}>
+      <GenomicProfileSection patientId={PATIENT} />
+    </RecordingHeldContext.Provider>,
+    { wrapper: MemoryRouter },
+  );
+  await screen.findByText('1 of 4 current medications has guidance to review');
+  const simvastatin = within(row('simvastatin'));
+  await userEvent.click(simvastatin.getByRole('button', { name: 'Why, and the evidence' }));
+  expect(simvastatin.getAllByRole('heading', { name: 'The evidence' }).length).toBeGreaterThan(0);
+  expect(simvastatin.queryByRole('link', { name: DECISION_WORDS.recordHere })).not.toBeInTheDocument();
+  expect(simvastatin.queryByRole('button', { name: DECISION_WORDS.record })).not.toBeInTheDocument();
 });
 
 // Spec 045 slice N4: the drug being checked as a modifier. An invented list; no drug here is listed against anything real.
