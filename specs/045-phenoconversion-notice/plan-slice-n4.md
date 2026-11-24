@@ -56,6 +56,8 @@ frontend ship in one pull request.
    `IN`-only list never does.
 6. **With no list loaded,** no `candidateNotices` anywhere, as N2 rule 7 and PN-6.
 7. **Nothing else changes** (PN-4): with `candidateNotices` removed, the response is identical to today's.
+8. **Not for a drug already taken.** A checked drug that is already one of the patient's current, active medications gets no candidate
+   notice: "Starting this medication" would be wrong, and its effect is already N2's notice on the rows.
 
 ## The words (draft; the founders' to approve and sign, P-D6)
 
