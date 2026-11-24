@@ -15,6 +15,7 @@ export * from './roles';
 export * from './tenant';
 export * from './evaluation-request';
 export * from './usage';
+export * from './access-review';
 export * from './clinician-decisions';
 export * from './result-acknowledgements';
 export * from './result-renders';

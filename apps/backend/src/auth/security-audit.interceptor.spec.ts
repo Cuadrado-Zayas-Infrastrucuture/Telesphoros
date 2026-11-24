@@ -105,3 +105,45 @@ describe('the audit interceptor on a write', () => {
     expect((store as InMemorySecurityAuditStore).events[0]).toMatchObject({ type: 'private-read', routeKey: 'PatientsController.list' });
   });
 });
+
+// Spec 046 AR-2: the evaluations list names its patient in the query, so its read row takes that patient as its subject. Nothing else changes.
+describe('the audit interceptor on the evaluations list', () => {
+  class EvaluationsController {
+    list() {
+      return undefined;
+    }
+    get() {
+      return undefined;
+    }
+  }
+  class FollowupsController {
+    read() {
+      return undefined;
+    }
+  }
+  const readContext = (cls: new () => object, handler: () => unknown, params: Record<string, string>, query: Record<string, unknown>): ExecutionContext => {
+    const req = { method: 'GET', id: 'synthetic-request-0002', params, query, principal: { tenantId: 'tenant-a', sub: 'user-a' } };
+    return { switchToHttp: () => ({ getRequest: () => req }), getClass: () => cls, getHandler: () => handler } as unknown as ExecutionContext;
+  };
+  const subjectOf = async (cls: new () => object, handler: () => unknown, params: Record<string, string>, query: Record<string, unknown>) => {
+    const { interceptor, handler: next, store } = setup();
+    await lastValueFrom(interceptor.intercept(readContext(cls, handler, params, query), next));
+    return (store as InMemorySecurityAuditStore).events[0]!.subjectId;
+  };
+
+  it('records the patientId of the query as the subject of the list', async () => {
+    expect(await subjectOf(EvaluationsController, EvaluationsController.prototype.list, {}, { patientId: SUBJECT, page: '1' })).toBe(SUBJECT);
+  });
+
+  it('drops a patientId that is not one UUID, and records none when the list names no patient', async () => {
+    expect(await subjectOf(EvaluationsController, EvaluationsController.prototype.list, {}, { patientId: 'x; DROP TABLE' })).toBeNull();
+    expect(await subjectOf(EvaluationsController, EvaluationsController.prototype.list, {}, { patientId: [SUBJECT, SUBJECT] })).toBeNull();
+    expect(await subjectOf(EvaluationsController, EvaluationsController.prototype.list, {}, {})).toBeNull();
+  });
+
+  it('leaves every other route as it was: the path id, or none, whatever the query holds (controls)', async () => {
+    const other = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+    expect(await subjectOf(EvaluationsController, EvaluationsController.prototype.get, { id: other }, { patientId: SUBJECT })).toBe(other);
+    expect(await subjectOf(FollowupsController, FollowupsController.prototype.read, {}, { patientId: SUBJECT })).toBeNull();
+  });
+});
