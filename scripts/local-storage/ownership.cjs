@@ -52,7 +52,7 @@ function control(id) { location(id); return path.join(base, 'control', id + '.js
 function procStart(text) {
   const close = text.lastIndexOf(')');
   const fields = close < 0 ? [] : text.slice(close + 2).trim().split(' ');
-  if (fields.length < 20 || !/^\d+$/.test(fields[19])) refuse();
+  if (!/^\d+$/.test(fields[19] ?? '')) refuse();
   return fields[19];
 }
 function identity(pid) {
