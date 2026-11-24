@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { isMain } from '../is-main.mjs';
 
 /** RC-1: the "Clinical content and logic" paths of .github/CODEOWNERS, kept equal to them by a test. */
-export const CLINICAL_PATHS = Object.freeze(['knowledge/', 'packages/cpic-schema/', 'apps/backend/src/services/', 'tests/clinical_scenarios/', 'docs/clinical-validation/']);
+export const CLINICAL_PATHS = Object.freeze(['knowledge/', 'packages/cpic-schema/', 'apps/backend/src/services/', 'apps/backend/src/genomic-profile/', 'apps/backend/src/gene-modifiers/', 'tests/clinical_scenarios/', 'docs/clinical-validation/']);
 /** D2: the reviewer is the knowledge signer whose key id is `kevin` (spec 033-14 SR-1); no other key approves. */
 export const REVIEWER_KEY_ID = 'kevin';
 export const REVIEWER_ALIAS = 'alias/telesphoros-staging-knowledge-signer-kevin';

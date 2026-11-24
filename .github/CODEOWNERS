@@ -19,6 +19,8 @@
 /knowledge/                         @jzayas03
 /packages/cpic-schema/              @jzayas03
 /apps/backend/src/services/         @jzayas03
+/apps/backend/src/genomic-profile/  @jzayas03
+/apps/backend/src/gene-modifiers/   @jzayas03
 /tests/clinical_scenarios/          @jzayas03
 /docs/clinical-validation/          @jzayas03
 

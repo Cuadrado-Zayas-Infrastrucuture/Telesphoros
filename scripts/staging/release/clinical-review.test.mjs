@@ -169,6 +169,15 @@ test('T-9: a review record when the reviewer key is missing is refused, naming t
   assert.match(gate(h, { record, reviewer: 'not base64 DER' }).problems.join('\n'), /reviewer key/);
 });
 
+test('T-11: a change in the genomic profile or the gene modifier lists counts as clinical (specs 044 and 045 live outside services/)', () => {
+  for (const path of ['apps/backend/src/genomic-profile/genomic-profile.builder.ts', 'apps/backend/src/gene-modifiers/gene-modifier-set.ts']) {
+    const h = history({ [path]: 'export const changed = true;\n' });
+    const result = gate(h);
+    assert.equal(result.kind, 'refused', path);
+    assert.deepEqual(result.changed, [path]);
+  }
+});
+
 test("T-10: the clinical paths equal CODEOWNERS' clinical block", () => {
   const owners = readFileSync(join(HERE, '../../../.github/CODEOWNERS'), 'utf8').split('\n');
   const start = owners.findIndex((line) => line.startsWith('# Clinical content and logic'));

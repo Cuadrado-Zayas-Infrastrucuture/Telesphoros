@@ -27,7 +27,7 @@ point where engine output reaches clinicians is the release, so the review is re
 
 | ID | Requirement |
 | --- | --- |
-| RC-1 | **Clinical paths, one list.** `knowledge/`, `packages/cpic-schema/`, `apps/backend/src/services/`, `tests/clinical_scenarios/` and `docs/clinical-validation/`: the paths under "Clinical content and logic" in `.github/CODEOWNERS`. A test keeps the two lists equal. |
+| RC-1 | **Clinical paths, one list.** `knowledge/`, `packages/cpic-schema/`, `apps/backend/src/services/`, `apps/backend/src/genomic-profile/` (the genomic profile and its phenoconversion notices, specs 044 and 045), `apps/backend/src/gene-modifiers/` (the gene modifier lists, spec 045), `tests/clinical_scenarios/` and `docs/clinical-validation/`: the paths under "Clinical content and logic" in `.github/CODEOWNERS`. A test keeps the two lists equal. |
 | RC-2 | **The base is what runs.** The base commit is `image.commit` in `docs/ops/staging-expected.json` at the candidate, and its `image.digest` must equal the image ECS is running (`running_image` in `lib.sh`). A note that disagrees, or a base that is not an ancestor of the candidate, refuses the release: a stale or edited note cannot hide changes. |
 | RC-3 | **No clinical change passes on its own.** When no file under the clinical paths differs between base and candidate, the gate writes a record saying so and the release goes on. |
 | RC-4 | **A clinical change needs a review record.** Otherwise the release needs `~/telesphoros-private/releases/COMMIT/clinical-review.json` (schema `clinical-review/1`) naming the base, the candidate and the changed clinical files, which must equal what the gate computes. |
