@@ -4,8 +4,8 @@
 
 **Created**: 2026-11-24
 
-**Status**: **draft, awaiting the founder's approval of W-D1 to W-D5 (section 7). Specification only: no code, route, setting, migration
-or knowledge change.** It carries out slice A1 of [the pharmacist-first direction plan](../../docs/design/plans/pharmacist-first-product-direction.md)
+**Status**: **approved by the founder on 2026-11-24: W-D1 to W-D5 as recommended (section 7). Specification only: no code, route,
+setting, migration or knowledge change.** It carries out slice A1 of [the pharmacist-first direction plan](../../docs/design/plans/pharmacist-first-product-direction.md)
 (decision N2: "the clinical home is a worklist by role"), now that spec 044 (the genomic profile) and spec 045 (the phenoconversion notice,
 through N4) have come first, as GP-N2 ordered.
 
@@ -89,25 +89,25 @@ specification is written to be the plan for both.
 
 ## 7. Decisions for the founder
 
-- **W-D1. One route that gathers the queues, or the home reads each queue's own route.** The direction plan said "one read endpoint".
+- **W-D1. One route that gathers the queues, or the home reads each queue's own route.** The direction plan said "one read endpoint". **Decided 2026-11-24:** the home reads each queue's own route.
   - **Recommended:** the home reads each queue's own route, in parallel. Every section keeps the role, gate and tenant scope that route
     already has and is already tested for; one section failing cannot fail another (WL-1); no new route, permission or response shape.
   - **Alternative:** a new `GET /worklist` that calls each queue and returns the sections. One request, but a new route whose role
     checks must repeat every queue's, and a new place to get them wrong.
-- **W-D2. Where the chat goes until the help assistant (A3) replaces it.**
+- **W-D2. Where the chat goes until the help assistant (A3) replaces it.** **Decided 2026-11-24:** the chat moves to `/chat`, in the sidebar as "Chat".
   - **Recommended:** it moves to its own address, `/chat`, reached from the sidebar as "Chat". Nothing in it changes; A3 replaces it.
     Specs 024 D3 and 038 D3 are amended here only as far as "the chat is not the home".
   - **Alternative:** remove it now. Report upload stays reachable ("Attach report"), but a few people may use the chat's flow today, and
     A3 would then add a panel where nothing was.
-- **W-D3. Queues with no screen in the clinical app** (duplicates, merges, disputes, wrong-patient links).
+- **W-D3. Queues with no screen in the clinical app** (duplicates, merges, disputes, wrong-patient links). **Decided 2026-11-24:** not on the home in A1.
   - **Recommended:** not on the home in A1. Each joins the home in the slice that gives it a screen where the work is done, which is a
     clinical-workflow slice of its own (merges and links touch patient identity). Rule WL-7 is then built and tested for them when they
     come.
   - **Alternative:** show their counts now as read-only lines that open nothing. The home would then show work no one can do from it.
-- **W-D4. Held results in A1.** It is the most useful queue for a pharmacist, and N2 names it, but it needs the small API filter in W1.
+- **W-D4. Held results in A1.** It is the most useful queue for a pharmacist, and N2 names it, but it needs the small API filter in W1. **Decided 2026-11-24:** yes, with W1.
   - **Recommended:** yes, with W1.
   - **Alternative:** A1 ships with follow-ups only, and held results follow.
-- **W-D5. Who gets the worklist as their home.**
+- **W-D5. Who gets the worklist as their home.** **Decided 2026-11-24:** reader, clinician and reviewer; admin keeps `/usage`.
   - **Recommended:** reader, clinician and reviewer (everyone with clinical read). A reader sees held results only, since follow-ups
     are clinician and reviewer. Admin keeps `/usage`.
   - **Alternative:** clinician and reviewer only; a reader keeps landing on the chat.
