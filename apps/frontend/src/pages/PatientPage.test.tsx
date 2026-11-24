@@ -296,3 +296,130 @@ describe('moving to another patient', () => {
     expect(screen.queryByRole('heading', { level: 1, name: 'SYN-004' })).not.toBeInTheDocument();
   });
 });
+
+// When the identity cannot be read now (docs/design/plans/patient-page-identity-outage.md, B-D1 to B-D3): the page stays up with a warning in
+// the banner's place, it never looks like "none recorded", and nothing that records something for this patient is offered until it is read.
+type IdentityAnswer = 'found' | 'none' | 'unavailable' | 'unavailable-once' | 'network' | 'forbidden' | 'not-available' | 'version-missing';
+function identityApi(roles: Role[], answer: IdentityAnswer) {
+  let reads = 0;
+  const impl = vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input), 'http://x');
+    if (url.pathname === `/api/v1/patients/${ID}/demographics`) {
+      reads += 1;
+      if (answer === 'unavailable' || (answer === 'unavailable-once' && reads === 1)) return refusal(503, 'unavailable');
+      if (answer === 'network') throw new TypeError('Failed to fetch');
+      if (answer === 'forbidden') return refusal(403, 'forbidden');
+      if (answer === 'not-available') return refusal(404, 'not-found');
+      if (answer === 'none') return refusal(404, 'no-demographics');
+      if (answer === 'version-missing' && url.searchParams.has('version')) return refusal(404, 'no-demographics');
+      return json(200, CURRENT);
+    }
+    if (url.pathname === `/api/v1/patients/${ID}/medications`) return json(200, { items: [] });
+    if (url.pathname === `/api/v1/patients/${ID}`) return json(200, PATIENT);
+    if (url.pathname.endsWith('/api/v1/me/recovery-scope')) return json(200, { recoveryScope: RECOVERY_SCOPE });
+    if (url.pathname.includes('/api/v1/patients') || url.pathname.includes('/api/v1/reports'))
+      return json(200, { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
+    return json(200, { roles });
+  });
+  return impl;
+}
+function renderIdentity(roles: Role[], answer: IdentityAnswer) {
+  const impl = identityApi(roles, answer);
+  const view = renderApp(`/patients/${ID}`, { signedInAs: roles, fetchImpl: impl as unknown as typeof fetch });
+  return { impl, view };
+}
+const WARNING = /The patient's identity could not be loaded, so their name and date of birth are not shown\. Make sure this is patient SYN-004 before you act/;
+const HELD = "Results, decisions and follow-ups open once the patient's identity has loaded.";
+
+describe('when the identity cannot be read now (B-D1 to B-D3)', () => {
+  it('on a 503, keeps the page up and puts a warning naming the label where the banner goes', async () => {
+    renderIdentity(['clinician'], 'unavailable');
+    expect(await screen.findByRole('heading', { level: 1, name: 'SYN-004' })).toBeVisible();
+    expect(screen.getByText(WARNING)).toHaveAttribute('role', 'alert');
+    expect(screen.queryByRole('group', { name: 'Patient identity' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Genomic profile and medication check' })).toBeVisible();
+    expect(await screen.findByText('No medications recorded yet.')).toBeVisible();
+  });
+
+  it('never looks like "none recorded": no such line, no Incomplete, no Record demographics', async () => {
+    renderIdentity(['clinician'], 'unavailable');
+    const section = within(await screen.findByRole('region', { name: 'Demographics' }));
+    expect(section.getByText('The demographics could not be loaded. Use Retry above.')).toBeVisible();
+    expect(section.queryByText('No demographics recorded yet.')).not.toBeInTheDocument();
+    expect(section.queryByText('Incomplete')).not.toBeInTheDocument();
+    expect(section.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('holds everything that records something: no Add medication, and the results, decisions and follow-ups wait', async () => {
+    renderIdentity(['clinician'], 'unavailable');
+    expect(await screen.findByText('No medications recorded yet.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Add medication' })).not.toBeInTheDocument();
+    expect(screen.getByText(HELD)).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Recorded results' })).not.toBeInTheDocument();
+  });
+
+  it('control: with the identity read, the same clinician gets Add medication and the results, and no warning or held line', async () => {
+    renderIdentity(['clinician'], 'found');
+    expect(await screen.findByRole('group', { name: 'Patient identity' })).toHaveTextContent(NAME);
+    expect(await screen.findByRole('button', { name: 'Add medication' })).toBeInTheDocument();
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+    expect(screen.queryByText(HELD)).not.toBeInTheDocument();
+  });
+
+  it('control: with none recorded, the page says so and offers the first version, and shows no warning', async () => {
+    renderIdentity(['clinician'], 'none');
+    const section = within(await screen.findByRole('region', { name: 'Demographics' }));
+    expect(await section.findByText('No demographics recorded yet.')).toBeVisible();
+    expect(section.getByRole('button', { name: 'Record demographics' })).toBeVisible();
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+    expect(screen.queryByText(HELD)).not.toBeInTheDocument();
+  });
+
+  it('Retry reads the identity again, and only it; once it answers, the banner shows and the holds lift', async () => {
+    const { impl } = renderIdentity(['clinician'], 'unavailable-once');
+    await screen.findByText(WARNING);
+    const patientReads = () => impl.mock.calls.filter(([input]) => new URL(String(input), 'http://x').pathname === `/api/v1/patients/${ID}`).length;
+    const before = patientReads();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry loading the identity' }));
+    expect(await screen.findByRole('group', { name: 'Patient identity' })).toHaveTextContent(NAME);
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+    expect(screen.queryByText(HELD)).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Add medication' })).toBeInTheDocument();
+    expect(patientReads()).toBe(before);
+  });
+
+  it('a network failure is the same as a 503', async () => {
+    renderIdentity(['reader'], 'network');
+    expect(await screen.findByText(WARNING)).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'SYN-004' })).toBeVisible();
+  });
+
+  it('a 403 still stands for the whole page', async () => {
+    renderIdentity(['reader'], 'forbidden');
+    expect(await screen.findByText('Your role cannot read demographics.')).toHaveAttribute('role', 'alert');
+    expect(screen.queryByRole('heading', { level: 1, name: 'SYN-004' })).not.toBeInTheDocument();
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+  });
+
+  it('a 404 that is not "no demographics" still stands for the whole page', async () => {
+    renderIdentity(['reader'], 'not-available');
+    expect(await screen.findByText('This patient is not available.')).toHaveAttribute('role', 'alert');
+    expect(screen.queryByRole('heading', { level: 1, name: 'SYN-004' })).not.toBeInTheDocument();
+  });
+
+  it('a missing earlier version still stands for the whole page', async () => {
+    renderIdentity(['reader'], 'version-missing');
+    const section = within(await screen.findByRole('region', { name: 'Demographics' }));
+    await section.findByText(NAME);
+    await userEvent.click(section.getByRole('button', { name: 'View' }));
+    expect(await screen.findByText('That version does not exist.')).toHaveAttribute('role', 'alert');
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+  });
+
+  it('has no accessibility violations while the identity is unknown', async () => {
+    const { view } = renderIdentity(['clinician'], 'unavailable');
+    await screen.findByText(WARNING);
+    await screen.findByText('No medications recorded yet.');
+    expect(await axe(view.container)).toHaveNoViolations();
+  });
+});

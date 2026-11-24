@@ -1,15 +1,19 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { DECISION_WORDS } from '@/lib/genomicProfileWords';
+import { useRecordingHeld } from '@/lib/patientIdentity';
 import { syntheticStagingMode } from '@/lib/storageMode';
 
 /**
  * Spec 044 D9 and slice B part 2 (B2-D4): "Record a decision" under a result's evidence. Where decisions are on, it is a link to this result
  * in the patient's results list (`?result=`), where the decision form spec 006 tested already is: a decision is recorded in one place only.
  * In the synthetic staging, where they are not, it is a disabled button with its sentence beside it in plain text, never only in a tooltip
- * (a disabled control's tooltip cannot be reached by keyboard). Nothing is written from the profile.
+ * (a disabled control's tooltip cannot be reached by keyboard). Nothing is written from the profile. While the patient's identity could not
+ * be read, it is not shown: it leads to the results, which wait for the identity (docs/design/plans/patient-page-identity-outage.md, B-D3).
  */
 export function GenomicDecisionControl({ resultId }: { resultId: string }) {
+  const held = useRecordingHeld();
+  if (held) return null;
   if (syntheticStagingMode()) {
     return (
       <div className="flex flex-wrap items-center gap-2">
