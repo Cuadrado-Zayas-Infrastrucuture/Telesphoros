@@ -54,7 +54,7 @@ function api(roles: Role[]) {
     return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
   });
 }
-const open = (roles: Role[], path = '/workspace') => renderApp(path, { signedInAs: roles, fetchImpl: api(roles) as unknown as typeof fetch });
+const open = (roles: Role[], path = '/chat') => renderApp(path, { signedInAs: roles, fetchImpl: api(roles) as unknown as typeof fetch });
 const json = () => new File(['{"synthetic":true}'], 'SYN-004-cyp2c19.json');
 const file = () => document.querySelector<HTMLInputElement>('input[type=file]')!;
 const CONFIRM = { name: 'I confirm this file contains synthetic data only' };
@@ -101,9 +101,9 @@ async function addPatientFromSidebar() {
   await userEvent.click(await screen.findByRole('link', { name: 'Add patient' }));
 }
 
-/** Back to the conversation in progress: "New chat" in the sidebar would start a new one (specs/041 C4). */
+/** Back to the conversation in progress: Chat in the sidebar (spec 049; the pages' "Back to chat" became "Back to home"). */
 async function backToChat() {
-  await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
+  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat', exact: true }));
 }
 
 describe('the chat-first home in every build (specs/024)', () => {
@@ -141,7 +141,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await addPatientFromSidebar();
     await screen.findByRole('heading', { name: 'New patient' });
     await backToChat();
-    expect(router.state.location.pathname).toBe('/workspace');
+    expect(router.state.location.pathname).toBe('/chat');
     expect(screen.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this draft');
     expect(screen.getByRole('button', { name: 'Report details' })).toHaveTextContent('SYN-004-cyp2c19.json');
     expect(submitReport).not.toHaveBeenCalled();
@@ -319,7 +319,7 @@ describe('the chat-first home in every build (specs/024)', () => {
       }
       return base(input, init);
     });
-    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+    renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
     await screen.findByRole('button', { name: 'Attach a report' });
     await attach();
     const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
@@ -378,9 +378,9 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(screen.queryByRole('button', { name: 'Attach a report' })).toBeNull();
   });
 
-  it('signing in from the home page lands on /workspace for a clinical role, and an administrator stays on the home page (CH-1, D6)', async () => {
+  it('signing in from the home page lands on /workspace, the worklist (spec 049), for a clinical role, and an administrator stays on the home page (CH-1, D6)', async () => {
     const clinician = open(['clinician'], '/');
-    await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' });
+    await screen.findByRole('heading', { level: 1, name: 'Your worklist' });
     expect(clinician.router.state.location.pathname).toBe('/workspace');
     clinician.unmount();
     const admin = open(['admin'], '/');
@@ -433,7 +433,7 @@ describe('the chat-first home in every build (specs/024)', () => {
       }
       return ok(input, init);
     });
-    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+    renderApp('/chat', { signedInAs: ['clinician'], fetchImpl });
     await screen.findByRole('button', { name: 'Attach a report' });
     await attach();
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
@@ -628,7 +628,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) =>
       patientsDown && String(input).includes('/api/v1/patients') ? new Response('{}', { status: 503 }) : ok(input, init),
     );
-    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl: fetchImpl as unknown as typeof fetch });
+    renderApp('/chat', { signedInAs: ['clinician'], fetchImpl: fetchImpl as unknown as typeof fetch });
     await screen.findByRole('button', { name: 'Attach a report' });
     await attachOnly();
     const retry = await screen.findByRole('button', { name: 'Retry loading patients' });
@@ -715,12 +715,12 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(screen.queryByRole('link', { name: 'Open a patient' })).toBeNull();
   });
 
-  it('"New chat" starts an empty conversation', async () => {
+  it('Chat in the sidebar, on the chat itself, starts an empty conversation, as "New chat" did (spec 049)', async () => {
     open(['clinician']);
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'First question');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByText(NOTE);
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'New chat' }));
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Chat', exact: true }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' })).toBeVisible();
     expect(screen.queryByText('First question')).toBeNull();
   });
@@ -732,7 +732,7 @@ describe('the chat-first home in every build (specs/024)', () => {
         ? new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } })
         : base(input, init),
     );
-    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+    renderApp('/chat', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
     await screen.findByRole('button', { name: 'Attach a report' });
     await attach();
     await screen.findByRole('combobox', { name: 'Patient' });

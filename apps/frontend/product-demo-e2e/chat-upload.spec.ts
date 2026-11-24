@@ -1,9 +1,9 @@
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { openAccountMenu, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { openAccountMenu, openWorkspaceNavigation, signInAs, openChat } from '../e2e/helpers';
 
 test('attach in chat, complete details, and upload into the conversation', async ({ page }) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   let declarations = 0;
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/reports') declarations++;
@@ -41,7 +41,7 @@ test('attach in chat, complete details, and upload into the conversation', async
   await medications.getByRole('button', { name: 'Save medication', exact: true }).click();
   await expect(medications.getByRole('heading', { name: 'hydralazine' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('patient-record.png') });
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openChat(page);
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Draft kept while adding patient');
   await page.getByRole('button', { name: 'Report details', exact: true }).click();
   await expect(dialog.getByRole('combobox', { name: 'Patient', exact: true }).locator('option:checked')).toHaveText(label);
@@ -59,13 +59,13 @@ test('attach in chat, complete details, and upload into the conversation', async
   await dialog.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page).toHaveURL(/\/chat$/);
   expect(declarations).toBe(1);
   await page.screenshot({ path: test.info().outputPath('chat-report-uploaded.png') });
 });
 
 test('Reports opens as a page and the chat keeps the same draft', async ({ page }) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   await page.getByRole('textbox', { name: 'Question' }).fill('Unsent synthetic question');
   // Reports is a destination page (specs/041 C1), not a panel over the chat.
   await openWorkspaceNavigation(page);
@@ -74,13 +74,13 @@ test('Reports opens as a page and the chat keeps the same draft', async ({ page 
   await expect(page.getByRole('dialog', { name: 'Report history', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('reports-page.png') });
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openChat(page);
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Unsent synthetic question');
 });
 
 for (const [link, title] of [['Settings', 'Account preferences']] as const) {
   test(`${link} opens as a panel and returns to the same draft`, async ({ page }) => {
-    await signInAs(page, 'alice', '/workspace');
+    await signInAs(page, 'alice', '/chat');
     await page.getByRole('textbox', { name: 'Question' }).fill('Unsent synthetic question');
     // Settings is in the account menu at the sidebar's foot (specs/034 D4).
     await openAccountMenu(page);

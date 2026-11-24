@@ -85,7 +85,7 @@ describe('one way to move around (specs/041 slice C)', () => {
     const crumbs = within(await screen.findByRole('navigation', { name: 'Breadcrumb' }));
     expect(crumbs.getByRole('link', { name: 'Patients' })).toHaveAttribute('href', '/patients');
     expect(crumbs.getByText('SYN-004')).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Back to chat' })).toHaveAttribute('href', '/workspace');
+    expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/workspace');
   });
 
   it('puts the same breadcrumb on the new-patient form', async () => {

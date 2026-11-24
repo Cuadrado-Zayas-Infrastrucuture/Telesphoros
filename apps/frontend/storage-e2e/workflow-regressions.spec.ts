@@ -1,12 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from '../e2e/helpers';
+import { openChat, openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from '../e2e/helpers';
 
 const sample = { name: 'synthetic-workflow.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') };
 type Fixture = Awaited<ReturnType<typeof signInWithPatient>>;
 
 async function attachInChat(page: Page, fixture: Fixture) {
+  // A new conversation, as "New chat" opened (spec 049): Chat returns to the chat, and Chat on the chat itself starts a new one.
+  await openChat(page);
   await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'New chat', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Chat', exact: true }).click();
   await page.locator('input[type=file]').setInputFiles(sample);
   const details = page.getByRole('dialog', { name: 'Report details', exact: true });
   await details.getByRole('combobox', { name: 'Patient', exact: true }).selectOption(fixture.id);
@@ -146,7 +148,7 @@ test('merged patient report history and stage counts include original patient ID
   try {
     const reviewerPage = await reviewer.newPage();
     const authenticated = reviewerPage.waitForResponse((response) => response.url().endsWith('/api/v1/me'));
-    await signInAs(reviewerPage, 'gina', '/workspace');
+    await signInAs(reviewerPage, 'gina', '/chat');
     const reviewerHeaders = { Authorization: (await authenticated).request().headers().authorization! };
     async function decide(kind: 'merge' | 'unmerge') {
       const proposal = await page.request.post(`${survivor.api}/api/v1/patient-merges`, {

@@ -51,8 +51,8 @@ test('report navigation is offered without owned storage, beside the local previ
   await expect(followups).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
   await expect(page.getByRole('link', { name: 'Chat preview', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'New chat', exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace$/);
+  await page.getByRole('link', { name: 'Chat', exact: true }).click();
+  await expect(page).toHaveURL(/\/chat$/);
   await expect(page.getByRole('button', { name: 'Attach a report', exact: true })).toBeVisible();
   await openWorkspaceNavigation(page);
   await expect(followups).toBeVisible();

@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs, openChat } from '../e2e/helpers';
 
 const confirmation = 'I confirm this file contains synthetic data only';
 const fixture = (id: string) => new URL(`../../../data/fixtures/lab-reports/captures/${id}/source.pdf`, import.meta.url).pathname;
 
 test('replacement, same-file reattachment and failed-upload retry stay clear in chat', async ({ page }) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const picker = page.locator('input[type=file]');
   const details = page.getByRole('dialog', { name: 'Report details', exact: true });
   await picker.setInputFiles(fixture('D01'));
@@ -21,7 +21,7 @@ test('replacement, same-file reattachment and failed-upload retry stay clear in 
   await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(`SYN-RETRY-${crypto.randomUUID().slice(0, 8)}`);
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openChat(page);
   await page.getByRole('button', { name: 'Report details', exact: true }).click();
   await details.getByRole('textbox', { name: 'Report note' }).fill('Discuss this synthetic report at the next visit.');
   await details.getByRole('checkbox', { name: confirmation }).check();
@@ -45,7 +45,7 @@ test('replacement, same-file reattachment and failed-upload retry stay clear in 
 
 test('a roster beyond 20 patients stays searchable and selectable without losing the draft', async ({ page, browser }, info) => {
   const me = page.waitForResponse((response) => response.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const authenticated = await me;
   const api = new URL(authenticated.url()).origin;
   const headers = { Authorization: authenticated.request().headers().authorization! };
@@ -60,7 +60,7 @@ test('a roster beyond 20 patients stays searchable and selectable without losing
   // A fresh signed-in view reads the seeded real roster, with this project's viewport/touch settings.
   const view = await browser.newPage({ viewport: page.viewportSize()!, hasTouch: info.project.use.hasTouch, isMobile: info.project.use.isMobile });
   try {
-    await signInAs(view, 'alice', '/workspace');
+    await signInAs(view, 'alice', '/chat');
     await openPatients(view); // specs/034 D2: the roster lives on the Patients page
     const patients = view.getByRole('region', { name: 'Patient records', exact: true });
     await expect(view.getByRole('link', { name: 'Add patient', exact: true })).toBeInViewport();

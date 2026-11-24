@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChartColumn, ChevronsUpDown, FileText, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Sparkles, SquarePen, Users, X } from 'lucide-react';
+import { ChartColumn, ChevronsUpDown, FileText, House, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Sparkles, Users, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -9,7 +9,7 @@ import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
 import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
-import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
+import { CHAT_PATH, LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
 import { preferenceStorage } from '@/lib/storageConsent';
 import { clampSidebarWidth, readSidebarCollapsed, readSidebarWidth, SIDEBAR_WIDTH, writeSidebarCollapsed, writeSidebarWidth } from '@/lib/sidebarPreference';
 import { cn } from '@/lib/utils';
@@ -20,9 +20,10 @@ import { Button } from '@/components/ui/Button';
 type PanelItem = { kind: 'link'; to: string; label: string; icon: typeof FileText; show: boolean } | { kind: 'followups'; show: boolean };
 
 /**
- * The frame of every signed-in page (specs/018-unified-sidebar), laid out as specs/034: New chat, a short block of destinations, one Recents
- * list that takes the remaining height, and the account pinned at the bottom. On desktop it collapses to icons, remembered in this browser; the
- * layout narrows its column through `.workspace-layout:has(.is-collapsed)`. On small screens it is a disclosure menu instead.
+ * The frame of every signed-in page (specs/018-unified-sidebar), laid out as specs/034: Home (the worklist, spec 049) and Chat, a short block
+ * of destinations, one Recents list that takes the remaining height, and the account pinned at the bottom. On desktop it collapses to icons,
+ * remembered in this browser; the layout narrows its column through `.workspace-layout:has(.is-collapsed)`. On small screens it is a
+ * disclosure menu instead.
  */
 export function WorkspaceSidebar() {
   const { status, roles, preferredName } = useAuth();
@@ -94,8 +95,8 @@ export function WorkspaceSidebar() {
   const { pathname } = useLocation();
   const lists = canRead && !pathname.startsWith('/local-');
   const followups = lists && roles.some((role) => role === 'clinician' || role === 'reviewer');
-  // The destinations (specs/034 D1, replacing the order of specs/024 D2), each only for the roles that may use it. New chat sits above them,
-  // Recents below them, and Settings with Sign out in the account menu at the bottom.
+  // The destinations (specs/034 D1, replacing the order of specs/024 D2), each only for the roles that may use it. Home and Chat sit above them
+  // (spec 049: "New chat" became Home, and the chat its own entry), Recents below them, and Settings with Sign out in the account menu at the bottom.
   const everything: PanelItem[] = [
     ...(localWorkspaceAvailable()
       ? [
@@ -207,25 +208,34 @@ export function WorkspaceSidebar() {
       <div id="workspace-navigation-content" className={cn('workspace-navigation-content', open && 'is-open')}>
         <nav aria-label="Primary" className="workspace-primary flex min-h-0 flex-1 flex-col gap-5">
           <ul className="flex flex-col gap-0.5">
-            {status === 'signedIn' && (
+            {status === 'signedIn' && canRead && (
               <li>
                 {/* Collapsed to icons, each destination shows its name in a tooltip beside it (specs/018 D3, specs/042 D6). */}
-                <LazyTooltip label={iconsOnly ? 'New chat' : undefined} side="right">
+                <LazyTooltip label={iconsOnly ? 'Home' : undefined} side="right">
+                  <SidebarLink to={WORKSPACE_PATH} end data-panel-item="Home" onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
+                    <House aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="workspace-link-label">Home</span>
+                  </SidebarLink>
+                </LazyTooltip>
+              </li>
+            )}
+            {status === 'signedIn' && (
+              <li>
+                <LazyTooltip label={iconsOnly ? 'Chat' : undefined} side="right">
                   <SidebarLink
-                    to={WORKSPACE_PATH}
+                    to={CHAT_PATH}
                     end
-                    data-panel-item="New chat"
+                    data-panel-item="Chat"
                     onKeyDown={dismiss}
                     onClick={() => {
-                      announceNewChat();
+                      // From another page, Chat returns to the conversation in progress; on the chat itself it starts a new one, as "New chat" did.
+                      if (pathname === CHAT_PATH) announceNewChat();
                       close();
                     }}
-                    styleFor={({ isActive }) =>
-                      cn('workspace-new-chat flex min-h-control items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-primary hover:bg-muted', isActive && 'bg-muted')
-                    }
+                    styleFor={linkClass}
                   >
-                    <SquarePen aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="workspace-link-label">New chat</span>
+                    <MessageSquare aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="workspace-link-label">Chat</span>
                   </SidebarLink>
                 </LazyTooltip>
               </li>

@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { DrugList } from '@telesphoros/shared-types';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openWorkspaceNavigation, signInAs, openChat } from '../e2e/helpers';
 const drugs: DrugList = JSON.parse(readFileSync(new URL('../../../packages/shared-types/src/drug-list/bundled.json', import.meta.url), 'utf8'));
 const createdPatients = new WeakMap<Page, { api: string; patient: string; headers: { Authorization: string } }>();
 test.afterEach(async ({ page }) => {
@@ -14,7 +14,7 @@ test.afterEach(async ({ page }) => {
 
 async function fixture(page: Page, earlier = 0) {
   const me = page.waitForResponse((reply) => reply.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const auth = await me;
   const api = new URL(auth.url()).origin;
   const headers = { Authorization: auth.request().headers().authorization! };
@@ -59,8 +59,8 @@ async function openInbox(page: Page) {
   await expect(panel.getByText('Loading follow-ups…', { exact: true })).toHaveCount(0);
   return panel;
 }
-/** No reminder is listed: the only link left in main is the page's own Back to chat (specs/041 C4). */
-const expectNoReminderLinks = (panel: Locator) => expect(panel.getByRole('link')).toHaveText(['Back to chat']);
+/** No reminder is listed: the only link left in main is the page's own Back to home (spec 049 section 5; it was Back to chat, specs/041 C4). */
+const expectNoReminderLinks = (panel: Locator) => expect(panel.getByRole('link')).toHaveText(['Back to home']);
 const filteredRead = (page: Page, status: string, assignment = 'mine') =>
   page.waitForResponse((reply) => {
     const url = new URL(reply.url());
@@ -109,7 +109,7 @@ test('filtering resets pagination, keeps clinic totals, handles no matches and o
   await target.click();
   await expect(page.getByRole('form', { name: 'Document follow-up' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
+  await openChat(page);
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep the synthetic filtered reminder discussion');
 });
 
@@ -118,7 +118,7 @@ test('a reviewer can filter clinic reminders and sees an honest empty assigned-t
   const context = await browser.newContext({ viewport: page.viewportSize()! });
   try {
     const reviewer = await context.newPage();
-    await signInAs(reviewer, 'gina', '/workspace');
+    await signInAs(reviewer, 'gina', '/chat');
     const panel = await openInbox(reviewer);
     const read = filteredRead(reviewer, 'all');
     await panel.getByRole('combobox', { name: 'Assignment', exact: true }).selectOption('mine');

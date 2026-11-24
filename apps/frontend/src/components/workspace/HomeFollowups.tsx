@@ -9,8 +9,8 @@ const SHOWN = 3;
 const DUE_WORDS = { overdue: 'Overdue', today: 'Due today', upcoming: 'Upcoming', closed: 'Closed' } as const;
 
 /**
- * The home's work list (specs/038 D19): the open follow-ups assigned to the person signed in, from the same read the Follow-ups inbox
- * uses. It is the one list of work across patients the API has. Each row names the patient and the medication, says when the reminder
+ * The worklist's follow-ups (specs/038 D19, spec 049 section 3; it moved there from the chat's welcome): the open follow-ups assigned to the
+ * person signed in, from the same read the Follow-ups inbox uses. Each row names the patient and the medication, says when the reminder
  * is due and in which timezone, and opens that follow-up. "Overdue" is about the reminder's date, and the section says so.
  */
 export function HomeFollowups() {
@@ -18,7 +18,7 @@ export function HomeFollowups() {
   const shown = data?.items.slice(0, SHOWN) ?? [];
   const more = (data?.items.length ?? 0) - shown.length;
   return (
-    <section aria-label="Follow-ups assigned to you" className="mx-auto mt-6 flex w-full max-w-md flex-col gap-2 text-sm">
+    <section aria-label="Follow-ups assigned to you" className="flex w-full flex-col gap-2 text-sm">
       <h2 className="font-medium">Follow-ups assigned to you</h2>
       {error ? (
         <>

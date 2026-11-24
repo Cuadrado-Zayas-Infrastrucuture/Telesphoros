@@ -14,7 +14,7 @@ import { ReportDetails } from '@/components/ReportDetails';
 import { ReportStages } from '@/components/ReportStages';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { usePatientOptions } from '@/hooks/usePatientOptions';
-import { BackToChatLink } from '@/components/layout/BackToChatLink';
+import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
 import { useReportDownload } from '@/hooks/useReportDownload';
 import { useReportList } from '@/hooks/useReportList';
 import { ownedStorageMode } from '@/lib/storageMode';
@@ -103,14 +103,14 @@ export default function ReportsPage() {
     <div className="reports-workspace flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          {/* A page now, not a panel over the chat (specs/041 C1): this returns to the conversation in progress. */}
-          <BackToChatLink />
+          {/* A page now, not a panel over the chat (specs/041 C1): this returns to the worklist, the home (spec 049). */}
+          <BackToHomeLink />
           <h1 className="text-3xl leading-tight tracking-tight">Reports</h1>
           <p className="mt-1 text-sm text-pretty text-muted-foreground">Report records and verified upload information.</p>
         </div>
         {canAttach && (
           <Button asChild className="min-h-control w-full whitespace-normal px-5 sm:w-auto">
-            <Link to="/workspace">
+            <Link to="/chat">
               <ArrowUpFromLine aria-hidden="true" className="size-4 shrink-0" />
               Attach report in chat
             </Link>

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
-import { BackToChatLink } from '@/components/layout/BackToChatLink';
+import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
 import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { DemographicsSection } from '@/components/patients/DemographicsSection';
 import { GenomicProfileSection } from '@/components/patients/GenomicProfileSection';
@@ -115,7 +115,7 @@ export default function PatientPage() {
             <Link to="/patients">Back to patients</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/workspace">Back to chat</Link>
+            <Link to="/workspace">Back to home</Link>
           </Button>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function PatientPage() {
             <div className="flex flex-col gap-1">
               <div className="flex flex-wrap items-center justify-between gap-x-4">
                 <Breadcrumb trail={[{ to: '/patients', label: 'Patients' }]} current={patient.label} />
-                <BackToChatLink />
+                <BackToHomeLink />
               </div>
               <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
               <p className="text-sm text-muted-foreground">Synthetic patient · Added {when(patient.createdAt)}</p>

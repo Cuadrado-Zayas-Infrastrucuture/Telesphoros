@@ -81,15 +81,22 @@ export async function openWorkspaceNavigation(page: Page) {
   if (panel) {
     const close = page.getByRole('button', { name: /^Close (resume report upload|account preferences)$/ });
     await close.click();
-    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(page).toHaveURL(/\/chat$/);
   }
   // The URL can change before React commits the signed-in workspace shell.
   // isVisible() does not wait: checking it first can silently skip the mobile menu.
-  const workspaceRoute = /^\/(?:reports(?:\/|$)|local-|workspace(?:\/|$))/.test(new URL(page.url()).pathname);
+  const workspaceRoute = /^\/(?:reports(?:\/|$)|local-|workspace(?:\/|$)|chat$)/.test(new URL(page.url()).pathname);
   await expect(workspaceRoute ? page.locator('header.workspace-navigation') : page.getByRole('banner')).toBeVisible();
   const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
   if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true })).toBeVisible();
+}
+
+/** The chat (specs/024) from the sidebar's Chat (spec 049 W-D2): from another page it returns to the conversation in progress. */
+export async function openChat(page: Page) {
+  await openWorkspaceNavigation(page);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Chat', exact: true }).click();
+  await expect(page).toHaveURL(/\/chat$/);
 }
 
 /** Opens the account menu at the sidebar's foot (specs/034 D4), which holds Settings and Sign out; on a phone the menu button opens first. */

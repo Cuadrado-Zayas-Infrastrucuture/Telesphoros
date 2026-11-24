@@ -7,7 +7,8 @@ import { axe } from 'vitest-axe';
 import { followupListSchema, type Role } from '@telesphoros/shared-types';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
-// Specs/038 D19: the home lists the follow-ups assigned to the person signed in, from the inbox read. Synthetic data only.
+// Specs/038 D19: the home lists the follow-ups assigned to the person signed in, from the inbox read. Since spec 049 the home is the worklist,
+// and this is its first section. Synthetic data only.
 
 const NOW = '2026-11-12T12:00:00.000Z';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -40,6 +41,7 @@ function open(roles: Role[], mine: () => Response) {
     const at = new URL(String(url), 'http://synthetic');
     if (at.pathname === '/api/v1/followups') return at.searchParams.get('assignment') === 'mine' ? mine() : json(list([]));
     if (at.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
+    if (at.pathname === '/api/v1/evaluations') return json({ data: [], meta: { page: 1, pageSize: 5, total: 0, totalPages: 0 } });
     if (at.pathname.includes('/patients') || at.pathname.includes('/reports')) return json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
     return json({ roles });
   });
@@ -95,7 +97,7 @@ it('a reviewer sees the same section; a reader and a member with no role do not,
   reviewer.unmount();
   for (const roles of [['reader'], []] as Role[][]) {
     const view = open(roles, () => json(list([entry(0, 'overdue', '2026-11-01')])));
-    await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' });
+    await screen.findByRole('heading', { level: 1, name: 'Your worklist' });
     expect(screen.queryByRole('region', { name: 'Follow-ups assigned to you' })).not.toBeInTheDocument();
     expect(view.fetchImpl.mock.calls.some(([url]) => String(url).includes('assignment=mine'))).toBe(false);
     view.unmount();

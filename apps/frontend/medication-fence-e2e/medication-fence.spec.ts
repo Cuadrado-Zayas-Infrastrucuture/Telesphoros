@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 test('paused recording retains the compact form, creates no entry and leaves reads available', async ({ page }, info) => {
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   await openPatients(page); // specs/034 D2: Add patient lives on the Patients page and opens the new patient's page
   const label = `SYN-FENCE-${crypto.randomUUID().slice(0, 8)}`;
   await page.getByRole('link', { name: 'Add patient' }).click();
