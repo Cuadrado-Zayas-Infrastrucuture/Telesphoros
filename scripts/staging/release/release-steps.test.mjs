@@ -106,7 +106,11 @@ esac
 `, 0o755);
 git(clone, 'add', '.');
 git(clone, 'commit', '-q', '-m', 'base');
+// The facts name the running image and its commit (the base), as after a release: the clinical review gate (spec 048) reads them. The
+// change below is not under a clinical path, so the gate passes on its own; its refusals are tested in clinical-review.test.mjs.
+const BASE = git(clone, 'rev-parse', 'HEAD');
 git(clone, 'checkout', '-q', '-b', 'feature');
+put(clone, 'docs/ops/staging-expected.json', JSON.stringify({ newestMigration: '0070', image: { digest: `sha256:${'a'.repeat(64)}`, commit: BASE } }));
 put(clone, 'apps/backend/src/x.ts', 'export {};\n');
 git(clone, 'add', '.');
 git(clone, 'commit', '-q', '-m', 'the change');
@@ -174,6 +178,37 @@ test('image: the reason, the claim and CI come first; nothing is built before th
   git(clone, 'update-ref', 'refs/remotes/origin/main', COMMIT);
   assert.ok(!/buildx build|push/.test(log('docker')), 'nothing was built or pushed');
   assert.ok(!existsSync(join(rel, 'new_image.txt')));
+});
+
+test('image: a clinical change since the running image stops the step before anything is built, until a record is there (spec 048)', () => {
+  clearLogs();
+  git(clone, 'checkout', '-q', '-b', 'clinical', COMMIT);
+  put(clone, 'apps/backend/src/services/recommendation-engine/rule.ts', 'export const r = 1;\n');
+  git(clone, 'add', '.');
+  git(clone, 'commit', '-q', '-m', 'an engine change');
+  git(clone, 'checkout', '-q', 'main');
+  git(clone, 'merge', '-q', '--no-ff', '-m', 'Merge pull request #3', 'clinical');
+  const clinical = git(clone, 'rev-parse', 'HEAD');
+  git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const crel = join(priv, 'releases', clinical);
+  mkdirSync(crel, { recursive: true });
+  writeFileSync(join(crel, 'break-glass-reason.txt'), readFileSync(join(rel, 'break-glass-reason.txt')));
+  const stopped = run('image.sh', ['BUILD', clinical]);
+  assert.equal(stopped.status, 1, out(stopped));
+  assert.match(out(stopped), /1 clinical file\(s\) changed since [0-9a-f]{8}: the release needs a clinical review record[\s\S]*changed: apps\/backend\/src\/services\/recommendation-engine\/rule\.ts[\s\S]*clinical review refused/);
+  assert.ok(!/buildx build|push/.test(log('docker')), 'nothing was built or pushed');
+  assert.ok(!/kms/.test(log('aws')), 'no key is read without a review record');
+  // With the founder's exception (staging only) the gate passes; the step then goes on to its build, which this test does not follow.
+  const changed = 'apps/backend/src/services/recommendation-engine/rule.ts';
+  writeFileSync(join(crel, 'clinical-review.json'), JSON.stringify({ schema: 'clinical-review/1', base: BASE, candidate: clinical, changed: [changed], exception: { reason: 'no reviewer key yet; synthetic staging only' } }));
+  const excepted = run('image.sh', ['BUILD', clinical], { STUB_REHEARSAL_EXIT: '1' });
+  assert.match(out(excepted), /clinical review: EXCEPTION, without the review \(staging only\)[\s\S]*synthetic rehearsal failed: not pushing/);
+  rmSync(`${clone}-release-${clinical.slice(0, 8)}`, { recursive: true, force: true });
+  git(clone, 'worktree', 'prune');
+  git(clone, 'reset', '-q', '--hard', COMMIT);
+  git(clone, 'update-ref', 'refs/remotes/origin/main', COMMIT);
+  git(clone, 'branch', '-q', '-D', 'clinical');
+  assert.ok(!existsSync(join(stubDir, 'pushed')), 'nothing was pushed');
 });
 
 test('image: a failed rehearsal pushes nothing; an unfinished scan writes no new_image.txt; a dirty build worktree is refused', () => {
