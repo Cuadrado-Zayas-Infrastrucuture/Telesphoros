@@ -9,7 +9,8 @@ shows when the identity cannot be read (#454). The founder approved S-D1 to S-D3
 - it is recorded beside the English and tested, but not shown, until the app has a language choice;
 - that choice gets its own spec.
 
-**Spec 050, `specs/050-workspace-spanish/spec.md`, is that spec. Not approved yet.** It covers:
+**Spec 050, `specs/050-workspace-spanish/spec.md`, is that spec.** The founder approved LS-D1 to LS-D8 as recommended on 2026-11-24.
+It covers:
 
 - a language choice for the signed-in app, English by default and never the browser's language;
 - one table of words per screen, with English and Spanish side by side;
@@ -18,6 +19,6 @@ shows when the identity cannot be read (#454). The founder approved S-D1 to S-D3
 - nothing machine translated;
 - the order of slices LS1 to LS6.
 
-It also lists the Spanish that specs 038, 044, 045 and 049 have left waiting. Eight decisions, LS-D1 to LS-D8, are put to the founder.
+It also lists the Spanish that specs 038, 044, 045 and 049 have left waiting.
 
 Neither document contains Spanish text. No code change.

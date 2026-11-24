@@ -4,7 +4,8 @@
 
 **Created**: 2026-11-24
 
-**Status**: **proposed, 2026-11-24. Not approved.** Specification only: no code, route, setting, migration or knowledge change. It is
+**Status**: **approved by the founder on 2026-11-24: LS-D1 to LS-D8 as recommended (section 4).** Specification only: no code, route,
+setting, migration or knowledge change. Each slice gets its own plan before code. It is
 S-D2 of [the identity-wording Spanish plan](../../docs/design/plans/patient-identity-spanish.md), which the founder approved on 2026-11-24:
 "a separate spec for the app's language layer". It also gathers every Spanish text that other specs have left waiting.
 
