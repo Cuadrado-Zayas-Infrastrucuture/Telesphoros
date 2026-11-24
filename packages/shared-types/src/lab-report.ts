@@ -225,6 +225,8 @@ export const evaluationListQuerySchema = paginationQuerySchema
     patientId: z.uuid().optional(),
     /** `current=true` keeps only the current evaluation of each report. Only the value `true` is accepted. */
     current: z.literal('true').optional(),
+    /** `disposition=held` keeps only held evaluations, `evaluated` only evaluated ones (spec 049 W1, the worklist's held results). Composes with the others. */
+    disposition: z.enum(['held', 'evaluated']).optional(),
   })
   .refine((query) => Number.isSafeInteger((query.page - 1) * query.pageSize), { path: ['page'], message: 'Page offset is too large.' });
 export type EvaluationListQuery = z.infer<typeof evaluationListQuerySchema>;
