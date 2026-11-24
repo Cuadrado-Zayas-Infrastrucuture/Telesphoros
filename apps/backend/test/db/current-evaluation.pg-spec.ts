@@ -35,7 +35,25 @@ async function report(t: string) {
   const a = await repo.insertAcceptance(t, 'syn-reviewer', acceptanceFor(c.record.id, capture));
   let n = 0;
   const evaluate = async () => (await repo.insertEvaluation(t, 'syn-system', evaluationFor(seeded, c.record.id, a.record.id, { knowledgeSetId: sha(`ks-${++n}`) }))).record.id;
-  return { reportId: seeded.reportId, evaluate };
+  /** One more evaluation of it that is HELD (as evaluation-context.pg-spec stores one): no inputs, no results, a hold code. */
+  const hold = async () =>
+    (
+      await repo.insertEvaluation(
+        t,
+        'syn-system',
+        evaluationFor(seeded, c.record.id, a.record.id, {
+          knowledgeSetId: sha(`ks-${++n}`),
+          captureAcceptanceId: null,
+          disposition: 'held',
+          holdCode: 'source-limit',
+          geneInputs: [],
+          occurrences: [],
+          results: [],
+          geneStates: [],
+        }),
+      )
+    ).record.id;
+  return { reportId: seeded.reportId, evaluate, hold };
 }
 const retract = (t: string, evaluationId: string, previous?: string) =>
   repo.insertCorrection(t, 'syn-reviewer', { evaluationId, kind: 'retraction', reasonCode: 'software-defect', previousCorrectionId: previous }).then((r) => r.record.id);
@@ -162,6 +180,49 @@ describe('the current evaluation of a report', () => {
     await retract(tb, eb);
     expect((await bypassing.listEvaluations(ta, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([ea]);
     expect((await bypassing.listEvaluations(tb, { current: true }, { offset: 0, limit: 100 })).items).toEqual([]);
+  });
+});
+
+// Spec 049 W1: the worklist's "Held results" reads `disposition=held&current=true`. Hand-written expectations: which evaluation was stored held.
+describe('the disposition filter', () => {
+  const all = { offset: 0, limit: 100 };
+  const ids = async (t: string, filter: Parameters<typeof repo.listEvaluations>[1]) => (await repo.listEvaluations(t, filter, all)).items.map((e) => e.id);
+
+  it('keeps only held or only evaluated evaluations, composes with current and reportId, and counts the filtered set', async () => {
+    const t = tenant();
+    const a = await report(t); // evaluated only
+    const h = await report(t); // held only: held and current
+    const g = await report(t); // held, then evaluated: the held one is no longer current
+    const a1 = await a.evaluate();
+    const h1 = await h.hold();
+    const g1 = await g.hold();
+    const g2 = await g.evaluate();
+
+    expect(await ids(t, { disposition: 'held' })).toEqual([h1, g1]);
+    expect(await ids(t, { disposition: 'evaluated' })).toEqual([a1, g2]);
+    expect(await ids(t, {})).toEqual([a1, h1, g1, g2]); // absent: both, as before
+    expect(await ids(t, { disposition: 'held', current: true })).toEqual([h1]);
+    expect(await ids(t, { disposition: 'evaluated', current: true })).toEqual([a1, g2]);
+    expect(await ids(t, { disposition: 'held', reportId: g.reportId })).toEqual([g1]);
+    expect(await ids(t, { disposition: 'held', current: true, reportId: g.reportId })).toEqual([]);
+
+    // The total is the filtered set's, also when the page holds fewer.
+    const first = await repo.listEvaluations(t, { disposition: 'held' }, { offset: 0, limit: 1 });
+    expect(first.items.map((e) => e.id)).toEqual([h1]);
+    expect(first.total).toBe(2);
+    const page = await repo.evaluationPage(t, { disposition: 'held', current: true }, { offset: 0, limit: 1 });
+    expect(page.items.map((e) => e.id)).toEqual([h1]);
+    expect(page.total).toBe(1);
+  });
+
+  it("never lists another tenant's held evaluations (checked as a superuser, where only the query's own conditions protect)", async () => {
+    const ta = tenant();
+    const tb = tenant();
+    const ha = await (await report(ta)).hold();
+    const hb = await (await report(tb)).hold();
+    expect((await bypassing.listEvaluations(ta, { disposition: 'held' }, all)).items.map((e) => e.id)).toEqual([ha]);
+    expect((await bypassing.listEvaluations(tb, { disposition: 'held', current: true }, all)).items.map((e) => e.id)).toEqual([hb]);
+    expect((await bypassing.listEvaluations(ta, { disposition: 'evaluated' }, all)).total).toBe(0);
   });
 });
 
