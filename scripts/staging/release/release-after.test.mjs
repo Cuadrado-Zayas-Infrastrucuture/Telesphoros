@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { signerKeysValue, signerPem } from './fence-plan.fixtures.mjs';
 
 const here = new URL('.', import.meta.url).pathname;
 const box = mkdtempSync(join(tmpdir(), 'release-after-'));
@@ -22,6 +23,10 @@ const OLD = `${REPO_URL}@sha256:${'a'.repeat(64)}`;
 const NEW = `${REPO_URL}@sha256:${'c'.repeat(64)}`;
 const TD = `${PREFIX}task-definition/telesphoros-staging-api:12`;
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
+// The knowledge signers' KMS keys (033-23 H1), invented: what `terraform output -json knowledge_signer_key_arns` and `aws kms get-public-key` answer.
+const KEY_JAN = `arn:aws:kms:us-east-2:${ACCOUNT}:key/11111111-1111-4111-8111-111111111111`;
+const KEY_KEVIN = `arn:aws:kms:us-east-2:${ACCOUNT}:key/22222222-2222-4222-8222-222222222222`;
+const der = (pem) => pem.split('\n').filter((line) => line && !line.startsWith('-----')).join('');
 
 const stubDir = join(box, 'stub');
 mkdirSync(stubDir);
@@ -46,6 +51,8 @@ stub('aws', `case "$*" in
   *describe-alarms*"--state-value ALARM"*) echo "\${STUB_INALARM-}" ;;
   *describe-alarms*) echo 36 ;;
   *filter-log-events*) [ -n "\${STUB_NO_LEDGER:-}" ] && echo '[]' || echo '["{\\"event\\":\\"ledger-full-check-completed\\",\\"tenantsChecked\\":1}"]' ;;
+  *"kms get-public-key --key-id ${KEY_JAN} "*) [ "\${STUB_KMS:-}" = fail ] && exit 254; echo "${der(signerPem('A'))}" ;;
+  *"kms get-public-key --key-id ${KEY_KEVIN} "*) [ "\${STUB_KMS:-}" = fail ] && exit 254; echo "${der(signerPem('B'))}" ;;
   *) echo "unexpected aws $*" >&2; exit 99 ;;
 esac`);
 stub('curl', `case "$*" in
@@ -61,6 +68,7 @@ stub('terraform', `case "$*" in
   *"output -raw cognito_app_client_id"*) printf exampleclientid ;;
   *"output -raw cognito_sign_in_domain"*) printf https://auth.example.test ;;
   *"output -raw web_distribution_id"*) printf E1EXAMPLE ;;
+  *"output -json knowledge_signer_key_arns"*) [ "\${STUB_KEY_ARNS:-}" = none ] && echo '{}' || echo '${JSON.stringify({ jan: KEY_JAN, kevin: KEY_KEVIN })}' ;;
   *"state show"*) printf '  arn  = "${TD}"\\n  family = "telesphoros-staging-api"\\n' ;;
   *"state list"*) cat "$STUB/state-list" ;;
   *"state pull"*) n=$(cat "$STUB/pulls" 2>/dev/null || echo 0); echo $((n + 1)) > "$STUB/pulls"; if [ "$n" -ge 1 ] && [ -e "$STUB/state-later" ]; then cat "$STUB/state-later"; else cat "$STUB/state"; fi ;;
@@ -126,7 +134,7 @@ const CLUSTER = `${PREFIX}cluster/telesphoros-staging-api`;
 const SERVICE = `${PREFIX}service/telesphoros-staging-api/telesphoros-staging-api`;
 const taskArn = (n) => `${PREFIX}task/telesphoros-staging-api/${String(n).padStart(32, '0')}`;
 const SETTINGS = [{ name: 'SYNTHETIC_ASSESSMENT', value: 'enabled' }, { name: 'SYNTHETIC_KNOWLEDGE_DIR', value: '/app/synthetic-knowledge' }];
-const observe = ({ writes = 'disabled', assessment = true } = {}) => {
+const observe = ({ writes = 'disabled', assessment = true, keys = null } = {}) => {
   const j = (n, v) => writeFileSync(join(stubDir, n), JSON.stringify(v));
   j('services.json', { failures: [], services: [{ serviceArn: SERVICE, clusterArn: CLUSTER, serviceName: 'telesphoros-staging-api', status: 'ACTIVE',
     taskDefinition: TD, desiredCount: 2, runningCount: 2, pendingCount: 0,
@@ -138,7 +146,8 @@ const observe = ({ writes = 'disabled', assessment = true } = {}) => {
     containers: [{ name: 'api', image: NEW, imageDigest: `sha256:${'c'.repeat(64)}`, lastStatus: 'RUNNING', healthStatus: 'HEALTHY' }],
     overrides: { containerOverrides: [{ name: 'api' }] } })) });
   j('taskdef.json', { taskDefinition: { taskDefinitionArn: TD, status: 'ACTIVE', containerDefinitions: [{ name: 'api', image: NEW,
-    environment: [{ name: 'MEDICATION_WRITES', value: writes }, ...(assessment ? SETTINGS : [])], secrets: [], environmentFiles: [] }] } });
+    environment: [{ name: 'MEDICATION_WRITES', value: writes }, ...(assessment ? SETTINGS : []), ...(keys === null ? [] : [{ name: 'KNOWLEDGE_SIGNER_KEYS', value: keys }])],
+    secrets: [], environmentFiles: [] }] } });
 };
 observe();
 
@@ -345,4 +354,57 @@ test('state backup after an INFRA apply alone: its own log, record and plan, and
   rmSync(dmg(), { force: true });
   assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT])), /the MIGRATE and IMAGE apply logs of this release are missing/, 'IMAGE still needs both of its logs');
   writeFileSync(join(rel, 'i-apply.txt'), imageLog);
+});
+
+// The knowledge signers' public keys (033-23 H1): switched on, the API task must carry, for each signer Terraform names, exactly the public key KMS
+// holds for that signer's key; switched off, none. Never a key printed.
+test('verify: SIGNER-KEYS-ON passes only when each signer carries the key KMS holds; SIGNER-KEYS-OFF expects the keys gone', () => {
+  stackEnv();
+  const noKey = (r) => assert.ok(!out(r).includes('MFkwEwYH'), 'no public key is printed');
+  const operation = (name, mode, text) => {
+    const op = join(rel, 'signer-keys', name);
+    mkdirSync(op, { recursive: true });
+    const t = mode === 'SIGNER-KEYS-ON' ? 'ke' : 'kd';
+    setCurrent(text, join(op, `${t}.tfvars`));
+    writeFileSync(join(op, `${t}.tfplan`), 'plan');
+    writeFileSync(join(op, `${t}-apply.txt`), '== apply exit status: 0\n');
+    return op;
+  };
+  const on = operation('keys-1', 'SIGNER-KEYS-ON', `${OFF}knowledge_signer_keys_on_api = true\n`);
+  for (const [why, keys, env, shows] of [
+    ['no keys on the task', null, {}, /KNOWLEDGE_SIGNER_KEYS is not one map of signer id to public key/],
+    ['keys that are not JSON', 'not json', {}, /KNOWLEDGE_SIGNER_KEYS is not one map of signer id to public key/],
+    ['a signer missing', signerKeysValue(['jan']), {}, /the signers in KNOWLEDGE_SIGNER_KEYS are not the ones Terraform names/],
+    ['a signer Terraform does not name', signerKeysValue(['jan', 'kevin', 'mallory']), {}, /the signers in KNOWLEDGE_SIGNER_KEYS are not the ones Terraform names/],
+    ['another key for a signer', JSON.stringify({ jan: signerPem('A'), kevin: signerPem('Z') }), {}, /signer kevin: the API task does not carry the public key KMS holds/],
+    ['the two keys swapped', JSON.stringify({ jan: signerPem('B'), kevin: signerPem('A') }), {}, /signer jan: the API task does not carry the public key KMS holds/],
+    ['KMS cannot be read', signerKeysValue(), { STUB_KMS: 'fail' }, /cannot read the public key of signer jan from KMS/],
+    ['Terraform names no signers', signerKeysValue(), { STUB_KEY_ARNS: 'none' }, /cannot read knowledge_signer_key_arns/],
+  ]) {
+    observe({ assessment: false, keys });
+    const r = run('verify.sh', ['SIGNER-KEYS-ON', COMMIT, 'keys-1'], env);
+    assert.equal(r.status, 1, `${why}: ${out(r)}`);
+    assert.match(out(r), shows, why);
+    assert.match(r.stdout, /SOME CHECKS FAILED/);
+    assert.ok(!existsSync(join(on, 'verify-ok.txt')), why);
+    noKey(r);
+  }
+  observe({ assessment: false, keys: signerKeysValue() });
+  const good = run('verify.sh', ['SIGNER-KEYS-ON', COMMIT, 'keys-1']);
+  assert.equal(good.status, 0, out(good)); noKey(good);
+  assert.match(good.stdout, /== 7\. Knowledge signer public keys in the API task definition \(current\.tfvars: present\)/);
+  assert.match(readFileSync(join(on, 'verify-ok.txt'), 'utf8'), /^signer keys present$/m);
+
+  const off = operation('keys-off-1', 'SIGNER-KEYS-OFF', `${OFF}knowledge_signer_keys_on_api = false\n`);
+  const still = run('verify.sh', ['SIGNER-KEYS-OFF', COMMIT, 'keys-off-1']);
+  assert.equal(still.status, 1);
+  assert.match(out(still), /KNOWLEDGE_SIGNER_KEYS is set, but current\.tfvars switches the signer keys off/); noKey(still);
+  observe({ assessment: false });
+  const kmsCalls = () => readFileSync(join(stubDir, 'aws.log'), 'utf8').split('\n').filter((l) => l.includes('kms get-public-key')).length;
+  const before = kmsCalls();
+  const gone = run('verify.sh', ['SIGNER-KEYS-OFF', COMMIT, 'keys-off-1']);
+  assert.equal(gone.status, 0, out(gone));
+  assert.match(readFileSync(join(off, 'verify-ok.txt'), 'utf8'), /^signer keys absent$/m);
+  assert.equal(kmsCalls(), before, 'switched off, verify reads no key from KMS');
+  observe();
 });

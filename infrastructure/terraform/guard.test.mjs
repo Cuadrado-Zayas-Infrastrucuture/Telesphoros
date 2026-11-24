@@ -41,6 +41,7 @@ import '../../scripts/staging/release/release-check.test.mjs';
 import '../../scripts/staging/release/fence-plan.test.mjs';
 import '../../scripts/staging/release/fence-vars.test.mjs';
 import '../../scripts/staging/release/assessment-plan.test.mjs';
+import '../../scripts/staging/release/signer-keys-plan.test.mjs';
 import '../../scripts/staging/release/release-scripts.test.mjs';
 import '../../scripts/staging/release/migration-pending.test.mjs';
 import '../../scripts/staging/release/release-steps.test.mjs';

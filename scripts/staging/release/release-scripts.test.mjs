@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { assessmentPlan, fencePlan } from './fence-plan.fixtures.mjs';
+import { assessmentPlan, fencePlan, signerKeysPlan } from './fence-plan.fixtures.mjs';
 
 const here = new URL('.', import.meta.url).pathname;
 const box = mkdtempSync(join(tmpdir(), 'release-scripts-'));
@@ -465,4 +465,67 @@ test('assessment operations: ON waits for the verified release and OFF never wai
   mkdirSync(join(rel, 'assessments/on-2/apply-started'));
   assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pinOf(again), 'on-2'], owner).status, 1, 'a previous start blocks another apply even before its log exists');
   assert.ok(!existsSync(join(rel, 'assessments/on-2/ae-apply.txt')));
+});
+
+test('signer-keys operations (033-23 H1): ON waits for the verified release, a signature or a break-glass record; OFF never waits; both publish only the reviewed target', () => {
+  const original = readFileSync(current, 'utf8');
+  const verificationFile = join(rel, 'verified-image.json');
+  const signed = readFileSync(verificationFile, 'utf8');
+  const imageLog = readFileSync(join(rel, 'i-apply.txt'), 'utf8');
+  assert.match(imageLog, /== apply exit status: 0/);
+  const migrateStatus = join(rel, 'migrate-status.txt');
+  writeFileSync(migrateStatus, 'pending: (none)\n');
+  const shape = (mode) => writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(signerKeysPlan(mode, NEW)));
+  const pinOf = (r) => r.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  const noKey = (r) => assert.ok(!`${r.stdout}${r.stderr}`.includes('MFkwEwYH'), 'no public key is printed');
+
+  shape('SIGNER-KEYS-ON');
+  writeFileSync(verificationFile, '{}');
+  assert.equal(run('plan.sh', ['SIGNER-KEYS-ON', COMMIT, 'keys-unverified'], owner).status, 1, 'an empty verification marker is insufficient');
+  assert.equal(run('plan.sh', ['SIGNER-KEYS-ON', COMMIT], owner).status, 1, 'an operation id is required');
+  const breakGlass = { format: 1, environment: 'staging', images: [NEW], recordedAt: '2026-11-24T00:00:00Z', method: 'break-glass',
+    reason: 'CI release-image cannot sign in this account; founder approved an unsigned synthetic staging image' };
+  writeFileSync(verificationFile, JSON.stringify({ ...breakGlass, reason: undefined }));
+  assert.equal(run('plan.sh', ['SIGNER-KEYS-ON', COMMIT, 'keys-no-reason'], owner).status, 1, 'a break-glass record without a written reason is not enough');
+  writeFileSync(verificationFile, JSON.stringify(breakGlass));
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(assessmentPlan('ASSESSMENT-ON', NEW)));
+  assert.equal(run('plan.sh', ['SIGNER-KEYS-ON', COMMIT, 'keys-wrong-shape'], owner).status, 1, 'an assessment plan is not a signer-keys plan');
+  assert.ok(!existsSync(join(rel, 'signer-keys/keys-wrong-shape/ke.tfplan.meta.json')), 'a plan the release check refuses is not recorded');
+
+  shape('SIGNER-KEYS-ON');
+  const planned = run('plan.sh', ['SIGNER-KEYS-ON', COMMIT, 'keys-1'], owner);
+  assert.equal(planned.status, 0, 'a break-glass record with a reason, naming the running image, is accepted: ' + planned.stdout + planned.stderr);
+  quiet(planned); noKey(planned);
+  const folder = join(rel, 'signer-keys/keys-1');
+  const target = readFileSync(join(folder, 'ke.tfvars'), 'utf8');
+  assert.equal(readFileSync(join(folder, 'source.tfvars'), 'utf8'), original);
+  assert.equal(target, original + 'knowledge_signer_keys_on_api = true\n');
+  const metadata = JSON.parse(readFileSync(join(folder, 'ke.tfplan.meta.json'), 'utf8'));
+  assert.equal(metadata.mode, 'SIGNER-KEYS-ON');
+  assert.equal(metadata.sourceVarSha256, sha(current));
+  writeFileSync(join(rel, 'i-apply.txt'), '== apply exit status: 9\n');
+  assert.equal(run('apply.sh', ['SIGNER-KEYS-ON', COMMIT, pinOf(planned), 'keys-1'], owner).status, 1, 'switching on is rechecked at apply');
+  writeFileSync(join(rel, 'i-apply.txt'), imageLog);
+  writeFileSync(verificationFile, '{}');
+  assert.equal(run('apply.sh', ['SIGNER-KEYS-ON', COMMIT, pinOf(planned), 'keys-1'], owner).status, 1, 'the image record is checked again at apply');
+  assert.ok(!existsSync(join(folder, 'ke-apply.txt')));
+  writeFileSync(verificationFile, JSON.stringify(breakGlass));
+  const applied = run('apply.sh', ['SIGNER-KEYS-ON', COMMIT, pinOf(planned), 'keys-1'], owner);
+  assert.equal(applied.status, 0, applied.stdout + applied.stderr); noKey(applied);
+  assert.match(waitFor(join(folder, 'ke-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), target);
+  assert.equal(readFileSync(`${current}.sha256`, 'utf8').trim(), sha(current));
+  assert.ok(!existsSync(join(rel, 'assessments/keys-1')) && !existsSync(join(rel, 'fences/keys-1')), 'signer-keys evidence has its own folder');
+
+  // The way back waits for nothing: no image record, an unfinished release and a pending migration do not stop it.
+  writeFileSync(verificationFile, '{}'); writeFileSync(join(rel, 'i-apply.txt'), '== apply exit status: 9\n'); writeFileSync(migrateStatus, 'pending: 0071\n');
+  shape('SIGNER-KEYS-OFF');
+  const off = run('plan.sh', ['SIGNER-KEYS-OFF', COMMIT, 'keys-off-1'], owner);
+  assert.equal(off.status, 0, 'switching OFF waits for nothing: ' + off.stdout + off.stderr); quiet(off); noKey(off);
+  assert.equal(readFileSync(join(rel, 'signer-keys/keys-off-1/kd.tfvars'), 'utf8'), original + 'knowledge_signer_keys_on_api = false\n');
+  const offApply = run('apply.sh', ['SIGNER-KEYS-OFF', COMMIT, pinOf(off), 'keys-off-1'], owner);
+  assert.equal(offApply.status, 0, offApply.stdout + offApply.stderr);
+  assert.match(waitFor(join(rel, 'signer-keys/keys-off-1/kd-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), original + 'knowledge_signer_keys_on_api = false\n');
+  writeFileSync(verificationFile, signed); writeFileSync(join(rel, 'i-apply.txt'), imageLog); writeFileSync(migrateStatus, 'pending: (none)\n');
 });

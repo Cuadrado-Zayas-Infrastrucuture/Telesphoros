@@ -19,8 +19,8 @@ const env = (c, name) => c.environment.find((e) => e.name === name);
 const drop = (c, name) => { c.environment = c.environment.filter((e) => e.name !== name); };
 const check = (mode, plan, image = FENCE_IMAGE) => problems(mode, plan, FENCE_IMAGE, image);
 
-test('the mode list is the four one-flag modes, and the settings the checker expects are the ones the fixtures install', () => {
-  assert.deepEqual([...FLAG_MODES].sort(), ['ASSESSMENT-OFF', 'ASSESSMENT-ON', 'FENCE-CLOSE', 'FENCE-OPEN']);
+test('the mode list is the six one-flag modes, and the settings the checker expects are the ones the fixtures install', () => {
+  assert.deepEqual([...FLAG_MODES].sort(), ['ASSESSMENT-OFF', 'ASSESSMENT-ON', 'FENCE-CLOSE', 'FENCE-OPEN', 'SIGNER-KEYS-OFF', 'SIGNER-KEYS-ON']);
   assert.deepEqual(ASSESSMENT_ENV, Object.entries(ASSESSMENT_SETTINGS).map(([name, value]) => ({ name, value })));
 });
 

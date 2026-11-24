@@ -22,8 +22,8 @@ const image = () => base({ api_image: NEW, api_migrate_image: NEW }, [td('api', 
 const alarm = (address, actions) => ({ address, mode: 'managed', type: 'aws_cloudwatch_metric_alarm', change: { actions, before: actions[0] === 'create' ? null : {}, after: actions[0] === 'delete' ? null : {} } });
 const infra = () => base({ api_image: OLD, api_migrate_image: OLD }, [alarm('aws_cloudwatch_metric_alarm.sweep_failing[0]', ['create'])]);
 const find = (p, a) => p.resource_changes.find((c) => c.address === a);
-// The knowledge signer keys (knowledge-signing.tf): created in an INFRA plan with knowledge_signer_keys_on_api off, then carried to the API by the next
-// IMAGE plan's new task definition. These cases pin why they cannot go out in one plan. Invented signer ids.
+// The knowledge signer keys (knowledge-signing.tf): created in an INFRA plan with knowledge_signer_keys_on_api off, then given to the API by the one-flag
+// SIGNER-KEYS-ON plan (signer-keys-plan.test.mjs). These cases pin why they cannot go out in one plan. Invented signer ids.
 const signerKeys = () => ['jan', 'kevin'].flatMap((id) => [
   { address: `aws_kms_key.knowledge_signer["${id}"]`, mode: 'managed', type: 'aws_kms_key', change: { actions: ['create'], before: null, after: {} } },
   { address: `aws_kms_alias.knowledge_signer["${id}"]`, mode: 'managed', type: 'aws_kms_alias', change: { actions: ['create'], before: null, after: {} } },
@@ -121,7 +121,7 @@ for (const [name, mode, make, pass] of cases) {
 }
 
 test('release-check refuses an unknown mode and two equal images', () => {
-  assert.deepEqual(problems('FOLD', image(), OLD, NEW), ['mode must be MIGRATE, IMAGE, INFRA, FENCE-CLOSE, FENCE-OPEN, ASSESSMENT-ON or ASSESSMENT-OFF']);
+  assert.deepEqual(problems('FOLD', image(), OLD, NEW), ['mode must be MIGRATE, IMAGE, INFRA, FENCE-CLOSE, FENCE-OPEN, ASSESSMENT-ON, ASSESSMENT-OFF, SIGNER-KEYS-ON or SIGNER-KEYS-OFF']);
   assert.ok(problems('IMAGE', image(), NEW, NEW).length > 0);
   assert.ok(problems('INFRA', infra(), OLD, OLD).length === 0, 'INFRA needs only the running image, given twice');
 });
