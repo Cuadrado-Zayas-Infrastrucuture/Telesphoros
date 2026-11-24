@@ -96,7 +96,8 @@ async function openProfile(page: Page, colorScheme: 'light' | 'dark') {
   );
   // The e2e API runs on the in-memory store, which by design has no demographics: they are ledgered records (spec 025 D5), the ledger exists only
   // on PostgreSQL, so the route answers 503 (UnavailablePatientDemographicsRepository, storage.module.ts). No setting in playwright.config.ts changes
-  // that. The patient page stops at its own error without them, so answer as the PostgreSQL API does for a patient with none recorded yet.
+  // that. Without them the page shows its "identity could not be loaded" state, which hides "Record a decision" (patient-identity-unknown.spec.ts
+  // tests that state), so answer as the PostgreSQL API does for a patient with none recorded yet.
   // The real route is browser-tested on PostgreSQL in storage-e2e/patient-demographics.spec.ts (the nightly e2e-storage suite).
   await page.route(
     (url) => url.pathname === `/api/v1/patients/${patient.id}/demographics`,

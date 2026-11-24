@@ -1,7 +1,7 @@
 # Plan: the patient page when the identity cannot be read
 
-**Status**: **proposed, 2026-11-24. Not approved.** No code until the founder approves B-D1 to B-D4. Read against `main` after PR #452.
-Frontend only. Called "option B" in #452's follow-ups.
+**Status**: **approved by the founder on 2026-11-24: B-D1 to B-D4 as recommended.** The plan merged in #453; it is built in the
+pull request after it. Read against `main` after PR #452. Frontend only. Called "option B" in #452's follow-ups.
 
 ## 1. The problem
 
@@ -74,9 +74,11 @@ patient simply has none recorded.
 
 - `apps/frontend/src/pages/PatientPage.tsx`: the two reads, the unknown state, and the holds (B-D3).
 - `apps/frontend/src/components/patients/DemographicsSection.tsx`: the unknown state's line, with no form and no "Incomplete".
-- `apps/frontend/src/components/patients/GenomicProfileSection.tsx`: a prop to hide "Record a decision" while held (B-D3 (b) only).
-- `apps/frontend/src/lib/patientDemographics.ts`: if needed, keep the response status on the `SubmitError` that `getDemographics` throws, so
-  the page can tell 403 and 404 from the rest. The messages do not change. No identity value enters an error, as spec 025 D7 requires.
+- `apps/frontend/src/components/patients/GenomicDecisionControl.tsx`: hides "Record a decision" while held (B-D3 (b) only).
+  *As built:* it reads a context the page sets, instead of a prop passed through four profile components.
+- `apps/frontend/src/lib/patientIdentity.ts` (new, as built): the B-D2 wording, the B-D1 rule (`failsThePage`) and that context. The
+  `SubmitError` that `getDemographics` throws already carries the response status, so `patientDemographics.ts` is unchanged.
+- `apps/frontend/src/components/patients/IdentityUnknown.tsx` (new, as built): the warning and its Retry.
 - Tests (section 6), the clinical-validation note (B-D4), and one status fragment.
 
 ## 6. Verification
