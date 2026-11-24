@@ -80,11 +80,14 @@ running_image() {
 }
 
 # The reviewed one-flag transitions (fence-vars.mjs): same image, one canonical variable changed, one operation folder per attempt.
-flag_mode() { case "$1" in FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF) return 0 ;; *) return 1 ;; esac; }
-flag_folder() { case "$1" in FENCE-CLOSE|FENCE-OPEN) echo fences ;; ASSESSMENT-ON|ASSESSMENT-OFF) echo assessments ;; esac; }
-# The two that may only follow a finished, verified release: opening the medication fence, and switching the synthetic assessment on.
-# Closing and switching off never wait for anything: they are the way back.
-flag_needs_release() { [ "$1" = FENCE-OPEN ] || [ "$1" = ASSESSMENT-ON ]; }
+flag_mode() { case "$1" in FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF|SIGNER-KEYS-ON|SIGNER-KEYS-OFF) return 0 ;; *) return 1 ;; esac; }
+flag_folder() { case "$1" in FENCE-CLOSE|FENCE-OPEN) echo fences ;; ASSESSMENT-ON|ASSESSMENT-OFF) echo assessments ;; SIGNER-KEYS-ON|SIGNER-KEYS-OFF) echo signer-keys ;; esac; }
+# The three that may only follow a finished, verified release: opening the medication fence, switching the synthetic assessment on, and giving the
+# API the knowledge signers' public keys. Closing and switching off never wait for anything: they are the way back.
+flag_needs_release() { [ "$1" = FENCE-OPEN ] || [ "$1" = ASSESSMENT-ON ] || [ "$1" = SIGNER-KEYS-ON ]; }
+# Of those, the ones whose running image may carry a break-glass record with a written reason instead of a signature (founder, 2026-11-24 for the
+# signer keys, as for the assessment). The medication fence stays signature-only.
+flag_allows_break_glass() { [ "$1" = ASSESSMENT-ON ] || [ "$1" = SIGNER-KEYS-ON ]; }
 
 state_identity() { "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$HERE/plan-record.mjs" state; }
 

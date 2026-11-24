@@ -2,6 +2,7 @@
 // The reviewed one-flag transitions: each mode sets exactly one boolean variable, and nothing else in the file may change.
 //   FENCE-CLOSE / FENCE-OPEN         medication_writes_enabled = false / true
 //   ASSESSMENT-OFF / ASSESSMENT-ON   synthetic_assessment_enabled = false / true   (spec 032 S3, PR 3c-3a)
+//   SIGNER-KEYS-OFF / SIGNER-KEYS-ON knowledge_signer_keys_on_api = false / true   (spec 033-23 H1)
 import { readFileSync, writeFileSync } from 'node:fs';
 import { isMain } from '../is-main.mjs';
 
@@ -10,6 +11,8 @@ export const FLAGS = {
   'FENCE-OPEN': ['medication_writes_enabled', true],
   'ASSESSMENT-OFF': ['synthetic_assessment_enabled', false],
   'ASSESSMENT-ON': ['synthetic_assessment_enabled', true],
+  'SIGNER-KEYS-OFF': ['knowledge_signer_keys_on_api', false],
+  'SIGNER-KEYS-ON': ['knowledge_signer_keys_on_api', true],
 };
 export const FLAG_MODES = Object.keys(FLAGS);
 

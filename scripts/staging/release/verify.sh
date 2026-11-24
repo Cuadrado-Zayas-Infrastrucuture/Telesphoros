@@ -2,11 +2,12 @@
 # Read-only checks after an apply of a release onto running synthetic staging (spec 027, PR 3b). Founder-run. Writes nothing in AWS; safe to
 # run again (each run appends to the folder's verify.log). Needs API_BASE_URL in stack.env.
 #   scripts/staging/release/verify.sh IMAGE COMMIT
-#   scripts/staging/release/verify.sh ASSESSMENT-ON|ASSESSMENT-OFF|FENCE-CLOSE COMMIT OPERATION_ID
+#   scripts/staging/release/verify.sh ASSESSMENT-ON|ASSESSMENT-OFF|SIGNER-KEYS-ON|SIGNER-KEYS-OFF|FENCE-CLOSE COMMIT OPERATION_ID
 # The apply it follows must have exited 0, and its var file must still be current.tfvars: what is expected comes from that file, not from the
 # running task. Checks: both services steady with every running task on the image current.tfvars names; /ready and /health; no alarm in
 # ALARM; a ledger full check since the plan; the medication-fence observation judged by check-medication-fence-rollout.mjs (writes closed);
-# and the synthetic assessment settings present exactly when current.tfvars switches it on. Writes verify-ok.txt next to the apply only when
+# the synthetic assessment settings present exactly when current.tfvars switches it on; and the knowledge signers' public keys present exactly
+# when current.tfvars switches them on, each one the public key KMS holds for that signer (read-only). Writes verify-ok.txt next to the apply only when
 # every check passes, with the current.tfvars sha256 it verified (frontend.sh publishes only on that). A `hold` with task-not-stable or
 # deployment-not-complete right after an apply means "run it again in five minutes": old tasks can still be stopping.
 set -uo pipefail
@@ -15,9 +16,9 @@ umask 077
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 MODE="${1:-}"; COMMIT="${2:-}"; OPERATION="${3:-}"
 case "$MODE" in
-  IMAGE) T=i ;; ASSESSMENT-ON) T=ae ;; ASSESSMENT-OFF) T=ad ;; FENCE-CLOSE) T="fc" ;;
+  IMAGE) T=i ;; ASSESSMENT-ON) T=ae ;; ASSESSMENT-OFF) T=ad ;; SIGNER-KEYS-ON) T=ke ;; SIGNER-KEYS-OFF) T=kd ;; FENCE-CLOSE) T="fc" ;;
   FENCE-OPEN) die "verify.sh checks a closed medication fence only (check-medication-fence-rollout.mjs): tell Claude" ;;
-  *) die "usage: verify.sh IMAGE COMMIT, or verify.sh ASSESSMENT-ON|ASSESSMENT-OFF|FENCE-CLOSE COMMIT OPERATION_ID" ;;
+  *) die "usage: verify.sh IMAGE COMMIT, or verify.sh ASSESSMENT-ON|ASSESSMENT-OFF|SIGNER-KEYS-ON|SIGNER-KEYS-OFF|FENCE-CLOSE COMMIT OPERATION_ID" ;;
 esac
 release_folder "$COMMIT" || exit 1
 load_stack || exit 1
@@ -42,6 +43,7 @@ NEW=$(running_image) || exit 1
 if [ "$MODE" = IMAGE ]; then [ "$NEW" = "$(cat "$RELEASE_OUT/new_image.txt" 2>/dev/null)" ] || die "current.tfvars does not name this release's new image"; fi
 grep -Eq '^medication_writes_enabled[[:space:]]*=[[:space:]]*true' "$CURRENT" && die "current.tfvars opens medication writes: verify.sh checks a closed fence only; tell Claude"
 WANTSET=absent; grep -Eq '^synthetic_assessment_enabled[[:space:]]*=[[:space:]]*true' "$CURRENT" && WANTSET=present
+WANTKEYS=absent; grep -Eq '^knowledge_signer_keys_on_api[[:space:]]*=[[:space:]]*true' "$CURRENT" && WANTKEYS=present
 CL=$(tf_out api_cluster_name) || die "cannot read api_cluster_name"
 SINCE="$OUT/$T.tfplan"
 [ -f "$SINCE" ] || die "no $SINCE"
@@ -126,9 +128,49 @@ if ((c.environmentFiles ?? []).length) problems.push("an environment file could 
 console.log(problems.length ? problems.join("; ") : "   as expected"); process.exit(problems.length ? 1 : 0);
 ' "$PK/taskdef.json" "$WANTSET" || fail "the synthetic assessment settings are not as expected (above)"
 
+echo "== 7. Knowledge signer public keys in the API task definition (current.tfvars: $WANTKEYS)"
+# Switched on, each signer Terraform named must be in KNOWLEDGE_SIGNER_KEYS with exactly the public key KMS holds for that signer's key (read-only).
+KMSKEYS="$PK/signer-public-keys.json"
+printf '{}' > "$KMSKEYS"
+if [ "$WANTKEYS" = present ]; then
+  if ARNS=$("$TERRAFORM" -chdir="$TFDIR" output -json knowledge_signer_key_arns </dev/null 2>/dev/null) &&
+    PAIRS=$(printf '%s' "$ARNS" | node -e '
+const m = JSON.parse(require("fs").readFileSync(0, "utf8")), ok = /^[a-z0-9][a-z0-9-]{1,62}$/, arn = /^arn:aws:kms:us-east-2:[0-9]{12}:key\/[0-9a-f-]{36}$/;
+if (!m || typeof m !== "object" || Array.isArray(m) || Object.keys(m).length < 2 || !Object.entries(m).every(([id, a]) => ok.test(id) && arn.test(a))) process.exit(1);
+for (const [id, a] of Object.entries(m)) console.log(id + " " + a);'); then
+    while read -r ID KEY_ARN; do
+      [ -n "$ID" ] || continue
+      DER=$(aws kms get-public-key --key-id "$KEY_ARN" --query PublicKey --output text </dev/null) || { fail "cannot read the public key of signer $ID from KMS"; continue; }
+      node -e 'const f = require("fs"), [file, id, der] = process.argv.slice(1); const m = JSON.parse(f.readFileSync(file, "utf8")); m[id] = der; f.writeFileSync(file, JSON.stringify(m));' "$KMSKEYS" "$ID" "$DER" || fail "cannot record the public key of signer $ID"
+    done <<<"$PAIRS"
+  else
+    fail "cannot read knowledge_signer_key_arns (two or more signers, staging KMS keys) from Terraform"
+  fi
+fi
+node -e '
+const f = require("fs"), c = JSON.parse(f.readFileSync(process.argv[1], "utf8")).taskDefinition.containerDefinitions[0];
+const on = process.argv[2] === "present", kms = JSON.parse(f.readFileSync(process.argv[3], "utf8")), problems = [];
+const hits = (c.environment ?? []).filter((e) => e.name === "KNOWLEDGE_SIGNER_KEYS");
+const body = (pem) => typeof pem === "string" && /^-----BEGIN PUBLIC KEY-----\n[A-Za-z0-9+/=\n]+-----END PUBLIC KEY-----\n?$/.test(pem) ? pem.split("\n").filter((l) => l && !l.startsWith("-----")).join("") : null;
+if (!on && hits.length) problems.push("KNOWLEDGE_SIGNER_KEYS is set, but current.tfvars switches the signer keys off");
+if (on) {
+  let keys = null;
+  try { keys = hits.length === 1 ? JSON.parse(hits[0].value) : null; } catch { keys = null; }
+  if (!keys || typeof keys !== "object" || Array.isArray(keys)) problems.push("KNOWLEDGE_SIGNER_KEYS is not one map of signer id to public key");
+  else {
+    const want = Object.keys(kms).sort(), have = Object.keys(keys).sort();
+    if (want.length < 2 || JSON.stringify(want) !== JSON.stringify(have)) problems.push("the signers in KNOWLEDGE_SIGNER_KEYS are not the ones Terraform names");
+    for (const id of want) if (body(keys[id]) === null || body(keys[id]) !== kms[id]) problems.push("signer " + id + ": the API task does not carry the public key KMS holds");
+  }
+}
+if ((c.secrets ?? []).some((s) => s.name === "KNOWLEDGE_SIGNER_KEYS")) problems.push("KNOWLEDGE_SIGNER_KEYS is also a secret");
+if ((c.environmentFiles ?? []).length) problems.push("an environment file could override the signer keys");
+console.log(problems.length ? problems.join("; ") : "   as expected"); process.exit(problems.length ? 1 : 0);
+' "$PK/taskdef.json" "$WANTKEYS" "$KMSKEYS" || fail "the knowledge signer public keys are not as expected (above)"
+
 echo "== Result"
 if [ "$FAIL" = 0 ]; then
-  { echo "verified $(date -u +%Y-%m-%dT%H:%M:%SZ) $MODE${OPERATION:+ $OPERATION}"; echo "current $CURSHA"; echo "image $NEW"; echo "assessment $WANTSET"
+  { echo "verified $(date -u +%Y-%m-%dT%H:%M:%SZ) $MODE${OPERATION:+ $OPERATION}"; echo "current $CURSHA"; echo "image $NEW"; echo "assessment $WANTSET"; echo "signer keys $WANTKEYS"
     echo "fence $FENCE"; echo "ledger $LEDGER"; } > "$OUT/verify-ok.txt.tmp" && mv "$OUT/verify-ok.txt.tmp" "$OUT/verify-ok.txt"
   echo "ALL CHECKS PASSED: ${OUT#"$PRIVATE"/}/verify-ok.txt written."
 else

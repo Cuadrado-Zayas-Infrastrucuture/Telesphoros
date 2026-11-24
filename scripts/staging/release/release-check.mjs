@@ -7,6 +7,7 @@
 //            replaced. Everything else in the plan is for the founder's line-by-line read, which this check does not replace.
 //   FENCE-CLOSE / FENCE-OPEN keep one image, replace only the API task definition and move its service, changing only MEDICATION_WRITES.
 //   ASSESSMENT-ON / ASSESSMENT-OFF the same shape, changing only the two synthetic assessment settings (spec 032 S3, PR 3c-3a); fence-plan.mjs.
+//   SIGNER-KEYS-ON / SIGNER-KEYS-OFF the same shape, changing only KNOWLEDGE_SIGNER_KEYS, the signers' public keys (spec 033-23 H1); fence-plan.mjs.
 // Usage: node release-check.mjs MIGRATE|IMAGE|INFRA plan.json OLD_IMAGE NEW_IMAGE   (INFRA: NEW_IMAGE = OLD_IMAGE). Prints addresses, never values.
 import { flagProblems } from './fence-plan.mjs';
 import { FLAG_MODES } from './fence-vars.mjs';
@@ -43,7 +44,7 @@ export function problems(mode, plan, oldImage, newImage) {
   const out = [];
   const need = (ok, why) => { if (!ok) out.push(why); };
   const shape = SHAPES[mode];
-  if (!shape) return ['mode must be MIGRATE, IMAGE, INFRA, FENCE-CLOSE, FENCE-OPEN, ASSESSMENT-ON or ASSESSMENT-OFF'];
+  if (!shape) return ['mode must be MIGRATE, IMAGE, INFRA, FENCE-CLOSE, FENCE-OPEN, ASSESSMENT-ON, ASSESSMENT-OFF, SIGNER-KEYS-ON or SIGNER-KEYS-OFF'];
   if (!IMAGE_RE.test(oldImage ?? '') || !IMAGE_RE.test(newImage ?? '')) return ['OLD and NEW must be digest-pinned staging API images'];
   if (mode !== 'INFRA' && oldImage === newImage) return ['a MIGRATE or IMAGE plan needs two different images'];
   if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
@@ -85,7 +86,7 @@ export function problems(mode, plan, oldImage, newImage) {
 
 if (isMain(import.meta.url)) {
   const [mode, file, oldImage, newImage] = process.argv.slice(2);
-  if (!newImage) { console.error('usage: node release-check.mjs MIGRATE|IMAGE|INFRA|FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF plan.json OLD_IMAGE NEW_IMAGE'); process.exit(2); }
+  if (!newImage) { console.error('usage: node release-check.mjs MIGRATE|IMAGE|INFRA|FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF|SIGNER-KEYS-ON|SIGNER-KEYS-OFF plan.json OLD_IMAGE NEW_IMAGE'); process.exit(2); }
   let plan;
   try { plan = JSON.parse(readFileSync(file, 'utf8')); } catch { console.error('REFUSED: plan could not be read as JSON'); process.exit(1); }
   const found = problems(mode, plan, oldImage, newImage);
