@@ -46,7 +46,35 @@ The unit tests are in `apps/frontend/src/pages/PatientPage.test.tsx`, block "whe
 - **In the browser:** `apps/frontend/e2e/patient-identity-unknown.spec.ts` runs against the real in-memory e2e API, which answers 503 by
   itself. It runs at 375 and 1280 px, with no sideways scroll and no axe violation.
 
+### Defect injection (2026-11-24)
+
+The plan's section 6 asks that each rule be broken and a test be seen to fail. Each defect below was applied alone inside one sealed
+`opensandbox-pilot` job, the two test files were run, and the defect was reverted. After each revert the job's tree was back at its upload.
+No code change was kept.
+
+- **Commit tested:** `4a70ff08`, which is `main` at `7179c7ee` plus the restored test described under the table.
+- **Command, in `apps/frontend`:**
+  `node node_modules/vitest/vitest.mjs run src/pages/PatientPage.test.tsx src/components/patients/GenomicProfileSection.test.tsx`
+- **Baseline:** 65 of 65 tests passed (24 and 41). After the last revert: 65 of 65 again.
+
+| Defect | Tests that failed |
+| --- | --- |
+| 1. The patient and the demographics load in one `Promise.all` again, and any failure sets the page error | 6 in `PatientPage.test.tsx`: "on a 503, keeps the page up…", "never looks like "none recorded"…", "holds everything that records something…", "Retry reads the identity again…", "a network failure is the same as a 503", "has no accessibility violations while the identity is unknown" |
+| 2. An identity that could not be read is set to `none` instead of `unknown` | The same 6 |
+| 3. One hold dropped: medications `canWrite` no longer waits for the identity | 1: "holds everything that records something…" |
+| 4. The warning no longer names the label | 4: "on a 503, keeps the page up…", "Retry reads the identity again…", "a network failure is the same as a 503", "has no accessibility violations while the identity is unknown" |
+| 5. `GenomicDecisionControl.tsx` ignores the hold | 1 in `GenomicProfileSection.test.tsx`: "does not offer "Record a decision" while the patient page holds recording…" |
+
+**The test for defect 5 had been lost, and is restored.** The first run was on `main` at `7179c7ee`. There, defects 1 to 4 failed the same
+tests as above, and defect 5 left all 64 tests green. Its test merged with #454 (`bc2fd94`). A merge commit on the branch of #457
+(`6853c826`) dropped it, so `main` lacked it from `123d3774` on. The code was not affected. The same pull request that adds this record puts
+the test back with its text unchanged.
+
 ## What is not shown
+
+- No test checks that the patient page passes the hold on to the genomic profile. The test for the decision link supplies the hold itself.
+  A sixth defect, tried the same way on `4a70ff08`, made the page tell the profile that nothing is held. All 1,185 frontend unit tests
+  stayed green. The browser test does not look for the link either. No test was added: whether to add one is the founder's decision.
 
 - No test runs this against a real KMS outage. The 503 the page receives is the same response, and it comes from the in-memory store, not
   from KMS.
