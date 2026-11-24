@@ -1,6 +1,6 @@
 # Plan: spec 045, slice N4, a drug being considered that would change a gene's effect
 
-**Status**: **draft, for the founder's approval.** Plan only: no code. Read against `main` after PR #450, which completed spec 044 slice B.
+**Status**: **approved by the founder on 2026-11-24: N4-D1 and N4-D2 as recommended.** N4-D3, the wording, stays with P-D6: the code carries the draft text marked as awaiting the founders' signature. Read against `main` after PR #450, which completed spec 044 slice B.
 This is the slice the founder set aside on 2026-11-21 as N2-D1: "a later slice, with its own wording".
 
 ## The problem it solves
@@ -50,8 +50,7 @@ frontend ship in one pull request.
    lists the following, in name order, then RxCUI order:
    - every current, active medication (the same set as N2 rule 1) with a matching result that used G;
    - the checked drug itself (`self: true`) if its own matching results used G.
-3. **Nothing affected, no notice (N4-D1).** A notice whose `affected` would be empty is left out. Whether that is right is a decision
-   below.
+3. **Nothing affected, no notice (N4-D1).** A notice whose `affected` would be empty is left out.
 4. **A current medication with no matching result is never "affected".** `no-guideline-loaded` rows have no genes (as N2 rule 3).
 5. **Combination products are not split** (spec 039 D2): a `MIN` checked drug is a modifier only if the list names its own id, which an
    `IN`-only list never does.
@@ -77,10 +76,10 @@ glossary entry, as in N3.
 ## Decisions for the founders
 
 - **N4-D1. Show the notice only when something this patient takes is affected.**
-  - **Recommendation: yes.** A notice should matter to this patient, as N2 keeps to "only what the result rests on".
+  - **Decided 2026-11-24: yes.** A notice should matter to this patient, as N2 keeps to "only what the result rests on".
   - **The alternative:** always say "Fluvoxamine strongly lowers CYP2C19 activity", even when nothing current rests on CYP2C19.
 - **N4-D2. Rows of the current medications.**
-  - **Recommendation: no change to them.** The notice lives on the check, where the prescriber is looking. The affected medications are
+  - **Decided 2026-11-24: no change to them.** The notice lives on the check, where the prescriber is looking. The affected medications are
     named there in words.
   - **The alternative:** also mark each affected row while a drug is being checked.
 - **N4-D3. Wording.** The table above, and the Spanish later (P-D6).
