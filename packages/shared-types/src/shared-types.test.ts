@@ -236,6 +236,13 @@ describe('the evaluation list query', () => {
     expect(evaluationListQuerySchema.safeParse({ current: 'true' }).success).toBe(true);
     for (const current of ['false', '1', 'yes', true, 1]) expect(evaluationListQuerySchema.safeParse({ current }).success, String(current)).toBe(false);
   });
+
+  it('accepts disposition held or evaluated only, alone or with current (spec 049 W1)', () => {
+    expect(evaluationListQuerySchema.parse({ disposition: 'held', current: 'true' })).toEqual({ page: 1, pageSize: 20, disposition: 'held', current: 'true' });
+    expect(evaluationListQuerySchema.parse({ disposition: 'evaluated' })).toEqual({ page: 1, pageSize: 20, disposition: 'evaluated' });
+    for (const disposition of ['HELD', '', 'retracted', 'shown', ['held', 'evaluated'], true])
+      expect(evaluationListQuerySchema.safeParse({ disposition }).success, String(disposition)).toBe(false);
+  });
 });
 
 describe('patient identifiers and the patient link', () => {
