@@ -1,5 +1,5 @@
 import { type EvaluationSummaryDto, GENOMIC_CHECK_WORDS, genomicProfileDtoSchema } from '@telesphoros/shared-types';
-import { buildGenomicProfile, type ProfileEvaluation, type ProfileMedication } from './genomic-profile.builder';
+import { buildGenomicProfile, type ModifierLookup, type ProfileEvaluation, type ProfileMedication, type ProfileModifier } from './genomic-profile.builder';
 
 // Spec 044 slice A, rules 1 to 6 of plan-slice-a.md. Every expectation is written by hand from the inputs beside it. Synthetic data only: the
 // genes and drugs are invented (GENEA, GENEB) and the RxCUIs are numbers in the real form that name no drug in this test's meaning.
@@ -22,6 +22,7 @@ interface EvaluationSpec {
   createdAt?: string;
   genes?: Array<{ gene: string; phenotype?: string | null; activityScore?: string | null; state?: string; reasonCode?: string | null }>;
   results?: ResultSpec[];
+  scope?: string | null;
 }
 
 /** Only the fields the builder reads are meaningful; the rest are filled so the object has the DTO's shape. */
@@ -47,6 +48,7 @@ function evaluation(spec: EvaluationSpec): ProfileEvaluation {
     current: spec.current ?? true,
     state: spec.state ?? 'active',
     createdAt: spec.createdAt ?? '2026-11-01T00:00:00.000Z',
+    scope: spec.scope ?? null,
     advisory: {
       activeDisputes: 0,
       patientLink: spec.link ?? 'verified',
@@ -237,5 +239,157 @@ describe('the whole profile', () => {
     const profile = build([evaluation({ results: [{ outcome: 'held', rxcui: '555' }] })], [], '555');
     expect(profile.check).toMatchObject({ rxcui: '555', name: null, word: 'held' });
     expect(profile.medications).toEqual([]);
+  });
+});
+
+// Spec 045 N2, rules 1 to 7 of plan-slice-n2.md. The lists are invented: GENEA and GENEB are invented genes, and no drug here is said to affect a
+// real one. Every expected notice is written by hand.
+describe('spec 045 N2: a notice when a current medication is listed against a gene (phenoconversion, notice only)', () => {
+  const MODIFIER = '900';
+  const modifier = (gene: string, over: Partial<ProfileModifier> = {}): ProfileModifier => ({
+    gene,
+    effect: 'inhibitor',
+    strength: 'strong',
+    locator: { table: 'Synthetic Table 1', row: 'drugm' },
+    listId: 'syn-modifiers-a',
+    source: 'SYNTHETIC TEST FIXTURE',
+    sourceVersion: 'synthetic-1',
+    sourceUrl: 'https://example.invalid/synthetic',
+    ...over,
+  });
+  const lists =
+    (entries: Record<string, ProfileModifier[]>): ModifierLookup =>
+    (rxcui) =>
+      entries[rxcui] ?? [];
+  const usedGeneA = () =>
+    evaluation({
+      genes: [
+        { gene: 'GENEA', phenotype: 'Poor' },
+        { gene: 'GENEB', phenotype: 'Normal' },
+      ],
+      results: [{ outcome: 'shown', rxcui: '111', genes: ['GENEA'] }],
+    });
+  const withLists = (evaluations: ProfileEvaluation[], medications: ProfileMedication[], modifiersOf: ModifierLookup, checkRxcui?: string) =>
+    buildGenomicProfile({ patientId: PATIENT, evaluations, medications, checkRxcui, capped: false, modifiersOf });
+  const notice = {
+    kind: 'gene-modifier',
+    gene: 'GENEA',
+    medication: { rxcui: MODIFIER, name: 'drugm', startRecorded: true },
+    effect: 'inhibitor',
+    strength: 'strong',
+    source: {
+      listId: 'syn-modifiers-a',
+      source: 'SYNTHETIC TEST FIXTURE',
+      sourceVersion: 'synthetic-1',
+      sourceUrl: 'https://example.invalid/synthetic',
+      table: 'Synthetic Table 1',
+      row: 'drugm',
+    },
+  };
+
+  it('names a current modifier of a gene the result used, with its effect, strength, source and locator (rule 2, PN-7)', () => {
+    const medications = [medication('111', 'drugx'), medication(MODIFIER, 'drugm', { startMonth: '2026-01' })];
+    const profile = withLists([usedGeneA()], medications, lists({ [MODIFIER]: [modifier('GENEA')] }));
+    expect(profile.medications[0]!.contextNotices).toEqual([notice]);
+    expect(profile.modifierLists).toEqual({ loaded: true });
+    expect(() => genomicProfileDtoSchema.parse(profile)).not.toThrow();
+  });
+
+  it('gives no notice for a gene the result did not use, a stopped or earlier modifier, or a medication with only the same name (PN-2, PN-3)', () => {
+    const rowOf = (medications: ProfileMedication[], entries: Record<string, ProfileModifier[]>) =>
+      withLists([usedGeneA()], [medication('111', 'drugx'), ...medications], lists(entries)).medications[0]!.contextNotices;
+    // control: the same modifier, current and active, of the gene the result used
+    expect(rowOf([medication(MODIFIER, 'drugm')], { [MODIFIER]: [modifier('GENEA')] })).toHaveLength(1);
+    expect(rowOf([medication(MODIFIER, 'drugm')], { [MODIFIER]: [modifier('GENEB')] })).toEqual([]);
+    expect(rowOf([medication(MODIFIER, 'drugm', { status: 'stopped' })], { [MODIFIER]: [modifier('GENEA')] })).toEqual([]);
+    expect(rowOf([medication(MODIFIER, 'drugm', { current: false })], { [MODIFIER]: [modifier('GENEA')] })).toEqual([]);
+    expect(rowOf([medication('901', 'drugm')], { [MODIFIER]: [modifier('GENEA')] })).toEqual([]);
+  });
+
+  it('names the checked medication itself, an inducer as an inducer, and says when its start is not recorded (rules 2 and 6, N2-D2)', () => {
+    const inducer = modifier('GENEA', { effect: 'inducer', strength: 'moderate', locator: { table: 'Synthetic Table 2' } });
+    const profile = withLists([usedGeneA()], [medication('111', 'drugx')], lists({ '111': [inducer] }));
+    expect(profile.medications[0]!.contextNotices).toEqual([
+      {
+        ...notice,
+        medication: { rxcui: '111', name: 'drugx', startRecorded: false },
+        effect: 'inducer',
+        strength: 'moderate',
+        source: { ...notice.source, table: 'Synthetic Table 2', row: null },
+      },
+    ]);
+  });
+
+  it('says nothing on a row with no matching result, whatever the patient takes (rule 3)', () => {
+    const profile = withLists([usedGeneA()], [medication('222', 'drugy'), medication(MODIFIER, 'drugm')], lists({ [MODIFIER]: [modifier('GENEA')] }));
+    expect(profile.medications.map((m) => [m.rxcui, m.word, m.contextNotices])).toEqual([
+      ['222', 'no-guideline-loaded', []],
+      [MODIFIER, 'no-guideline-loaded', []],
+    ]);
+  });
+
+  it("puts a notice on a gene's card whether or not a result used the gene (rule 4)", () => {
+    const profile = withLists([usedGeneA()], [medication(MODIFIER, 'drugm', { startMonth: '2026-01' })], lists({ [MODIFIER]: [modifier('GENEB')] }));
+    expect(profile.genes.map((g) => [g.gene, g.contextNotices?.length])).toEqual([
+      ['GENEA', 0],
+      ['GENEB', 1],
+    ]);
+    expect(profile.genes[1]!.contextNotices![0]).toEqual({ ...notice, gene: 'GENEB' });
+  });
+
+  it('gives one notice per gene and medication, in gene order and then medication name order (rule 5)', () => {
+    const e = evaluation({ genes: [{ gene: 'GENEA', phenotype: 'Poor' }], results: [{ outcome: 'shown', rxcui: '111', genes: ['GENEA'] }] });
+    const twice = [modifier('GENEA'), modifier('GENEA', { listId: 'syn-modifiers-b' })];
+    const medications = [medication('111', 'drugx'), medication('902', 'zeta'), medication('903', 'alpha'), medication('903', 'alpha')];
+    const profile = withLists([e], medications, lists({ '902': [modifier('GENEA')], '903': twice }));
+    expect(profile.medications[0]!.contextNotices!.map((n) => [n.gene, n.medication.name, n.source.listId])).toEqual([
+      ['GENEA', 'alpha', 'syn-modifiers-a'],
+      ['GENEA', 'zeta', 'syn-modifiers-a'],
+    ]);
+  });
+
+  it('carries notices on a drug checked before prescribing', () => {
+    const profile = withLists([usedGeneA()], [medication(MODIFIER, 'drugm', { startMonth: '2026-01' })], lists({ [MODIFIER]: [modifier('GENEA')] }), '111');
+    expect(profile.check!.contextNotices).toEqual([notice]);
+  });
+
+  it('changes nothing else: the response with lists equals the one without, once the notices are removed (PN-4)', () => {
+    const evaluations = [usedGeneA()];
+    const medications = [medication('111', 'drugx'), medication(MODIFIER, 'drugm')];
+    function strip(value: unknown): unknown {
+      if (Array.isArray(value)) return value.map(strip);
+      if (value === null || typeof value !== 'object') return value;
+      const kept = Object.entries(value).filter(([key]) => key !== 'contextNotices' && key !== 'modifierLists');
+      return Object.fromEntries(kept.map(([key, inner]) => [key, strip(inner)]));
+    }
+    const before = buildGenomicProfile({ patientId: PATIENT, evaluations, medications, checkRxcui: '111', capped: false });
+    const after = withLists(evaluations, medications, lists({ [MODIFIER]: [modifier('GENEA'), modifier('GENEB')] }), '111');
+    expect(after.medications[0]!.contextNotices).toHaveLength(1);
+    expect(strip(after)).toEqual(strip(before));
+  });
+
+  it('with no list loaded, carries no notice anywhere and says so (rule 7, PN-6)', () => {
+    const profile = build([usedGeneA()], [medication('111', 'drugx'), medication(MODIFIER, 'drugm')], '111');
+    expect(profile.modifierLists).toEqual({ loaded: false });
+    for (const item of [...profile.genes, ...profile.medications, profile.check!]) expect(item).not.toHaveProperty('contextNotices');
+  });
+
+  it('never reassures (PN-5)', () => {
+    const profile = withLists([usedGeneA()], [medication('111', 'drugx'), medication(MODIFIER, 'drugm')], lists({ [MODIFIER]: [modifier('GENEA')] }), '111');
+    expect(JSON.stringify(profile)).not.toMatch(/\b(safe|no interaction|not affected|normal response|ok)\b/i);
+  });
+});
+
+describe("slice B part 2 (B2-D5): each matching result carries its evaluation's scope, unchanged", () => {
+  it('copies the scope of the evaluation each result came from, null included, and changes nothing else', () => {
+    const signed = evaluation({ scope: 'synthetic-patient-signed-knowledge', results: [{ outcome: 'shown', rxcui: '111' }] });
+    const plain = evaluation({ scope: null, results: [{ outcome: 'held', rxcui: '111' }] });
+    const check = build([signed, plain], [medication('111')]).medications[0]!;
+    const byOutcome = Object.fromEntries(check.results.map((r) => [r.outcome, r.scope]));
+    expect(byOutcome).toEqual({ shown: 'synthetic-patient-signed-knowledge', held: null });
+    // control: the rest of the row is what it was without a scope
+    const unscoped = build([evaluation({ results: [{ outcome: 'shown', rxcui: '111' }] }), evaluation({ results: [{ outcome: 'held', rxcui: '111' }] })], [medication('111')]);
+    expect(check.word).toBe(unscoped.medications[0]!.word);
+    expect(check.results.map((r) => r.outcome).sort()).toEqual(unscoped.medications[0]!.results.map((r) => r.outcome).sort());
   });
 });

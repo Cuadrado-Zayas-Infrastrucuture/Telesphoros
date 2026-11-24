@@ -6,6 +6,7 @@ import {
   copyOf,
   readJson,
   REAL_KNOWLEDGE_DIR,
+  REPO_ROOT,
   reviewedCopyOf,
   signerKeysJson,
   SYNTHETIC_DIR,
@@ -17,7 +18,7 @@ import type { GuidelineFile } from '@telesphoros/cpic-schema';
 import { GetPublicKeyCommand, SignCommand } from '@aws-sdk/client-kms';
 import { generateKeyPairSync, sign as signRaw, type KeyObject } from 'node:crypto';
 import { checkSignatures, parseSignerKeys } from './signatures';
-import { rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 
 afterAll(cleanupTempDirs);
 
@@ -200,5 +201,28 @@ describe('knowledge CLI: signatures', () => {
     const signer = TEST_SIGNERS[0]!;
     expect(await run(signArgs(synthetic), {}, { kms: () => stubKms(signer.privateKey, signer.publicKey) })).toEqual({ code: 1, text: 'Synthetic content can never be signed.' });
     expect((await run(['sign', synthetic, '--key-id', 'test-signer-a'])).code).toBe(2);
+  });
+});
+
+describe('knowledge CLI: gene modifier lists (spec 045 N1)', () => {
+  const MODIFIERS_DIR = join(REPO_ROOT, 'data/fixtures/knowledge/synthetic-modifiers');
+
+  it('verify-modifiers passes for the fixtures outside production, fails for them in production, and needs --dir', async () => {
+    const ok = await run(['verify-modifiers', '--dir', MODIFIERS_DIR]);
+    expect(ok.code).toBe(0);
+    expect(ok.text).toMatch(/^OK \(non-production\): 2 gene modifier lists, set [0-9a-f]{64}$/);
+    const refused = await run(['verify-modifiers', '--dir', MODIFIERS_DIR, '--production']);
+    expect(refused.code).toBe(1);
+    expect(refused.text).toContain('syn-modifiers-a.json: synthetic test content is not allowed in production.');
+    expect((await run(['verify-modifiers'])).code).toBe(2);
+  });
+
+  it('hash prints exactly the hash the loader checks for a gene modifier list, and sign reads one (and refuses it, being synthetic)', async () => {
+    const path = join(MODIFIERS_DIR, 'syn-modifiers-a.json');
+    expect(await run(['hash', path])).toEqual({ code: 0, text: contentSha256(JSON.parse(await readFile(path, 'utf8'))) });
+    expect(await run(['sign', path, '--key-id', 'test-signer-a', '--kms-key', 'arn:aws:kms:us-east-1:000000000000:key/test'])).toEqual({
+      code: 1,
+      text: 'Synthetic content can never be signed.',
+    });
   });
 });

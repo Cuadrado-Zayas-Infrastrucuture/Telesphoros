@@ -6,6 +6,7 @@ Workspace packages: code the apps import, with two exceptions that are run inste
 | --- | --- | --- | --- |
 | [`shared-types`](shared-types) | API contracts, roles and the patient, report and evaluation types | backend, frontend, smart-pilot | `src/index.ts` |
 | [`cpic-schema`](cpic-schema) | Schemas and vocabulary for the knowledge and the phenotype and recommendation engines. The real schema source: `knowledge/schemas` is an empty placeholder | backend, ai-service | `src/` |
+| [`help-content`](help-content) | Reviewed help content shared by the screens and the help assistant: the glossary first (spec 044 slice B part 2). Plain data and its schema, read from source | frontend | `src/glossary.en.json` |
 | [`jobs`](jobs) | Queue, backoff, runner and shutdown primitives | backend, worker, ai-service | `src/index.ts` |
 | [`fake-idp`](fake-idp) | A test-only identity provider. **Never deploy it, and never point production at it** | backend and frontend tests | `src/` |
 | [`smart-pilot`](smart-pilot) | A local, synthetic-only SMART/FHIR rehearsal with its own entry (`src/start.ts`), tests and UI. The package you run rather than import | nothing | `src/start.ts` |

@@ -71,8 +71,9 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     vi.stubGlobal('location', { ...window.location, hostname: '127.0.0.1' });
     try {
       open('/settings', ['clinician']);
+      // Recents loads on its own and may already show its rows: compare only the destinations above it, as linkNames() does.
+      expect(await linkNames()).toEqual(['New chat', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
       const nav = await primary();
-      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['New chat', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {
       vi.unstubAllGlobals();

@@ -38,6 +38,7 @@ export const EVENT_TYPE_FOR_TABLE = {
   structured_report_revisions: 'structured-report-revision',
   structured_finding_reviews: 'structured-finding-review',
   structured_source_resolutions: 'structured-source-resolution',
+  patient_followup_closure_acks: 'patient-followup-closure-ack',
 } as const;
 export type RecordTable = keyof typeof EVENT_TYPE_FOR_TABLE;
 export const RECORD_TABLES = Object.keys(EVENT_TYPE_FOR_TABLE) as RecordTable[];

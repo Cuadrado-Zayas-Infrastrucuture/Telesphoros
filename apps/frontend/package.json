@@ -24,6 +24,7 @@
     "@radix-ui/react-slot": "^1.5.0",
     "@radix-ui/react-tooltip": "^1.4.1",
     "@telesphoros/cpic-schema": "workspace:*",
+    "@telesphoros/help-content": "workspace:*",
     "@telesphoros/shared-types": "workspace:*",
     "ai": "7.0.145",
     "class-variance-authority": "^0.7.1",

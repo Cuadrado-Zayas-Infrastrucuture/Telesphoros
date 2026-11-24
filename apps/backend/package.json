@@ -23,7 +23,8 @@
     "knowledge:hash": "node dist/services/knowledge/cli.js hash",
     "knowledge:locate": "node dist/services/knowledge/cli.js locate",
     "knowledge:diff": "node dist/services/knowledge/cli.js diff",
-    "knowledge:sign": "node dist/services/knowledge/cli.js sign"
+    "knowledge:sign": "node dist/services/knowledge/cli.js sign",
+    "knowledge:verify-modifiers": "node dist/services/knowledge/cli.js verify-modifiers"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.1153.0",

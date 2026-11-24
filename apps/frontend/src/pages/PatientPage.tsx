@@ -3,10 +3,11 @@ import { PatientClinicalSections } from '@/components/patients/PatientClinicalSe
 import { Link, useParams } from 'react-router-dom';
 import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
-import { WRITER_ROLES } from '@/auth/roles';
+import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { BackToChatLink } from '@/components/layout/BackToChatLink';
 import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { DemographicsSection } from '@/components/patients/DemographicsSection';
+import { GenomicProfileSection } from '@/components/patients/GenomicProfileSection';
 import { MedicationsSection } from '@/components/patients/MedicationsSection';
 import { Button } from '@/components/ui/Button';
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
@@ -26,6 +27,7 @@ export default function PatientPage() {
   const { id = '' } = useParams();
   const { apiFetch, roles } = useAuth();
   const canWrite = roles.some((role) => WRITER_ROLES.includes(role));
+  const canReadClinical = roles.some((role) => CLINICAL_READ_ROLES.includes(role));
   const [patient, setPatient] = useState<PatientDto | null>(null);
   const [read, setRead] = useState<DemographicsRead | null>(null);
   const [version, setVersion] = useState<number | undefined>(undefined);
@@ -112,6 +114,8 @@ export default function PatientPage() {
             {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}
             {read.kind === 'found' && version === undefined && <PatientBanner value={read.value} />}
           </div>
+          {/* Spec 044 slice B (decision B-D1): what the patient's genomic results mean for their medications comes first, under the banner. */}
+          {canReadClinical && <GenomicProfileSection key={`genomic-${id}`} patientId={id} />}
           <DemographicsSection patientId={id} read={read} version={version} canWrite={canWrite} onViewVersion={view} onSaved={reload} />
           <MedicationsSection key={id} patientId={id} canWrite={roles.includes('clinician')} />
         </div>

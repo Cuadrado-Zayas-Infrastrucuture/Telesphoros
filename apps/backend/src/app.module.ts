@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { SecurityAuditInterceptor } from './auth/security-audit.interceptor';
 import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
+import { GeneModifiersModule } from './gene-modifiers/gene-modifiers.module';
 import { HealthModule } from './health/health.module';
 import { LabReportsModule } from './lab-reports/lab-reports.module';
 import { LedgerModule } from './ledger/ledger.module';
@@ -25,6 +26,7 @@ import { PatientsModule } from './patients/patients.module';
 import { ReportsModule } from './reports/reports.module';
 import { StorageModule } from './storage/storage.module';
 import { UsageModule } from './usage/usage.module';
+import { AccessReviewModule } from './access-review/access-review.module';
 
 @Module({})
 export class AppModule {
@@ -44,6 +46,7 @@ export class AppModule {
         StorageModule.register(env),
         ObjectStorageModule.register(env, recovery),
         LabReportsModule,
+        GeneModifiersModule,
         PatientsModule,
         PatientDemographicsModule,
         PatientMedicationsModule,
@@ -56,6 +59,7 @@ export class AppModule {
         MeModule,
         MembersModule,
         UsageModule,
+        AccessReviewModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

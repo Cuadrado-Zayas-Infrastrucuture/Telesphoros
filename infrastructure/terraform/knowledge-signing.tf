@@ -23,6 +23,19 @@ variable "knowledge_signers" {
   }
 }
 
+# The keys and the API's copy of their public halves go out in two releases, because no release plan may do both (scripts/staging/release/release-check.mjs):
+# an INFRA plan may create the keys but never changes a task definition, and an IMAGE plan replaces the task definitions but never creates a key. So the
+# keys come first with this off; it is turned on in the next IMAGE release, whose new task definitions then carry KNOWLEDGE_SIGNER_KEYS.
+variable "knowledge_signer_keys_on_api" {
+  description = "Give the API task KNOWLEDGE_SIGNER_KEYS, the named signers' public keys. Off by default: turn it on in the IMAGE release after the INFRA plan that created the keys."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.knowledge_signer_keys_on_api || length(var.knowledge_signers) > 0
+    error_message = "knowledge_signer_keys_on_api needs the signers named in knowledge_signers, and their keys created, first."
+  }
+}
+
 data "aws_iam_policy_document" "knowledge_signer_key" {
   for_each = var.knowledge_signers
   statement {
@@ -68,6 +81,10 @@ resource "aws_kms_key" "knowledge_signer" {
   key_usage                = "SIGN_VERIFY"
   deletion_window_in_days  = local.kms_deletion_days
   policy                   = data.aws_iam_policy_document.knowledge_signer_key[each.key].json
+
+  # A key policy that names a role AWS does not know yet is refused, so when knowledge_signers names a signing role made in the same plan
+  # (knowledge-signer-people.tf), the key waits for it.
+  depends_on = [aws_iam_role.knowledge_signer_person]
 }
 
 resource "aws_kms_alias" "knowledge_signer" {
@@ -82,10 +99,11 @@ data "aws_kms_public_key" "knowledge_signer" {
 }
 
 locals {
-  # Public keys only: KNOWLEDGE_SIGNER_KEYS is not a secret. Absent while no signer is named, so the API then refuses any signed real file.
-  knowledge_signer_environment = length(var.knowledge_signers) == 0 ? {} : {
+  # Public keys only: KNOWLEDGE_SIGNER_KEYS is not a secret. Absent while no signer is named or the switch is off, so the API then refuses any signed real
+  # file.
+  knowledge_signer_environment = var.knowledge_signer_keys_on_api && length(var.knowledge_signers) > 0 ? {
     KNOWLEDGE_SIGNER_KEYS = jsonencode({ for id, key in data.aws_kms_public_key.knowledge_signer : id => key.public_key_pem })
-  }
+  } : {}
 }
 
 output "knowledge_signer_key_arns" {

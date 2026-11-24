@@ -8,6 +8,7 @@
     ],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
@@ -32,6 +33,9 @@
       ],
       "@telesphoros/cpic-schema/vocabulary": [
         "../../packages/cpic-schema/src/vocabulary.ts"
+      ],
+      "@telesphoros/help-content": [
+        "../../packages/help-content/src/index.ts"
       ]
     }
   },

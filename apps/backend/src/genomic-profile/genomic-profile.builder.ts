@@ -1,5 +1,6 @@
 import {
   CLINICAL_USE,
+  type ContextNotice,
   type EvaluationSummaryDto,
   type GenomicCheck,
   type GenomicCheckResult,
@@ -26,7 +27,24 @@ export interface ProfileMedication {
   name: string;
   status: 'active' | 'stopped';
   current: boolean;
+  /** Spec 045 D4: a modifier with no recorded start is named with that said. Absent reads as not recorded. */
+  startMonth?: string | null;
 }
+
+/** Spec 045 N1: what a loaded gene modifier list says about one ingredient and gene (`GeneModifier`, read through its fields only). */
+export interface ProfileModifier {
+  gene: string;
+  effect: 'inhibitor' | 'inducer';
+  strength: 'strong' | 'moderate';
+  locator: { table: string; row?: string };
+  listId: string;
+  source: string;
+  sourceVersion: string;
+  sourceUrl: string;
+}
+
+/** The loaded lists, looked up by exact RxNorm id (PN-3). Undefined while none is loaded (PN-6). */
+export type ModifierLookup = (rxcui: string) => readonly ProfileModifier[];
 
 export interface ProfileInput {
   patientId: string;
@@ -35,6 +53,8 @@ export interface ProfileInput {
   /** `?rxcui=`, or undefined. */
   checkRxcui?: string;
   capped: boolean;
+  /** Spec 045 N2: the loaded gene modifier lists; undefined when none is loaded. */
+  modifiersOf?: ModifierLookup;
 }
 
 /** Rule 1: current, active and verified. Only these feed the profile and the checks. */
@@ -115,6 +135,8 @@ function checkOf(rxcui: string, name: string | null, evaluations: readonly Profi
           implication: result.implication,
           citation: result.citation,
           genes: result.genes,
+          // B2-D5: the evaluation's stored scope, unchanged, for the signed-knowledge label (K2c).
+          scope: evaluation.scope,
         },
       });
     }
@@ -129,16 +151,74 @@ function checkOf(rxcui: string, name: string | null, evaluations: readonly Profi
   return { rxcui, name, word, knowledgeChanged, conflict, results };
 }
 
+/**
+ * Spec 045 N2, rules 2, 4 and 5 of plan-slice-n2.md: one notice for every gene asked about and every current, active medication a loaded list
+ * names against it, by exact RxNorm id, in gene order and then medication name order. A medication recorded twice gives one notice.
+ */
+function noticesFor(genes: Iterable<string>, active: readonly ProfileMedication[], modifiersOf: ModifierLookup): ContextNotice[] {
+  const medications = [...active].sort((a, b) => byText(a.name, b.name) || byText(a.rxcui, b.rxcui));
+  const notices: ContextNotice[] = [];
+  const seen = new Set<string>();
+  for (const gene of [...new Set(genes)].sort(byText)) {
+    for (const medication of medications) {
+      for (const modifier of modifiersOf(medication.rxcui)) {
+        const key = `${gene}\0${medication.rxcui}`;
+        if (modifier.gene !== gene || seen.has(key)) continue;
+        seen.add(key);
+        notices.push({
+          kind: 'gene-modifier',
+          gene,
+          medication: { rxcui: medication.rxcui, name: medication.name, startRecorded: Boolean(medication.startMonth) },
+          effect: modifier.effect,
+          strength: modifier.strength,
+          source: {
+            listId: modifier.listId,
+            source: modifier.source,
+            sourceVersion: modifier.sourceVersion,
+            sourceUrl: modifier.sourceUrl,
+            table: modifier.locator.table,
+            row: modifier.locator.row ?? null,
+          },
+        });
+      }
+    }
+  }
+  return notices;
+}
+
 export function buildGenomicProfile(input: ProfileInput): GenomicProfileDto {
   const used = input.evaluations.filter((e) => usable(e.evaluation));
   const genes = genesOf(used);
-  return {
+  // Rule 1: only current, active medications are modifiers (D4, P-D3); a stopped one never is.
+  const active = input.medications.filter((m) => m.current && m.status === 'active');
+  const medications = active.map((m) => checkOf(m.rxcui, m.name, used, genes));
+  const check = input.checkRxcui === undefined ? null : checkOf(input.checkRxcui, null, used, genes);
+  const profile: GenomicProfileDto = {
     patientId: input.patientId,
     clinicalUse: CLINICAL_USE,
     capped: input.capped,
     genes,
     awaitingLinkReview: input.evaluations.filter((e) => awaitingLink(e.evaluation)).map((e) => ({ evaluationId: e.evaluation.id, reportId: e.evaluation.reportId })),
-    medications: input.medications.filter((m) => m.current && m.status === 'active').map((m) => checkOf(m.rxcui, m.name, used, genes)),
-    check: input.checkRxcui === undefined ? null : checkOf(input.checkRxcui, null, used, genes),
+    medications,
+    check,
+  };
+  const { modifiersOf } = input;
+  // Rule 7 (PN-6): with no list loaded, nothing is added but the flag that says so.
+  if (!modifiersOf) return { ...profile, modifierLists: { loaded: false } };
+  // Rules 2 and 3: a check's notices come from the genes its matching results used, so a check with no result has none. Rule 4: a card's from its gene.
+  const withNotices = (c: GenomicCheck): GenomicCheck => ({
+    ...c,
+    contextNotices: noticesFor(
+      c.results.flatMap((r) => r.genes),
+      active,
+      modifiersOf,
+    ),
+  });
+  return {
+    ...profile,
+    genes: genes.map((gene) => ({ ...gene, contextNotices: noticesFor([gene.gene], active, modifiersOf) })),
+    medications: medications.map(withNotices),
+    check: check === null ? null : withNotices(check),
+    modifierLists: { loaded: true },
   };
 }

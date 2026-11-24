@@ -41,7 +41,7 @@ function verificationWords(state: string): { word: string; caution: boolean } {
   }
 }
 
-function httpsOnly(value: string | undefined): string | null {
+export function httpsOnly(value: string | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);

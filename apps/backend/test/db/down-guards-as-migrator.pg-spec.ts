@@ -930,6 +930,76 @@ describe('patient follow-ups down guard as the non-superuser migrator', () => {
   });
 });
 
+describe('follow-up closure acknowledgements down guard as the non-superuser migrator (spec 047)', () => {
+  it('refuses populated acknowledgements despite FORCE RLS and reverses the empty migration to the event types before it', async () => {
+    const f = await fixture();
+    const above = revertAbove('followup_closure_acks');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const seeded = await seedLabReport(f.admin, tenant);
+      await withAdmin(f.admin, (c) =>
+        c.query(
+          "INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,'SYN-ack-assignee','active',ARRAY['clinician'],'synthetic-test'),($1,'SYN-ack-colleague','active',ARRAY['clinician'],'synthetic-test')",
+          [tenant],
+        ),
+      );
+      const ledger = new PostgresLedgerRecordsRepository(connection);
+      const medications = new PostgresPatientMedicationsRepository(connection, ledger);
+      const medication = await medications.insertVersion(tenant, 'SYN-ack-assignee', {
+        id: randomUUID(),
+        entryId: randomUUID(),
+        patientId: seeded.patientId,
+        name: 'syn-ingredient',
+        requestHash: 'a'.repeat(64),
+        input: { requestId: randomUUID(), rxcui: '991001', listVersion: 'a'.repeat(64), status: 'active', startMonth: null, stopMonth: null, source: 'clinician-entered' },
+      });
+      const records = new PostgresPatientFollowupsRepository(connection, ledger);
+      const base = { medicationId: medication.id, decisionId: null, assessment: null } as const;
+      const saved = await records.record(tenant, 'SYN-ack-assignee', seeded.patientId, {
+        ...base,
+        requestId: randomUUID(),
+        action: 'schedule',
+        note: 'Synthetic follow-up',
+        next: { date: '2026-01-01', timezone: 'America/Puerto_Rico', assignee: 'SYN-ack-assignee' },
+      });
+      const dismissed = await records.record(tenant, 'SYN-ack-colleague', seeded.patientId, {
+        ...base,
+        requestId: randomUUID(),
+        action: 'dismiss',
+        threadId: saved.threadId,
+        expectedVersion: 1,
+        note: 'Synthetic: covered',
+        next: null,
+      });
+      await records.acknowledge(tenant, 'SYN-ack-assignee', saved.threadId, { requestId: randomUUID(), followupId: dismissed.id });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM patient_followup_closure_acks')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated follow-up closure acknowledgements/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='patient_followup_closure_acks'")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role=replica');
+        await c.query('DELETE FROM patient_followup_closure_acks');
+        await c.query("DELETE FROM ledger_events WHERE event_type='patient-followup-closure-ack'");
+        await c.query('COMMIT');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0076']);
+      expect((await f.migrator.query("SELECT to_regclass('patient_followup_closure_acks') AS name")).rows).toEqual([{ name: null }]);
+      const fn = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(fn).toContain('patient_followups');
+      expect(fn).not.toContain('patient_followup_closure_acks');
+      const types = (await f.migrator.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname='ledger_events_type_valid'")).rows[0].def;
+      expect(types).toContain('patient-followup');
+      expect(types).not.toContain('patient-followup-closure-ack');
+      // 0076 comes back first, then every migration this test reverted above it (none while 0076 was the newest).
+      expect(await migrateUp(f.migrator)).toEqual(['0076', ...[...above.reverted].reverse()]);
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+});
+
 describe('structured revisions down guard as the non-superuser migrator', () => {
   it('sees populated evidence behind FORCE RLS and reverses only an empty migration', async () => {
     const f = await fixture();

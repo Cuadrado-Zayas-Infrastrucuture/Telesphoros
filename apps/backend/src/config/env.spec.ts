@@ -209,6 +209,54 @@ describe('loadEnv', () => {
       });
     });
 
+    describe('the gene modifier lists (spec 045 N1)', () => {
+      const withLists = {
+        ...production,
+        SYNTHETIC_ASSESSMENT: 'enabled',
+        SYNTHETIC_KNOWLEDGE_DIR: '/synthetic',
+        BUILD_VERSION: 'sha256-abcdef012345',
+        KNOWLEDGE_SIGNER_KEYS: '{}',
+        GENE_MODIFIERS_DIR: '/gene-modifiers',
+      };
+
+      it('is unset by default, and accepted with signer keys and the assessment on (control for each refusal below)', () => {
+        expect(loadEnv(production).GENE_MODIFIERS_DIR).toBeUndefined();
+        expect(loadEnv(withLists).GENE_MODIFIERS_DIR).toBe('/gene-modifiers');
+      });
+
+      it('needs the signer keys, because the lists load under the production rules', () => {
+        expect(() => loadEnv({ ...withLists, KNOWLEDGE_SIGNER_KEYS: undefined })).toThrow(/GENE_MODIFIERS_DIR.*needs KNOWLEDGE_SIGNER_KEYS/);
+      });
+
+      it('is refused while neither the assessment nor the pipeline is on, since nothing could read it', () => {
+        const off = { ...production, KNOWLEDGE_SIGNER_KEYS: '{}', GENE_MODIFIERS_DIR: '/gene-modifiers' };
+        expect(() => loadEnv(off)).toThrow(/GENE_MODIFIERS_DIR.*can only be set when SYNTHETIC_ASSESSMENT=enabled or LAB_REPORT_PIPELINE=enabled/);
+      });
+
+      it('must be its own directory, never the knowledge the assessment or the pipeline reads, however the path is written', () => {
+        for (const same of ['/synthetic', '/synthetic/', '/gene-modifiers/../synthetic']) {
+          expect(() => loadEnv({ ...withLists, GENE_MODIFIERS_DIR: same })).toThrow(/GENE_MODIFIERS_DIR.*must be its own directory, not SYNTHETIC_KNOWLEDGE_DIR/);
+        }
+        const pipeline = {
+          ...base,
+          STORAGE_DRIVER: 'postgres',
+          DATABASE_URL: 'postgres://app@db/app',
+          LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app',
+          LAB_REPORT_PIPELINE: 'enabled',
+          LAB_REPORT_FIXTURES_DIR: '/f',
+          KNOWLEDGE_DIR: '/k',
+          BUILD_VERSION: 'b1',
+          KNOWLEDGE_SIGNER_KEYS: '{}',
+          GENE_MODIFIERS_DIR: '/gene-modifiers',
+        };
+        const signed = { ...withLists, ASSESSMENT_KNOWLEDGE: 'signed', SIGNED_KNOWLEDGE_DIR: '/signed' };
+        expect(loadEnv(signed).GENE_MODIFIERS_DIR).toBe('/gene-modifiers');
+        expect(() => loadEnv({ ...signed, GENE_MODIFIERS_DIR: '/signed' })).toThrow(/GENE_MODIFIERS_DIR.*must be its own directory, not SIGNED_KNOWLEDGE_DIR/);
+        expect(loadEnv(pipeline).GENE_MODIFIERS_DIR).toBe('/gene-modifiers');
+        expect(() => loadEnv({ ...pipeline, GENE_MODIFIERS_DIR: '/k' })).toThrow(/GENE_MODIFIERS_DIR.*must be its own directory, not KNOWLEDGE_DIR/);
+      });
+    });
+
     it.each([
       ['the shared-secret verifier', { AUTH_VERIFIER: 'hmac', JWT_SECRET: 'x'.repeat(40) }, /AUTH_VERIFIER/],
       ["an issuer override (it could point at an attacker's keys)", { COGNITO_ISSUER: 'https://evil.example.com' }, /COGNITO_ISSUER/],
