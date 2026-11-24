@@ -33,6 +33,16 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 4. The image, unsigned under break-glass ([image-push.md](image-push.md)): write the reason, one line, to
    `~/telesphoros-private/releases/COMMIT/break-glass-reason.txt`, then `image.sh BUILD COMMIT`. It needs CI's image job green on COMMIT,
    builds and rehearses in `<clone>-release-<commit8>`, waits for ECR's scan, and writes `verified-image.json`, then `new_image.txt` last.
+   Before it builds anything, the clinical review gate (spec 048, `clinical-review.mjs`) compares COMMIT with the commit of the image that
+   runs (`image.commit` in `staging-expected.json`, whose digest must be the one ECS runs). With no change under the clinical paths it
+   writes `clinical-review.json` itself and goes on. Otherwise it stops and lists the changed files, until `releases/COMMIT/clinical-review.json` holds either:
+   - **Kevin's review:** he writes the bytes with `node scripts/staging/release/clinical-review.mjs message BASE COMMIT > review.msg`, signs
+     them with `aws kms sign --key-id alias/telesphoros-staging-knowledge-signer-kevin --message fileb://review.msg --message-type RAW
+     --signing-algorithm ECDSA_SHA_256 --query Signature --output text`, and the record is
+     `clinical-review.mjs record CLONE BASE COMMIT SIGNATURE > clinical-review.json`; or
+   - **the founder's exception, staging only:** `clinical-review.mjs exception CLONE BASE COMMIT "one line, 10 to 300 characters"`. The gate
+     prints `EXCEPTION`, and the record says so in git (step 7). Until Kevin's KMS key exists (`knowledge_signers`), this is the only way a
+     release with a clinical change goes out.
 5. `plan.sh MIGRATE COMMIT`, read it, `apply.sh MIGRATE COMMIT SHA256`. Then `plan.sh IMAGE COMMIT` and read it **before migrating**: it needs
    only the MIGRATE apply, and `migrate.sh` refuses to start without this release's IMAGE plan, recorded (so it passed the release check) and
    still matching the stack. Then `migrate.sh MIGRATE COMMIT`, only while nobody uses staging: it checks the pending migrations, the idle
@@ -51,6 +61,8 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 6c. `state-backup.sh BACKUP COMMIT` (three passphrase prompts), then the Drive copy and its round trip.
 7. `staging-status.sh` again, then update `docs/ops/staging-expected.json` and [environments.md](environments.md) in one pull request.
    Its `newestMigration` is what the next release's `migrate.sh` counts from: until that pull request merges, the next migration step refuses.
+   The same pull request copies `releases/COMMIT/clinical-review.json` to `docs/ops/clinical-reviews/COMMIT.json`, so every release's
+   review, exception or "no clinical change" is in git.
 8. `claim.sh release NAME`.
 
 Every plan is read as text before its apply. The checks refuse shapes; they do not approve a plan.
