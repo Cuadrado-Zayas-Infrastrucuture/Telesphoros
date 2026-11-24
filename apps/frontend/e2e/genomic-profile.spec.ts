@@ -94,8 +94,10 @@ async function openProfile(page: Page, colorScheme: 'light' | 'dark') {
     (url) => url.pathname === `/api/v1/patients/${patient.id}/genomic-profile`,
     (route) => fulfil(route, 200, profileFor(patient.id)),
   );
-  // The e2e API does not serve demographics, and the patient page stops at its own error without them: answer as the API does for a patient
-  // with none recorded yet.
+  // The e2e API runs on the in-memory store, which by design has no demographics: they are ledgered records (spec 025 D5), the ledger exists only
+  // on PostgreSQL, so the route answers 503 (UnavailablePatientDemographicsRepository, storage.module.ts). No setting in playwright.config.ts changes
+  // that. The patient page stops at its own error without them, so answer as the PostgreSQL API does for a patient with none recorded yet.
+  // The real route is browser-tested on PostgreSQL in storage-e2e/patient-demographics.spec.ts (the nightly e2e-storage suite).
   await page.route(
     (url) => url.pathname === `/api/v1/patients/${patient.id}/demographics`,
     (route) => fulfil(route, 404, { error: { code: 'not-found', message: 'No demographics are recorded.', details: [{ reason: 'no-demographics' }] } }),
