@@ -23,11 +23,12 @@ variable "knowledge_signers" {
   }
 }
 
-# The keys and the API's copy of their public halves go out in two releases, because no release plan may do both (scripts/staging/release/release-check.mjs):
+# The keys and the API's copy of their public halves go out in two plans, because no release plan may do both (scripts/staging/release/release-check.mjs):
 # an INFRA plan may create the keys but never changes a task definition, and an IMAGE plan replaces the task definitions but never creates a key. So the
-# keys come first with this off; it is turned on in the next IMAGE release, whose new task definitions then carry KNOWLEDGE_SIGNER_KEYS.
+# keys come first with this off; then the one-flag release mode SIGNER-KEYS-ON (scripts/staging/release/fence-plan.mjs) turns it on, on the running image,
+# and the API task's new revision carries KNOWLEDGE_SIGNER_KEYS. SIGNER-KEYS-OFF takes them away again.
 variable "knowledge_signer_keys_on_api" {
-  description = "Give the API task KNOWLEDGE_SIGNER_KEYS, the named signers' public keys. Off by default: turn it on in the IMAGE release after the INFRA plan that created the keys."
+  description = "Give the API task KNOWLEDGE_SIGNER_KEYS, the named signers' public keys. Off by default: turn it on with the SIGNER-KEYS-ON release mode after the INFRA plan that created the keys."
   type        = bool
   default     = false
   validation {

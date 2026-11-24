@@ -1,20 +1,26 @@
 // Narrow configuration-only plans. Existing MIGRATE/IMAGE/INFRA shapes are not changed.
-// One engine for the reviewed one-flag transitions (fence-vars.mjs): the medication fence and, since spec 032 S3 PR 3c-3a, the synthetic assessment.
-// Both keep one image, replace only the API task definition and move its service in place; they differ in WHICH environment settings may change.
+// One engine for the reviewed one-flag transitions (fence-vars.mjs): the medication fence, since spec 032 S3 PR 3c-3a the synthetic assessment, and
+// since spec 033-23 H1 the knowledge signers' public keys. All keep one image, replace only the API task definition and move its service in place;
+// they differ in WHICH environment settings may change.
 import { canonical, harmlessDrift } from './plan-drift.mjs';
 import { FLAG_MODES } from './fence-vars.mjs';
 
 /** What ASSESSMENT-ON installs in the API task and ASSESSMENT-OFF removes: exactly what api-compute.tf writes (its guard reads this constant). */
 export const ASSESSMENT_SETTINGS = { SYNTHETIC_ASSESSMENT: 'enabled', SYNTHETIC_KNOWLEDGE_DIR: '/app/synthetic-knowledge' };
+/** What SIGNER-KEYS-ON installs and SIGNER-KEYS-OFF removes: knowledge-signing.tf's jsonencode of signer id => public key PEM (its guard reads this). */
+export const SIGNER_KEYS_SETTING = 'KNOWLEDGE_SIGNER_KEYS';
 const FAMILIES = {
   medication: { word: 'fence', what: 'medication setting', variable: 'medication_writes_enabled', names: ['MEDICATION_WRITES'] },
   assessment: { word: 'assessment', what: 'assessment settings', variable: 'synthetic_assessment_enabled', names: Object.keys(ASSESSMENT_SETTINGS) },
+  signerKeys: { word: 'signer keys', what: 'signer public keys', variable: 'knowledge_signer_keys_on_api', names: [SIGNER_KEYS_SETTING] },
 };
 const MODES = {
   'FENCE-CLOSE': { family: FAMILIES.medication, on: false },
   'FENCE-OPEN': { family: FAMILIES.medication, on: true },
   'ASSESSMENT-OFF': { family: FAMILIES.assessment, on: false },
   'ASSESSMENT-ON': { family: FAMILIES.assessment, on: true },
+  'SIGNER-KEYS-OFF': { family: FAMILIES.signerKeys, on: false },
+  'SIGNER-KEYS-ON': { family: FAMILIES.signerKeys, on: true },
 };
 if (canonical(Object.keys(MODES).sort()) !== canonical([...FLAG_MODES].sort())) throw new Error('fence-plan.mjs and fence-vars.mjs disagree about the one-flag modes');
 
@@ -48,8 +54,32 @@ function definition(value, names) {
     container_definitions: [{ ...container, portMappings: ports, environment: remaining }] }) };
 }
 
-/** Whether the API task's settings make the requested transition: the medication flag (enabled/disabled), or the assessment's two settings (both or neither). */
-function transitionOk({ family, on }, before, after) {
+// A public key as aws_kms_public_key writes it: base64 lines between the PUBLIC KEY markers, and nothing after the end marker.
+const PUBLIC_KEY_PEM = /^-----BEGIN PUBLIC KEY-----\n(?:[A-Za-z0-9+/=]{1,64}\n){1,64}-----END PUBLIC KEY-----\n?$/;
+/** The sorted signer ids of a well-formed KNOWLEDGE_SIGNER_KEYS (at least two signers, one distinct public key each), or null. */
+function signerIds(value) {
+  if (typeof value !== 'string') return null;
+  let keys;
+  try { keys = JSON.parse(value); } catch { return null; }
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return null;
+  const entries = Object.entries(keys);
+  if (entries.length < 2 || !entries.every(([id, pem]) => /^[a-z0-9][a-z0-9-]{1,62}$/.test(id) && typeof pem === 'string' && PUBLIC_KEY_PEM.test(pem))) return null;
+  if (new Set(entries.map(([, pem]) => pem)).size !== entries.length) return null;
+  return entries.map(([id]) => id).sort();
+}
+
+/** Whether the API task's settings make the requested transition: the medication flag (enabled/disabled), the assessment's two settings (both or
+ * neither), or the signer keys: switching on gives a task that had none one key per signer the plan names; switching off removes well-formed keys
+ * whatever signers are named now, because it is the way back. */
+function transitionOk({ family, on }, before, after, signers) {
+  if (family === FAMILIES.signerKeys) {
+    const was = before.settings[SIGNER_KEYS_SETTING];
+    const now = after.settings[SIGNER_KEYS_SETTING];
+    if (!on) return signerIds(was) !== null && now === undefined;
+    const named = signers && typeof signers === 'object' && !Array.isArray(signers) ? Object.keys(signers).sort() : null;
+    const carried = signerIds(now);
+    return was === undefined && named !== null && carried !== null && canonical(carried) === canonical(named);
+  }
   if (family === FAMILIES.medication) {
     const was = before.settings.MEDICATION_WRITES;
     return after.settings.MEDICATION_WRITES === (on ? 'enabled' : 'disabled') && (on ? was === 'disabled' : was === undefined || was === 'enabled');
@@ -85,7 +115,7 @@ export function flagProblems(mode, plan, oldImage, newImage) {
     const after = definition(task.change.after, spec.family.names);
     need(before.image === oldImage && after.image === oldImage, `${w} task images must remain unchanged`);
     need(canonical(before.normal) === canonical(after.normal), `${w} task definition changes beyond the ${spec.family.what}`);
-    need(transitionOk(spec, before, after), `${w} task setting must make the requested transition`);
+    need(transitionOk(spec, before, after, variable('knowledge_signers')), `${w} task setting must make the requested transition`);
     need(computed.every((key) => task.change.after_unknown?.[key] !== true || task.change.after[key] == null) && task.change.after_unknown?.arn === true && unknowns(task.change.after_unknown).every((key) => computed.includes(key) || providerComputed(key)), `${w} task has unexpected unknown attributes`);
     need(off(task.change.before.enable_fault_injection) && (task.change.after_unknown?.enable_fault_injection === true ? task.change.after.enable_fault_injection == null : off(task.change.after.enable_fault_injection)),
       `${w} task must keep fault injection off`);
