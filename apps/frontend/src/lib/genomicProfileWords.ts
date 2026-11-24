@@ -1,6 +1,6 @@
 import { REASON_MESSAGES, REVIEWER_ACTIONS, RETIRED_REASON_CODES, type ReasonCode } from '@telesphoros/cpic-schema/vocabulary';
 import type { GlossaryEntry } from '@telesphoros/help-content';
-import type { ContextNotice, GenomicCheck, GenomicCheckResult, GenomicCheckWord, GenomicGene, GenomicProfileDto } from '@telesphoros/shared-types';
+import type { CandidateNotice, ContextNotice, GenomicCheck, GenomicCheckResult, GenomicCheckWord, GenomicGene, GenomicProfileDto } from '@telesphoros/shared-types';
 
 /**
  * Spec 044 slice B: every fixed string of the genomic profile screen, in one place, so the founders can rewrite and sign them (G3) without
@@ -175,12 +175,12 @@ export function noticeSentence(notice: ContextNotice, place: 'row' | 'card', che
 }
 
 /** The evidence: the source's own terms, "Paroxetine: listed as a strong inhibitor of CYP2D6." */
-export function noticeTerm(notice: ContextNotice): string {
-  return `${sentenceStart(notice.medication.name)}: listed as a ${notice.strength} ${notice.effect} of ${notice.gene}.`;
+export function noticeTerm(name: string, notice: Pick<ContextNotice, 'strength' | 'effect' | 'gene'>): string {
+  return `${sentenceStart(name)}: listed as a ${notice.strength} ${notice.effect} of ${notice.gene}.`;
 }
 
 /** Where the list says it (PN-7): "Source: [source], version [v], [table], row [r]." */
-export function noticeSourceLine(notice: ContextNotice): string {
+export function noticeSourceLine(notice: { source: ContextNotice['source'] }): string {
   const { source, sourceVersion, table, row } = notice.source;
   return `Source: ${[source, `version ${sourceVersion}`, table, row === null ? null : `row ${row}`].filter(Boolean).join(', ')}.`;
 }
@@ -214,3 +214,49 @@ export const DECISION_WORDS = {
   recordHere: 'Record a decision on this result',
   off: 'Decisions are not switched on in this environment.',
 } as const;
+
+/** One line of a row's notice evidence: who is listed, and the list's own terms and source (N3, N4). */
+export interface NoticeEvidence {
+  key: string;
+  name: string;
+  notice: Pick<ContextNotice, 'gene' | 'effect' | 'strength' | 'source'>;
+}
+
+/** A row's notice evidence: the current medications listed against its genes (N3), then the checked drug itself when it is listed (N4). */
+export function noticeEvidenceOf(check: Pick<GenomicCheck, 'contextNotices' | 'candidateNotices'>, name: string): NoticeEvidence[] {
+  const current = (check.contextNotices ?? []).map((notice) => ({ key: `${notice.gene}-${notice.medication.rxcui}`, name: notice.medication.name, notice }));
+  const candidate = (check.candidateNotices ?? []).map((notice) => ({ key: `candidate-${notice.gene}`, name, notice }));
+  return [...current, ...candidate];
+}
+
+/**
+ * Spec 045 N4: the words of the notice that the drug being checked would change a gene other guidance rests on. **Draft wording, from
+ * plan-slice-n4.md, awaiting the founders' signature (P-D6).** Everyday verbs, as in N3; the source's own terms are in the evidence.
+ */
+export const CANDIDATE_WORDS = {
+  lead: 'Starting this medication can change other guidance.',
+} as const;
+
+/** "drugx", "drugx and drugy", "drugx, drugy and drugz". */
+function namesList(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * "Fluvoxamine strongly lowers CYP2C19 activity. The guidance for clopidogrel, which this patient takes, is based on CYP2C19 and does not take
+ * this into account." Then, when the checked drug's own guidance rests on the gene too, a sentence that says so.
+ */
+export function candidateSentence(notice: CandidateNotice, name: string): string {
+  const { gene } = notice;
+  const others = notice.affected.filter((item) => !item.self).map((item) => item.name ?? item.rxcui);
+  const sentences = [`${sentenceStart(name)} ${NOTICE_ADVERBS[notice.strength]} ${NOTICE_VERBS[notice.effect]} ${gene} activity.`];
+  if (others.length > 0) {
+    sentences.push(`The guidance for ${namesList(others)}, which this patient takes, is based on ${gene} and does not take this into account.`);
+  }
+  if (notice.affected.some((item) => item.self)) {
+    const either = others.length > 0 ? ' as well, and does not take this into account either.' : ' and does not take this into account.';
+    sentences.push(`Its own guidance above is based on ${gene}${either}`);
+  }
+  return sentences.join(' ');
+}

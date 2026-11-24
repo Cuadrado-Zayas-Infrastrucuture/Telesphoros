@@ -1,5 +1,6 @@
 import {
   CLINICAL_USE,
+  type CandidateNotice,
   type ContextNotice,
   type EvaluationSummaryDto,
   type GenomicCheck,
@@ -186,6 +187,44 @@ function noticesFor(genes: Iterable<string>, active: readonly ProfileMedication[
   return notices;
 }
 
+/**
+ * Spec 045 N4: the drug being considered (`?rxcui=`) as a modifier of genes this patient's guidance rests on. One notice per listed gene, naming
+ * the current medications whose matching results used it, then the checked drug itself when its own did (rules 2 and 4). A notice with nothing
+ * affected is left out (N4-D1), and a drug the patient already takes gets none: its effect is N2's notice on the rows (rule 8).
+ */
+function candidateNoticesFor(check: GenomicCheck, medications: readonly GenomicCheck[], modifiersOf: ModifierLookup): CandidateNotice[] {
+  if (medications.some((m) => m.rxcui === check.rxcui)) return [];
+  const notices: CandidateNotice[] = [];
+  const seen = new Set<string>();
+  for (const modifier of modifiersOf(check.rxcui)) {
+    if (seen.has(modifier.gene)) continue;
+    seen.add(modifier.gene);
+    const usesGene = (c: GenomicCheck) => c.results.some((r) => r.genes.includes(modifier.gene));
+    const others = new Map(medications.filter(usesGene).map((m) => [m.rxcui, m.name ?? m.rxcui] as const));
+    const affected: CandidateNotice['affected'] = [...others]
+      .sort(([rxcuiA, nameA], [rxcuiB, nameB]) => byText(nameA, nameB) || byText(rxcuiA, rxcuiB))
+      .map(([rxcui, name]) => ({ rxcui, name, self: false }));
+    if (usesGene(check)) affected.push({ rxcui: check.rxcui, name: check.name, self: true });
+    if (affected.length === 0) continue;
+    notices.push({
+      kind: 'candidate-modifier',
+      gene: modifier.gene,
+      effect: modifier.effect,
+      strength: modifier.strength,
+      affected,
+      source: {
+        listId: modifier.listId,
+        source: modifier.source,
+        sourceVersion: modifier.sourceVersion,
+        sourceUrl: modifier.sourceUrl,
+        table: modifier.locator.table,
+        row: modifier.locator.row ?? null,
+      },
+    });
+  }
+  return notices.sort((a, b) => byText(a.gene, b.gene));
+}
+
 export function buildGenomicProfile(input: ProfileInput): GenomicProfileDto {
   const used = input.evaluations.filter((e) => usable(e.evaluation));
   const genes = genesOf(used);
@@ -218,7 +257,7 @@ export function buildGenomicProfile(input: ProfileInput): GenomicProfileDto {
     ...profile,
     genes: genes.map((gene) => ({ ...gene, contextNotices: noticesFor([gene.gene], active, modifiersOf) })),
     medications: medications.map(withNotices),
-    check: check === null ? null : withNotices(check),
+    check: check === null ? null : { ...withNotices(check), candidateNotices: candidateNoticesFor(check, medications, modifiersOf) },
     modifierLists: { loaded: true },
   };
 }
