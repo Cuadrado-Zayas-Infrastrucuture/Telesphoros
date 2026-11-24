@@ -16,5 +16,5 @@ The panel reads no patient data and sends or stores nothing typed. It comes in t
 - **H2:** the panel.
 - **H3:** topic counts, later if H-D3 says so.
 
-Six decisions, H-D1 to H-D6, wait on the founder. H-D1 and H-D2 are the direction plan's F2 and F3. No code, route, setting, migration or
+The founder approved H-D1 to H-D6 as recommended on 2026-11-24. H-D1 and H-D2 answer the direction plan's F2 and F3. No code, route, setting, migration or
 knowledge change.

@@ -4,8 +4,8 @@
 
 **Created**: 2026-11-24
 
-**Status**: **draft, awaiting the founder's approval of H-D1 to H-D6 (section 8). Specification only: no code, route, setting, migration
-or knowledge change.** It carries out slice A3 of [the pharmacist-first direction plan](../../docs/design/plans/pharmacist-first-product-direction.md):
+**Status**: **approved by the founder on 2026-11-24: H-D1 to H-D6 as recommended (section 8). Specification only: no code, route,
+setting, migration or knowledge change.** It carries out slice A3 of [the pharmacist-first direction plan](../../docs/design/plans/pharmacist-first-product-direction.md):
 decisions N3 ("chat is the product's help assistant … never the clinical interface") and N4 ("curated answers first, no model"). It answers
 the plan's open decisions F2 (who writes the help) and F3 (which policies it may quote) as H-D1 and H-D2. A model is slice A4 and is not here.
 
@@ -117,27 +117,27 @@ be answered. It can over-refuse, but it is never the only safeguard, because no 
 
 ## 8. Decisions for the founder
 
-- **H-D1 (F2). Who writes the articles.**
+- **H-D1 (F2). Who writes the articles.** **Decided 2026-11-24: as recommended.**
   - **Recommended:** I draft the English articles and the refusal sentence in plain words. They ship as `draft`, and the panel shows
     "Draft: not yet reviewed by a pharmacist." on each. You rewrite and sign them. The founders write the Spanish (spec 050), and nothing
     is machine translated. This is how the glossary was done (B2-D2).
   - **Alternative:** the panel ships with no articles until you write them, and shows only the glossary.
-- **H-D2 (F3). Which policies it may quote.**
+- **H-D2 (F3). Which policies it may quote.** **Decided 2026-11-24: as recommended.**
   - **Recommended:** none until you and counsel publish them. The "where the policies are" article says they are not yet published, and
     the draft privacy policy is never quoted.
   - **Alternative:** quote the draft, marked as a draft.
-- **H-D3. Counting what people ask.** The direction plan wants topic counts as the proof of concept's evidence.
+- **H-D3. Counting what people ask.** The direction plan wants topic counts as the proof of concept's evidence. **Decided 2026-11-24: as recommended.**
   - **Recommended:** a later slice, H3. It needs a write route, a table and a privacy review of its own, and the usability sessions (F5)
     can judge the panel first.
   - **Alternative:** in A3 now.
-- **H-D4. Where Help opens.**
+- **H-D4. Where Help opens.** **Decided 2026-11-24: as recommended.**
   - **Recommended:** a Help button in the sidebar on every signed-in page, opening the side drawer, which also holds the glossary.
   - **Alternative:** a floating button in a corner of every page.
-- **H-D5. The chat.**
+- **H-D5. The chat.** **Decided 2026-11-24: as recommended.**
   - **Recommended:** unchanged in A3. It still attaches reports, and retiring it is its own slice once attaching has a home outside the
     chat (spec 049 noted that attach still lives there).
   - **Alternative:** send the chat's typed questions to Help now, which would end "Questions cannot be answered here."
-- **H-D6. The patient-question rule.**
+- **H-D6. The patient-question rule.** **Decided 2026-11-24: as recommended.**
   - **Recommended:** as section 5, refusing before searching, with a must-refuse list and a must-answer list as its tests.
   - **Alternative:** no rule, relying on the articles saying nothing about a patient.
 
