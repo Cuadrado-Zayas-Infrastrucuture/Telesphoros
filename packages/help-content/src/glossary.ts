@@ -7,13 +7,13 @@ import glossaryEn from './glossary.en.json';
  * two pharmacists have reviewed it and are named, with the date, in `signedBy`; the screen says which it is. This is a recorded sign-off,
  * not a cryptographic signature (B2-D1).
  */
-const signerSchema = z.strictObject({
+export const signerSchema = z.strictObject({
   name: z.string().min(1),
   role: z.string().min(1),
   date: z.iso.date(),
 });
 
-function signersMatchStatus(entry: { status: 'draft' | 'signed'; signedBy: readonly unknown[] }): boolean {
+export function signersMatchStatus(entry: { status: 'draft' | 'signed'; signedBy: readonly unknown[] }): boolean {
   return entry.status === 'signed' ? entry.signedBy.length >= 2 : entry.signedBy.length === 0;
 }
 
