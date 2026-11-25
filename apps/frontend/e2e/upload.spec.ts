@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { signInWithPatient, signOutFromSidebar, waitPastSignOutSecond } from './helpers';
+import { signInAs, signInWithPatient, signOutFromSidebar, waitPastSignOutSecond } from './helpers';
 
 const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
@@ -290,4 +290,37 @@ for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata 
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem('telesphoros.upload-recovery.v1'))).toBeNull();
+});
+
+test('searches all patients beyond page 1 on the upload page and keeps the chosen patient after clearing search (spec 040 slice C)', async ({ page }) => {
+  const me = page.waitForResponse(response => response.url().endsWith('/api/v1/me'));
+  await signInAs(page, 'alice', '/reports/upload');
+  const authenticated = await me;
+  const api = new URL(authenticated.url()).origin;
+  const headers = { Authorization: authenticated.request().headers().authorization! };
+  const prefix = `SYN-${crypto.randomUUID().slice(0, 8)}`;
+  const created: { id: string; label: string }[] = [];
+  for (let index = 0; index < 25; index++) {
+    const res = await page.request.post(`${api}/api/v1/patients`, { headers, data: { label: `${prefix}-${index}` } });
+    expect(res.status()).toBe(201);
+    created.push(await res.json() as { id: string; label: string });
+  }
+  const target = created[24]!;
+  await page.getByRole('button', { name: 'Refresh patients' }).click();
+  await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+  await expect(page.getByRole('option', { name: target.label, exact: true })).toHaveCount(0);
+
+  const searchField = page.getByRole('textbox', { name: 'Find a patient' });
+  await searchField.fill(target.label);
+  await searchField.press('Enter');
+  await expect(page.getByText('Searched all patients: 1 match.')).toBeVisible();
+  const picker = page.getByLabel(/synthetic patient \(required\)/i);
+  await expect(picker.getByRole('option', { name: target.label, exact: true })).toHaveCount(1);
+  await picker.selectOption(target.id);
+  await page.getByRole('button', { name: 'Clear patient search' }).click();
+  await expect(picker).toHaveValue(target.id);
+
+  await fill(page, target.id, 'structured', 'searched.json', REPORT);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
 });

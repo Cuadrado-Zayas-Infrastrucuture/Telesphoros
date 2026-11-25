@@ -25,6 +25,7 @@ import { NativeSelect } from '@/components/ui/NativeSelect';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { PatientPicker } from '@/components/PatientPicker';
 import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
+import { PatientSearchField } from '@/components/patients/PatientSearchField';
 import { AddPatientPanel } from '@/components/upload/AddPatientPanel';
 import { PatientPaging } from '@/components/upload/PatientPaging';
 import { UploadReceived } from '@/components/upload/UploadReceived';
@@ -32,6 +33,7 @@ import { UploadSummary } from '@/components/upload/UploadSummary';
 import { useAddPatient } from '@/hooks/useAddPatient';
 import { useInterruptedUpload } from '@/hooks/useInterruptedUpload';
 import { usePatientPages } from '@/hooks/usePatientPages';
+import { usePatientSearch } from '@/hooks/usePatientSearch';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { describeSize } from '@/lib/describeSize';
 import { incompleteness } from '@/lib/demographicsDraft';
@@ -72,6 +74,7 @@ export default function UploadReportPage() {
     [],
   );
   const { patients, loading: patientsLoading, error: patientError, requestedPage, load: loadPatients } = usePatientPages();
+  const { state: patientSearch, search: searchAllPatients, more: moreMatches, reset: resetPatientSearch } = usePatientSearch();
   const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
 
   const [serverError, setServerError] = useState<string | null>(null);
@@ -106,8 +109,14 @@ export default function UploadReportPage() {
     form.setFocus('patientId');
   }, [patientsLoading, form]);
   // The list row of the chosen patient carries `demographicsComplete`; a just-created patient gets it once the page reloads.
+  const foundPatients = patientSearch.status === 'found' ? patientSearch.patients : null;
+  const pickerPatients = foundPatients ?? patients?.data ?? null;
   const chosenPatientId = useWatch({ control: form.control, name: 'patientId' });
-  const chosenRow = patients?.data.find((patient) => patient.id === chosenPatientId);
+  const chosenRow = chosenPatientId
+    ? (pickerPatients?.find((patient) => patient.id === chosenPatientId) ??
+      patients?.data.find((patient) => patient.id === chosenPatientId) ??
+      (selectedPatient?.id === chosenPatientId ? selectedPatient : undefined))
+    : undefined;
 
   async function addPatient() {
     setAdded(null);
@@ -210,6 +219,7 @@ export default function UploadReportPage() {
     progress.current = {};
     setCanStartOver(true);
     setSelectedPatient(null);
+    resetPatientSearch();
     setStep(0);
     form.reset(emptyValues);
     setReference(null);
@@ -302,6 +312,9 @@ export default function UploadReportPage() {
                     <legend className="sr-only">Report details</legend>
 
                     <div hidden={guided && step !== 0} className={guided && step !== 0 ? 'hidden' : 'flex flex-col gap-2'}>
+                      {((patients && patients.meta.total > 0) || patientSearch.status !== 'idle') && (
+                        <PatientSearchField state={patientSearch} onSearch={searchAllPatients} onMore={moreMatches} onReset={resetPatientSearch} disabled={isSubmitting} />
+                      )}
                       <FormField
                         control={form.control}
                         name="patientId"
@@ -311,16 +324,24 @@ export default function UploadReportPage() {
                             <FormControl>
                               <PatientPicker
                                 {...field}
-                                patients={patients?.data ?? null}
+                                patients={pickerPatients}
                                 selectedPatient={selectedPatient}
-                                loading={patientsLoading}
-                                error={patientError}
-                                emptyMessage="No patients yet. Add a synthetic patient to continue."
+                                loading={foundPatients ? false : patientsLoading}
+                                error={foundPatients ? null : patientError}
+                                emptyMessage={foundPatients ? 'No matching patients.' : 'No patients yet. Add a synthetic patient to continue.'}
                                 disabled={isSubmitting}
                                 onRetry={() => loadPatients(requestedPage)}
                                 onValueChange={(id) => {
                                   field.onChange(id);
-                                  setSelectedPatient(patients?.data.find((patient) => patient.id === id) ?? null);
+                                  if (!id) {
+                                    setSelectedPatient(null);
+                                    return;
+                                  }
+                                  setSelectedPatient(
+                                    pickerPatients?.find((patient) => patient.id === id) ??
+                                      patients?.data.find((patient) => patient.id === id) ??
+                                      (selectedPatient?.id === id ? selectedPatient : null),
+                                  );
                                 }}
                               />
                             </FormControl>
@@ -338,7 +359,7 @@ export default function UploadReportPage() {
                         )}
                       />
 
-                      <PatientPaging patients={patients} loading={patientsLoading} error={patientError} busy={isSubmitting} onPage={loadPatients} />
+                      {!foundPatients && <PatientPaging patients={patients} loading={patientsLoading} error={patientError} busy={isSubmitting} onPage={loadPatients} />}
                       {added && (
                         <p role="status" className="text-sm text-muted-foreground">
                           {added}

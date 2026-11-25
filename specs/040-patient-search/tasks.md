@@ -63,4 +63,18 @@ Written 2026-11-25 from the plan, after slice A merged (#390). P2: nothing runs 
 
 ## Slice C: the two pickers (after slice B's PR)
 
-- [ ] C1 to C4, written from the plan when slice B is merged.
+Written 2026-11-25 from the approved plan, after slice B merged.
+
+- [x] C1 `PatientSearchField` (`apps/frontend/src/components/patients/PatientSearchField.tsx`): reusable search input, "Search all patients"
+  button (Enter searches without submitting any outer form), local refusal message with 0 requests, status sentence, "More matches" paging,
+  Clear action, and inline error with Retry, wired to `usePatientSearch`.
+- [x] C2 `WorkspaceConversation.tsx` (PS-11, PS-12): mounts `PatientSearchField` above `PatientPicker`; passes matches while a 200 search
+  holds; keeps `selectedPatient` selectable across non-matching searches and after clearing a search-selected patient; `PatientPicker.tsx`
+  unchanged.
+- [x] C3 `UploadReportPage.tsx` (PS-11, PS-12): mounts `PatientSearchField` above `PatientPicker` inside the upload form without interfering
+  with outer form submission; passes matches while a 200 search holds; keeps `selectedPatient` selectable across non-matching searches and
+  after clearing a search-selected patient; hides `PatientPaging` while matches hold; `PatientPicker.tsx` unchanged.
+- [x] C4 Tests: `PatientSearchField.test.tsx`, `WorkspaceConversationSearch.test.tsx`, `UploadReportPageSearch.test.tsx` (failing-before
+  and passing-after covering 200, fallback + Retry on 400/403/429/500/network/malformed, local refusal with 0 requests, PS-12 abort/stale
+  drop, Enter not submitting outer form, clearing, and `selectedPatient` survival); `PatientPicker.test.tsx` unchanged and passing; 1
+  synthetic search case each in `e2e/upload.spec.ts` and `e2e/upload-navigation.spec.ts`.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
+import type { PatientDto } from '@telesphoros/shared-types';
 import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
@@ -7,7 +8,9 @@ import { PromptInput } from '@/components/prompt-kit/PromptInput';
 import { PromptInputTextarea } from '@/components/prompt-kit/PromptInputTextarea';
 import { SystemMessage } from '@/components/prompt-kit/SystemMessage';
 import { PatientPicker } from '@/components/PatientPicker';
+import { PatientSearchField } from '@/components/patients/PatientSearchField';
 import { Input } from '@/components/ui/Input';
+import { usePatientSearch } from '@/hooks/usePatientSearch';
 import { useRemovedAttachment } from '@/hooks/useRemovedAttachment';
 import { useWorkspacePatients } from '@/hooks/useWorkspacePatients';
 import { ConversationEntries, type Entry, type UploadEntry } from '@/components/workspace/ConversationEntries';
@@ -42,11 +45,13 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
   const { roles, apiFetch, recoverySession, preferredName } = useAuth();
   const canAttach = roles.some((role) => WRITER_ROLES.includes(role));
   const { patients, loading: patientsLoading, error: patientsError, hasMore: morePatients, loadMore: loadPatients } = useWorkspacePatients(canAttach);
+  const { state: patientSearch, search: searchAllPatients, more: moreMatches, reset: resetPatientSearch } = usePatientSearch();
   const [file, setFile] = useState<File | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const attachment = useRemovedAttachment();
   // The patient is always the clinician's own choice (specs/038 D2): never the first one the list happened to load.
   const [patientId, setPatientId] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
   const [synthetic, setSynthetic] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -77,7 +82,14 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     [],
   );
 
-  useEffect(() => onPatientAdded((patient) => setPatientId(patient.id)), []);
+  useEffect(
+    () =>
+      onPatientAdded((patient) => {
+        setPatientId(patient.id);
+        setSelectedPatient(patient);
+      }),
+    [],
+  );
 
   const update = (id: number, change: Partial<UploadEntry>) =>
     setEntries((list) => list.map((entry) => (entry.id === id && entry.kind === 'upload' ? { ...entry, ...change } : entry)));
@@ -140,8 +152,21 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
 
   const busy = uploading || cancelling;
   const text = input.trim();
-  const chosen = patients?.find((p) => p.id === patientId);
+  const foundPatients = patientSearch.status === 'found' ? patientSearch.patients : null;
+  const pickerPatients = foundPatients ?? patients;
+  const chosen = patientId
+    ? (pickerPatients?.find((p) => p.id === patientId) ?? patients?.find((p) => p.id === patientId) ?? (selectedPatient?.id === patientId ? selectedPatient : undefined))
+    : undefined;
   const chosenIncomplete = chosen ? incompleteness(chosen) === 'incomplete' : false;
+
+  function selectPatient(nextId: string) {
+    setPatientId(nextId);
+    if (!nextId) {
+      setSelectedPatient(null);
+      return;
+    }
+    setSelectedPatient(pickerPatients?.find((p) => p.id === nextId) ?? patients?.find((p) => p.id === nextId) ?? (selectedPatient?.id === nextId ? selectedPatient : null));
+  }
   const blocked = file
     ? !chosen
       ? 'Choose the patient first.'
@@ -303,18 +328,23 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
                   <X aria-hidden="true" className="size-4" />
                 </Button>
               </div>
+              {((patients && patients.length > 0) || patientSearch.status !== 'idle') && (
+                <PatientSearchField state={patientSearch} onSearch={searchAllPatients} onMore={moreMatches} onReset={resetPatientSearch} disabled={busy} />
+              )}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="text-muted-foreground">for</span>
                 <PatientPicker
                   aria-label="Patient"
-                  patients={patients}
+                  patients={pickerPatients}
+                  selectedPatient={chosen ?? null}
                   value={patientId}
-                  onValueChange={setPatientId}
+                  onValueChange={selectPatient}
+                  emptyMessage={foundPatients ? 'No matching patients.' : 'No patients yet.'}
                   disabled={busy}
-                  error={patientsError}
+                  error={foundPatients ? null : patientsError}
                   onRetry={loadPatients}
                 />
-                {morePatients && !patientsError && (
+                {morePatients && !patientsError && !foundPatients && (
                   <Button variant="ghost" size="sm" disabled={busy} pending={patientsLoading} pendingLabel="Loading patients…" onClick={loadPatients}>
                     More patients
                   </Button>
