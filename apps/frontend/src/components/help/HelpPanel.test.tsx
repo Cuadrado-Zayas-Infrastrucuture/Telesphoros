@@ -88,13 +88,15 @@ it('has no WCAG A/AA violation, listing or with an article open', async () => {
 });
 
 const EMPTY_COUNTS = { overdue: 0, today: 0, upcoming: 0, unassigned: 0 };
+const EMPTY_PAGE = { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 function openApp(roles: Role[]) {
   const fetchImpl = vi.fn<typeof fetch>(async (url) => {
     const at = new URL(String(url), 'http://synthetic');
     if (at.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
     if (at.pathname === '/api/v1/followups') return json({ currentActor: 'person-1', items: [], page: 1, hasMore: false, counts: EMPTY_COUNTS });
-    if (at.pathname.startsWith('/api/v1/')) return json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
+    // The worklist's and the sidebar's reads; anything else, the sign-in's /me included, answers with the roles.
+    if (at.pathname === '/api/v1/evaluations' || at.pathname.includes('/patients') || at.pathname.includes('/reports')) return json(EMPTY_PAGE);
     return json({ roles });
   });
   return { ...renderApp('/workspace', { signedInAs: roles, fetchImpl }), fetchImpl };
