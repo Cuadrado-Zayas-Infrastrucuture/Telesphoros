@@ -2,7 +2,7 @@
 
 Date: 2026-11-25
 
-Status: **plan only, waiting for the founder's decisions (section 4).** No document, code or test changes yet.
+Status: **approved by the founder on 2026-11-25: WT-D1 and WT-D2 as recommended.** Plan only: no document, code or test changes.
 
 ## 1. Why
 
@@ -61,13 +61,13 @@ The five-minute table follows the same route. The second upload (D08) starts fro
 
 ## 4. Decisions for the founder
 
-- **WT-D1. The presenter's spoken lines** in the five-minute table. They are your words for investors.
+- **WT-D1. The presenter's spoken lines** in the five-minute table. They are your words for investors. **Decided 2026-11-25: as recommended.**
   - **Recommended:** I change only the two lines that name the chat: the 0:00 scene, "Introduce the chat workspace", and the 3:50
     scene, "Return to chat". I draft their replacements and mark both in the PR for you to reword. Every other spoken line stays word
     for word, since none depends on the chat.
   - **Alternative:** I change only the Action column and leave the whole wording column to you.
 - **WT-D2. The narrated backup recording**, `chat-first-2026-11-02`. It shows the chat, so it no longer matches the live demo, and the
-  document tells the presenter to fall back to it if the live demo fails.
+  document tells the presenter to fall back to it if the live demo fails. **Decided 2026-11-25: as recommended.**
   - **Recommended:** mark it as historical, like the earlier recordings already are. Add to the pre-meeting checks: "record a new
     backup from the current app before the next meeting". Recording happens outside git, on your machine; this slice makes none.
   - **Alternative:** keep it as the current backup, with one sentence saying it shows the retired chat.
