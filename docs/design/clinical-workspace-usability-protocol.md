@@ -23,11 +23,16 @@ tests.
     result on hold for a missing gene result, a result with no guideline, and one withdrawn result;
   - one patient with 20 or more results, and enough patients that the list has more than one page;
   - one follow-up overdue and one due today, assigned to the participant, and one held result;
-  - for task 11, `SYN-307`, whose guidance rests on `GENEA` and who takes `drugm`, which the synthetic list `syn-modifiers-a` names
-    as a strong `GENEA` inhibitor;
-  - for task 12, a synthetic drug `SYN-307` does not take, with synthetic guidance.
+  - for task 11, `SYN-307`, with a `GENEA` result, who takes a recorded medication that the session's test-signed list names as a
+    `GENEA` inhibitor. Which medication is for the session-data slice to decide;
+  - for task 12, any drug that `SYN-307` does not take.
 
-  The genes and drugs are the invented ones of the fixtures (`GENEA`, `drugm`). No real drug is named in a session.
+  Medications are recorded and checked by RxNorm, from the bundled drug list, so their names are real drugs. Every gene and every
+  guideline is invented (`GENEA`, `GENEB`), and no session pairs a real drug with a real gene. In a synthetic build two things follow,
+  and the moderator expects them:
+  - the notice appears on the `GENEA` card only, not on a medication row: the synthetic guidelines carry invented RxNorm ids, which no
+    recorded medication matches;
+  - for the same reason, the drug check in task 12 says no guideline is loaded for any drug.
 - **Participants:** five, pharmacists and prescribers, none of whom built the screens. One should use a keyboard only; one should use a
   screen reader they already know.
 - **Record:** screen and voice with consent. No real patient is discussed. Notes use the task number, never a participant's name.
@@ -48,8 +53,8 @@ Read each task aloud once. Do not point at the screen. Stop a task after three m
 | 8 | (Moderator blocks the follow-up save.) "What has been saved?" (spec 038) | Says the decision is saved and the follow-up is not | Believing both failed, or both succeeded; recording the decision again |
 | 9 | "Find the patient with 20 results and open the last drug." (spec 038, 040) | Finds the patient, by search or the list, and opens the drug without losing track of the patient | Losing the patient's identity while scrolling |
 | 10 | "From the home screen, what is waiting for you? Is anything urgent clinically?" (spec 049) | Names the follow-ups and the held results; says an overdue reminder is a late task, and a held result is guidance not shown, not a clinical warning | Reading "Overdue" or "Held" as a clinical alarm |
-| 11 | "SYN-307 takes drugm. Is there anything on this page about that?" (spec 045; skip until the build shows a notice) | Finds the notice, says which gene and which guidance it concerns, and says the guidance does not take the medication into account | Reading the notice as a dose change or a contraindication; reading its absence on another row as "no interaction" |
-| 12 | "Before prescribing [the task 12 drug] for SYN-307, check what this page says about it." (spec 044) | Uses **Check a drug before prescribing**, reads the result for that drug, and says nothing was saved | Believing the check recorded a prescription or a decision |
+| 11 | "SYN-307 takes [the task 11 medication]. Is there anything on this page about that?" (spec 045; skip until the build shows a notice) | Finds the notice on the `GENEA` card, says which gene it concerns, and says the result does not take the medication into account | Reading the notice as a dose change or a contraindication; reading its absence on another row as "no interaction" |
+| 12 | "Before prescribing [the task 12 drug] for SYN-307, check what this page says about it." (spec 044) | Uses **Check a drug before prescribing**, reads what the page says for that drug (in a synthetic build, that no guideline is loaded for it), and says nothing was saved | Believing the check recorded a prescription or a decision; reading "no guideline loaded" as "safe to prescribe" |
 
 ## What to measure
 
