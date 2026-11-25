@@ -291,3 +291,27 @@ for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata 
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem('telesphoros.upload-recovery.v1'))).toBeNull();
 });
+
+test('Search all patients finds a patient beyond the loaded page, and the upload goes to that patient (spec 040 slice C)', async ({ page }) => {
+  const fixture = await signInWithPatient(page);
+  // More than one page of patients, whatever the other tests have made, so the search is offered (D4).
+  for (let index = 0; index < 21; index++) {
+    const created = await page.request.post(`${fixture.api}/api/v1/patients`, { headers: fixture.headers, data: { label: `SYN-PAD-${crypto.randomUUID().slice(0, 8)}` } });
+    expect(created.status()).toBe(201);
+  }
+  await page.getByRole('button', { name: 'Refresh patients' }).click();
+  const field = page.getByRole('textbox', { name: 'Find a patient' });
+  await field.fill(fixture.label);
+  await field.press('Enter');
+  await expect(page.getByText('Searched all patients: 1 match. The choices below are the matches.')).toBeVisible();
+  await expect(page.getByLabel(/synthetic patient \(required\)/i).locator('option')).toHaveText(['Choose an existing patient…', fixture.label]);
+  await expect(page.getByRole('button', { name: 'Next patients' })).toHaveCount(0);
+  const bytes = Buffer.from('{"synthetic":"searched"}');
+  await fill(page, fixture.id, 'structured', 'searched.json', bytes);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
+  const reports = await stored(page, fixture);
+  expect(reports).toHaveLength(1);
+  expect(reports[0]).toMatchObject({ patientId: fixture.id, fileUploaded: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
