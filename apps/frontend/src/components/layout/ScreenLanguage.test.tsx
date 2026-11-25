@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setAppLanguage, type AppLanguage } from '@/lib/appLanguage';
 import { formatIn, useFormat, when } from '@/lib/formatWhen';
@@ -90,14 +90,14 @@ describe('<html lang> on the app (R3), with no screen translated yet (LS1)', () 
   it('is "en" with English chosen', async () => {
     renderApp('/signed-out');
     expect(await screen.findByRole('heading', { level: 1, name: 'You have been signed out' })).toBeVisible();
-    expect(document.documentElement.lang).toBe('en');
+    await waitFor(() => expect(document.documentElement.lang).toBe('en'));
   });
 
   it('is "es" with Spanish chosen, and every untranslated screen, the frame included, says lang="en" and stays English', async () => {
     setAppLanguage('es');
     renderApp('/signed-out');
     const heading = await screen.findByRole('heading', { level: 1, name: 'You have been signed out' });
-    expect(document.documentElement.lang).toBe('es');
+    await waitFor(() => expect(document.documentElement.lang).toBe('es'));
     expect(heading.closest('[lang]')).toHaveAttribute('lang', 'en');
     expect(document.querySelector('.app-frame')).toHaveAttribute('lang', 'en');
   });

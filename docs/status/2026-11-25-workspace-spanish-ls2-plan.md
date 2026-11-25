@@ -14,3 +14,6 @@ footer, consent bar) and the sign-in pages. That is about 55 strings. It is spli
 
 Nobody can choose Spanish until LS6. Six decisions, LS2-D1 to LS2-D6, were put to the founder, who approved all six as recommended on 2026-11-25. Among them: how the founders preview their
 text, and whether they review the landing's existing draft Spanish rather than write it again. No code change.
+
+Also in this pull request: a fix to LS1 (#470). `AppFrame` now sets `<html lang>` in a layout effect, in the same commit as the content, and the
+two tests that read it wait for it. A test had read the attribute before the effect ran, and failed on timing.
