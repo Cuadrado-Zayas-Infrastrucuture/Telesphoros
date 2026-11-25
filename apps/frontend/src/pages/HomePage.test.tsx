@@ -12,10 +12,10 @@ it.each([{ roles: ['reader'] }, { roles: ['reviewer'] }, { roles: ['admin'] }, {
   for (const link of screen.getAllByRole('link', { name: 'Open workspace' })) expect(link).toHaveAttribute('href', signedInHome([...roles]));
   expect(screen.getAllByRole('link', { name: 'Open workspace' })).toHaveLength(2);
 });
-it.each(['clinician'] as const)('sends the upload action to the signed-in home, where reports are attached, for %s', async (role) => {
+it.each(['clinician'] as const)('sends the upload action to Attach a report for %s (spec 052 RC-2)', async (role) => {
   await renderSignedInAt('/', { signedInAs: [role] });
   await screen.findByRole('heading', { name: /PGx reports, interpreted/ });
-  for (const link of screen.getAllByRole('link', { name: 'Upload a synthetic report' })) expect(link).toHaveAttribute('href', signedInHome([role]));
+  for (const link of screen.getAllByRole('link', { name: 'Upload a synthetic report' })) expect(link).toHaveAttribute('href', '/reports/upload');
   expect(screen.getAllByRole('link', { name: 'Upload a synthetic report' })).toHaveLength(1);
 });
 it.each([{ roles: ['admin'] }, { roles: [] }] as const)('shows no Reports link in the header to $roles, who cannot open the page', async ({ roles }) => {

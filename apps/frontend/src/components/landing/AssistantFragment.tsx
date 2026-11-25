@@ -1,8 +1,9 @@
 import { useLandingLanguage } from '@/lib/landing/landing-language';
 
 /**
- * Decorative fictional exchange for the chat capability row: a sample question, typing dots under motion, then the note the
- * chat really shows outside the local preview (specs/024 CH-4). See PatientLinkFragment for the rules these fragments keep.
+ * Decorative fictional exchange for the worklist and Help capability row: a question about using the app, typing dots under motion, then
+ * the kind of answer Help gives (landing copy refresh, LC-D2). Never a question about a patient. See PatientLinkFragment for the rules these
+ * fragments keep.
  */
 export function AssistantFragment() {
   const { fragments } = useLandingLanguage().copy;

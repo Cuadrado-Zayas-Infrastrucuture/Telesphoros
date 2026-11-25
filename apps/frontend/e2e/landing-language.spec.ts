@@ -44,7 +44,7 @@ test('choosing Spanish changes the whole landing, passes axe and fits the viewpo
   expect(await axeViolations(page)).toEqual([]);
   // Nothing English is left in the landing's own headings.
   const headings = await page.locator('main h1, main h2, main h3').allTextContents();
-  expect(headings.join(' | ')).not.toMatch(/interpreted with care|Working toward|Take a look inside|Why we’re building|Start from the chat/);
+  expect(headings.join(' | ')).not.toMatch(/interpreted with care|Working toward|Take a look inside|Why we’re building|Start from your worklist/);
 
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'es');
