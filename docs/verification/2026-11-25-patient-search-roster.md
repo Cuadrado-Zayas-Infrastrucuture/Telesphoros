@@ -43,6 +43,7 @@ Not changed: the API and every backend file; `listPatients`; `useWorkspacePatien
 | Every page loaded: no button, no request | `PatientRoster.test.tsx` | D4 |
 | A newer search aborts the earlier one and drops its late answer | `PatientRoster.test.tsx` | PS-12 |
 | The wording of the loaded-pages sentence | `PatientsPage.test.tsx` (updated) | specs/038 D17 |
+| The demo suite's busy roster finds the field by its new name | `product-demo-e2e/workflow-polish.spec.ts` (updated) | the field's label |
 | 25 patients made, the oldest found with the button; 25 matches and More matches; clearing returns; no sideways scroll; no WCAG A/AA violation; keyboard only | `e2e/patient-search.spec.ts` (new), at 375 and 1280 px | PS-10, against the real backend |
 
 ## Not done yet
