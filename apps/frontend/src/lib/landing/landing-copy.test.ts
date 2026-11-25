@@ -45,9 +45,11 @@ describe('landing copy', () => {
       expect(text('es')).toContain(phrase);
   });
 
-  it('English leads with report interpretation, as the public site does, and quotes the chat note exactly', () => {
+  it('English leads with report interpretation, as the public site does, and its sample exchange is a Help question about using the app', () => {
     expect(LANDING_COPY.en.hero.headline.join(' ')).toBe('PGx reports, interpreted with care.');
-    expect(LANDING_COPY.en.fragments.answer).toBe('Interpretation is not available in the prototype yet.');
+    // LC-D2: what Help answers, and never about a patient.
+    expect(LANDING_COPY.en.fragments.question).toBe('How do I attach a report?');
+    expect(LANDING_COPY.en.fragments.answer).toBe('Choose Attach a report on your home page.');
     expect(LANDING_COPY.en.header.skip).toBe('Skip to main content');
     expect(LANDING_COPY.en.closing.mascotAlt).toBe('Telesphoros mascot in a teal cloak');
   });
