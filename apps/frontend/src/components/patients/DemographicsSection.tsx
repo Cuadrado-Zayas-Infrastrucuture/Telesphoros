@@ -6,7 +6,8 @@ import { DemographicsVersions } from '@/components/patients/DemographicsVersions
 import { Button } from '@/components/ui/Button';
 import { draftFrom, EMPTY_DRAFT } from '@/lib/demographicsDraft';
 import type { DemographicsRead } from '@/lib/patientDemographics';
-import { IDENTITY_WORDS } from '@/lib/patientIdentity';
+import { IDENTITY_TABLE } from '@/lib/patientIdentity';
+import { useWords } from '@/lib/words/screens';
 
 export function DemographicsSection(props: {
   patientId: string;
@@ -19,6 +20,7 @@ export function DemographicsSection(props: {
 }) {
   const { read, version, canWrite, onViewVersion } = props;
   const [editing, setEditing] = useState(false);
+  const words = useWords(IDENTITY_TABLE);
   const heading = (
     <h2 id="demographics-heading" className="text-lg font-semibold">
       Demographics
@@ -29,7 +31,7 @@ export function DemographicsSection(props: {
     return (
       <section aria-labelledby="demographics-heading" className="flex flex-col gap-2">
         {heading}
-        <p className="text-sm text-muted-foreground">{IDENTITY_WORDS.section}</p>
+        <p className="text-sm text-muted-foreground">{words.section}</p>
       </section>
     );
   }

@@ -13,6 +13,8 @@ import { RouteLoading } from '@/components/RouteLoading';
  *
  * Public: overview, sign-in, the sign-in callback, signed-out, not-found.
  * Signed-in only: everything under <ProtectedRoute>; and by role: under <RequireRole>.
+ *
+ * `handle.screen` names a screen for the language layer (spec 050 LS1-D2, `lib/words/screens.ts`). A route with none is not translated.
  */
 // Read once at start-up so an invalid owned-storage setting fails here, before anything renders, rather than being taken for "off".
 ownedStorageMode();
@@ -26,9 +28,9 @@ export const routes: RouteObject[] = [
     HydrateFallback: RouteLoading,
     children: [
       { index: true, lazy: async () => ({ Component: (await import('@/pages/HomePage')).default }) },
-      { path: 'signin', lazy: async () => ({ Component: (await import('@/pages/SignInPage')).default }) },
+      { path: 'signin', handle: { screen: 'sign-in' }, lazy: async () => ({ Component: (await import('@/pages/SignInPage')).default }) },
       { path: 'auth/callback', lazy: async () => ({ Component: (await import('@/pages/AuthCallbackPage')).default }) },
-      { path: 'signed-out', lazy: async () => ({ Component: (await import('@/pages/SignedOutPage')).default }) },
+      { path: 'signed-out', handle: { screen: 'sign-in' }, lazy: async () => ({ Component: (await import('@/pages/SignedOutPage')).default }) },
       {
         element: <ProtectedRoute />,
         children: [
@@ -37,7 +39,7 @@ export const routes: RouteObject[] = [
           {
             lazy: async () => ({ Component: (await import('@/pages/WorkspacePage')).default }),
             children: [
-              { path: 'workspace', lazy: async () => ({ Component: (await import('@/pages/WorklistPage')).default }) },
+              { path: 'workspace', handle: { screen: 'home' }, lazy: async () => ({ Component: (await import('@/pages/WorklistPage')).default }) },
               { path: 'chat', element: null },
               // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
               { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
@@ -69,7 +71,7 @@ export const routes: RouteObject[] = [
                 children: [
                   // Specs/034: the sidebar's Patients destination, the list the panel used to hold.
                   { path: 'patients', lazy: async () => ({ Component: (await import('@/pages/PatientsPage')).default }) },
-                  { path: 'patients/:id', lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) },
+                  { path: 'patients/:id', handle: { screen: 'patient' }, lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) },
                 ],
               },
             ],

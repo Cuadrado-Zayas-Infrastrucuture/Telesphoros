@@ -16,7 +16,8 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { when } from '@/lib/formatWhen';
 import { SubmitError } from '@/lib/api';
 import { getDemographics, getPatient, type DemographicsRead } from '@/lib/patientDemographics';
-import { failsThePage, IDENTITY_WORDS, RecordingHeldContext } from '@/lib/patientIdentity';
+import { failsThePage, IDENTITY_TABLE, RecordingHeldContext } from '@/lib/patientIdentity';
+import { useWords } from '@/lib/words/screens';
 import { PatientBanner } from '@/components/patients/PatientBanner';
 import { PatientLabelContext } from '@/lib/patientLabel';
 
@@ -44,6 +45,7 @@ export default function PatientPage() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [identityAttempt, setIdentityAttempt] = useState(0);
+  const words = useWords(IDENTITY_TABLE);
   // A version number or an error belongs to one patient. Opening another chart (the same page, a new id) starts it at its current record, with its
   // identity banner, and drops the previous patient's error; it is reset here, during render, so the reads below never run with the old values.
   const [shownId, setShownId] = useState(id);
@@ -128,7 +130,7 @@ export default function PatientPage() {
   const read = identity.read;
   // B-D3: while the identity is unknown, nothing that records something for this patient is offered.
   const held = read.kind === 'unknown';
-  const clinical = held ? <p className="max-w-3xl text-sm text-muted-foreground">{IDENTITY_WORDS.held}</p> : <PatientClinicalSections key={`clinical-${id}`} patientId={id} />;
+  const clinical = held ? <p className="max-w-3xl text-sm text-muted-foreground">{words.held}</p> : <PatientClinicalSections key={`clinical-${id}`} patientId={id} />;
   return (
     <PatientLabelContext.Provider value={patient.label}>
       <RecordingHeldContext.Provider value={held}>

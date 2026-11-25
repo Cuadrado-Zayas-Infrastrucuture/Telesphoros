@@ -1,15 +1,29 @@
 import { ownedStorageMode } from '@/lib/storageMode';
-import { useRef } from 'react';
-import { Outlet, useNavigation, useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { Outlet, useMatches, useNavigation, useLocation } from 'react-router-dom';
+import type { UIMatch } from 'react-router-dom';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { useAuth } from '@/auth/AuthProvider';
 import { WorkspaceSidebar } from '@/components/layout/WorkspaceSidebar';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SkipLink } from '@/components/layout/SkipLink';
+import { ScreenLanguage } from '@/components/layout/ScreenLanguage';
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useRouteFocus } from '@/hooks/useRouteFocus';
+import { useAppLanguage } from '@/lib/appLanguage';
+import { useLandingLanguage } from '@/lib/landing/landing-language';
 import { SIGN_IN_FLOW } from '@/lib/theme';
+import { ScreenLanguageContext, screenLanguage, type Screen } from '@/lib/words/screens';
 import { ThemeProvider } from '@/theme/ThemeProvider';
+
+/** The screen the deepest matched route names in `handle.screen`, if any. */
+function namedScreen(matches: readonly UIMatch[]): Screen | undefined {
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const named = (matches[i]?.handle as { screen?: Screen } | undefined)?.screen;
+    if (named) return named;
+  }
+  return undefined;
+}
 
 export function AppFrame() {
   const { pathname } = useLocation();
@@ -21,52 +35,76 @@ export function AppFrame() {
   const mainRef = useRef<HTMLElement>(null);
   const navigation = useNavigation();
   useRouteFocus(mainRef, landing);
+  // Spec 050 LS1 (LS1-D1): the one place that sets <html lang>. The landing has its own language; every other page follows the app's (R3).
+  const { language: app } = useAppLanguage();
+  const { language: landingLanguage } = useLandingLanguage();
+  useEffect(() => {
+    document.documentElement.lang = landing ? landingLanguage : app;
+  }, [landing, landingLanguage, app]);
+  // The screen a route names in `handle.screen` (LS1-D2); a route with none is not translated (R6). The frame itself is the `shell`. The landing
+  // keeps its own language and copy, so neither the shell's nor a screen's language is marked there.
+  const screen = namedScreen(useMatches());
+  const shell = screenLanguage(app, 'shell');
 
   // The one-screen workspace (specs/016) is its own frame: no site header, sidebar or footer.
   if (pathname === '/local-workspace') {
     return (
       <ThemeProvider pathname={pathname}>
         <SkipLink />
-        <main id="main" ref={mainRef} tabIndex={-1} className="focus:outline-none">
-          <Outlet />
-        </main>
+        <ScreenLanguage screen={screen}>
+          {(lang) => (
+            <main id="main" ref={mainRef} tabIndex={-1} lang={lang} className="focus:outline-none">
+              <Outlet />
+            </main>
+          )}
+        </ScreenLanguage>
       </ThemeProvider>
     );
   }
 
   return (
     <ThemeProvider pathname={pathname}>
-      <div className={`app-frame flex flex-col${workspace ? ' workspace-shell' : ''}${sidebar ? ' workspace-layout' : ''}`}>
-        <SkipLink />
-        {sidebar ? <WorkspaceSidebar /> : <SiteHeader />}
-        <div className={sidebar ? 'workspace-body' : 'contents'}>
-          {/* Announced politely while a lazy route's JavaScript is being fetched. */}
-          <div role="status" aria-live="polite" className="mx-auto w-full max-w-page px-4 sm:px-6">
-            {navigation.state === 'loading' && <p className="sr-only">Loading page…</p>}
+      <ScreenLanguageContext.Provider value={shell}>
+        <div
+          className={`app-frame flex flex-col${workspace ? ' workspace-shell' : ''}${sidebar ? ' workspace-layout' : ''}`}
+          lang={!landing && shell.language !== app ? shell.language : undefined}
+        >
+          <SkipLink />
+          {sidebar ? <WorkspaceSidebar /> : <SiteHeader />}
+          <div className={sidebar ? 'workspace-body' : 'contents'}>
+            {/* Announced politely while a lazy route's JavaScript is being fetched. */}
+            <div role="status" aria-live="polite" className="mx-auto w-full max-w-page px-4 sm:px-6">
+              {navigation.state === 'loading' && <p className="sr-only">Loading page…</p>}
+            </div>
+            <ScreenLanguage screen={screen} inherits={shell.language}>
+              {(lang) => (
+                <main
+                  id="main"
+                  ref={mainRef}
+                  tabIndex={-1}
+                  aria-busy={navigation.state === 'loading' || undefined}
+                  lang={landing ? undefined : lang}
+                  className={
+                    sidebar
+                      ? `workspace-main relative focus:outline-none${navigation.state === 'loading' ? ' route-pending' : ''}`
+                      : landing
+                        ? `relative w-full flex-1 focus:outline-none${navigation.state === 'loading' ? ' route-pending' : ''}`
+                        : `relative mx-auto w-full max-w-page flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-10${navigation.state === 'loading' ? ' route-pending' : ''}`
+                  }
+                >
+                  {navigation.state === 'loading' && (
+                    <div className="route-skeleton absolute inset-0 z-10 bg-background p-4 sm:p-6">
+                      <ContentSkeleton label="" variant="page" />
+                    </div>
+                  )}
+                  <Outlet />
+                </main>
+              )}
+            </ScreenLanguage>
+            {!sidebar && <SiteFooter />}
           </div>
-          <main
-            id="main"
-            ref={mainRef}
-            tabIndex={-1}
-            aria-busy={navigation.state === 'loading' || undefined}
-            className={
-              sidebar
-                ? `workspace-main relative focus:outline-none${navigation.state === 'loading' ? ' route-pending' : ''}`
-                : landing
-                  ? `relative w-full flex-1 focus:outline-none${navigation.state === 'loading' ? ' route-pending' : ''}`
-                  : `relative mx-auto w-full max-w-page flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-10${navigation.state === 'loading' ? ' route-pending' : ''}`
-            }
-          >
-            {navigation.state === 'loading' && (
-              <div className="route-skeleton absolute inset-0 z-10 bg-background p-4 sm:p-6">
-                <ContentSkeleton label="" variant="page" />
-              </div>
-            )}
-            <Outlet />
-          </main>
-          {!sidebar && <SiteFooter />}
         </div>
-      </div>
+      </ScreenLanguageContext.Provider>
     </ThemeProvider>
   );
 }
