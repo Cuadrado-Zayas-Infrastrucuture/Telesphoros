@@ -7,6 +7,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
 import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
+import { HelpButton } from '@/components/help/HelpButton';
 import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
 import { CHAT_PATH, LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
@@ -255,6 +256,11 @@ export function WorkspaceSidebar() {
                   <FollowupsNavLink iconsOnly={iconsOnly} className={linkClass} onClick={close} onKeyDown={dismiss} />
                 </li>
               ),
+            )}
+            {status === 'signedIn' && (
+              <li>
+                <HelpButton iconsOnly={iconsOnly} onKeyDown={dismiss} />
+              </li>
             )}
           </ul>
           {lists && <SidebarReports onNavigate={close} />}
