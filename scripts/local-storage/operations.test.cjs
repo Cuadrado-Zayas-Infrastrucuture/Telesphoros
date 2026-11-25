@@ -202,3 +202,28 @@ test('only vanished entries are tolerated: the strict removal walk and every tam
   assert.throws(() => o.checkTree(path.join(m.root, 'missing'), { live: true }), { code: 'ENOENT' });
   o.remove(m);
 });
+// ps derives lstart from the kernel's boot time, which moves when the wall clock is stepped. On Linux the identity
+// takes the start in clock ticks since boot from /proc/PID/stat instead, which no clock step can move.
+test('start ticks are parsed after the last parenthesis, whatever the command name holds', () => {
+  const fields = Array.from({ length: 20 }, (_, i) => String(i + 3)); fields[19] = '552573';
+  assert.equal(o.procStart('4242 (odd) name (x)) ' + fields.join(' ') + ' 0 0\n'), '552573');
+  for (const bad of ['', '4242 no parens S 1', '4242 (n) S 1 2 3']) assert.throws(() => o.procStart(bad), /ownership verification refused/);
+});
+test('on Linux the identity is the start in ticks since boot plus the command, never the wall-clock start', { skip: process.platform !== 'linux' }, () => {
+  const ticks = o.procStart(fs.readFileSync('/proc/self/stat', 'utf8'));
+  const command = require('node:child_process').execFileSync('ps', ['-p', String(process.pid), '-o', 'command='], { encoding: 'utf8' }).trim();
+  const lstart = require('node:child_process').execFileSync('ps', ['-p', String(process.pid), '-o', 'lstart='], { encoding: 'utf8' }).trim();
+  const id = o.identity(process.pid);
+  assert.equal(id, 'start-ticks:' + ticks + ' ' + command);
+  assert.ok(!id.includes(lstart), 'the wall-clock start must not be part of the identity');
+  assert.equal(o.identity(process.pid), id);
+});
+test('an identity mismatch names the part that differs', () => {
+  const id = o.identity(process.pid), cut = id.startsWith('start-ticks:') ? id.indexOf(' ') : 24;
+  const start = id.slice(0, cut), command = id.slice(cut + 1);
+  assert.equal(o.live({ pid: process.pid, identity: id }), true);
+  assert.throws(() => o.live({ pid: process.pid, identity: start + ' synthetic-other-command' }), /^Error: Local process identity mismatch \(command\); resources retained\.$/);
+  const otherStart = start.startsWith('start-ticks:') ? 'start-ticks:1' : 'Thu Jan  1 00:00:00 1970';
+  assert.throws(() => o.live({ pid: process.pid, identity: otherStart + ' ' + command }), /^Error: Local process identity mismatch \(start\); resources retained\.$/);
+  assert.throws(() => o.live({ pid: process.pid, identity: 'foreign' }), /^Error: Local process identity mismatch \(start, command\); resources retained\.$/);
+});
