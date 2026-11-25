@@ -10,17 +10,7 @@ import type { PatientSearch } from '@/hooks/usePatientSearch';
  *
  * It is not a form: it sits inside the upload form, so Enter here searches and never submits the upload.
  */
-export function PatientSearchField({
-  state,
-  onSearch,
-  onMore,
-  onReset,
-}: {
-  state: PatientSearch;
-  onSearch: (text: string) => void;
-  onMore: () => void;
-  onReset: () => void;
-}) {
+export function PatientSearchField({ state, onSearch, onMore, onReset }: { state: PatientSearch; onSearch: (text: string) => void; onMore: () => void; onReset: () => void }) {
   const id = useId();
   const [text, setText] = useState('');
   const found = state.status === 'found' ? state : null;
