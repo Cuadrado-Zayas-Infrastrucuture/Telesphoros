@@ -8,9 +8,12 @@ import { AlertTitle } from '@/components/ui/AlertTitle';
 import { SignInArt } from '@/components/signin/SignInArt';
 import { Button } from '@/components/ui/Button';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { SIGN_IN_WORDS } from '@/lib/words/signIn';
+import { useWords } from '@/lib/words/screens';
 
 export default function SignInPage() {
-  usePageTitle('Sign in');
+  const words = useWords(SIGN_IN_WORDS);
+  usePageTitle(words.title);
   const { signIn } = useAuth();
   const location = useLocation();
   const [error, setError] = useState(false);
@@ -32,17 +35,17 @@ export default function SignInPage() {
     <div className="grid items-center gap-10 lg:grid-cols-2">
       <div className="flex max-w-prose flex-col gap-4">
         {/* The heading takes the signal colour, as the landing page's headline does (specs/043 D6). The button below does not. */}
-        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight text-signal">Sign in</h1>
-        <p className="text-muted-foreground">You will be taken to the secure sign-in page. Accounts are by invitation only: if you need access, ask your administrator.</p>
+        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight text-signal">{words.heading}</h1>
+        <p className="text-muted-foreground">{words.intro}</p>
         {error && (
           <Alert variant="destructive">
-            <AlertTitle>Could not reach the sign-in page</AlertTitle>
-            <AlertDescription>Check your connection and try again.</AlertDescription>
+            <AlertTitle>{words.unreachable}</AlertTitle>
+            <AlertDescription>{words.checkConnection}</AlertDescription>
           </Alert>
         )}
         <div>
-          <Button size="lg" onClick={start} pending={busy} pendingLabel="Redirecting…" disabled={busy}>
-            Sign in
+          <Button size="lg" onClick={start} pending={busy} pendingLabel={words.redirecting} disabled={busy}>
+            {words.button}
           </Button>
         </div>
       </div>

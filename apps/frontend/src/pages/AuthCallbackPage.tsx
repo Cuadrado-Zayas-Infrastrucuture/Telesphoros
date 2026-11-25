@@ -8,10 +8,13 @@ import { Button } from '@/components/ui/Button';
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { landingAfterSignIn } from '@/lib/localWorkspace';
+import { CALLBACK_WORDS } from '@/lib/words/signIn';
+import { useWords } from '@/lib/words/screens';
 
 /** The address the sign-in page sends the browser back to. Redeems the one-time code, then moves on. */
 export default function AuthCallbackPage() {
-  usePageTitle('Signing you in');
+  const words = useWords(CALLBACK_WORDS);
+  usePageTitle(words.title);
   const { completeSignIn, roles } = useAuth();
   const navigate = useNavigate();
   const [returnTo, setReturnTo] = useState<string | null>(null);
@@ -41,12 +44,10 @@ export default function AuthCallbackPage() {
   if (failure === 'account') {
     return (
       <div className="flex max-w-prose flex-col gap-4">
-        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Your account is not set up yet</h1>
+        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">{words.accountHeading}</h1>
         <Alert variant="destructive">
-          <AlertTitle>No organization is assigned to your account</AlertTitle>
-          <AlertDescription>
-            You signed in successfully, but your account does not belong to an organization yet. Ask your administrator to add you to one. Trying again will not help until they do.
-          </AlertDescription>
+          <AlertTitle>{words.accountTitle}</AlertTitle>
+          <AlertDescription>{words.accountBody}</AlertDescription>
         </Alert>
       </div>
     );
@@ -54,14 +55,14 @@ export default function AuthCallbackPage() {
   if (failure === 'generic') {
     return (
       <div className="flex max-w-prose flex-col gap-4">
-        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Sign-in did not complete</h1>
+        <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">{words.failedHeading}</h1>
         <Alert variant="destructive">
-          <AlertTitle>We could not sign you in</AlertTitle>
-          <AlertDescription>The sign-in link may have expired or been used already. Please try again.</AlertDescription>
+          <AlertTitle>{words.failedTitle}</AlertTitle>
+          <AlertDescription>{words.failedBody}</AlertDescription>
         </Alert>
         <div>
           <Button asChild>
-            <Link to="/signin">Try again</Link>
+            <Link to="/signin">{words.tryAgain}</Link>
           </Button>
         </div>
       </div>
@@ -69,8 +70,8 @@ export default function AuthCallbackPage() {
   }
   return (
     <div className="flex max-w-prose flex-col gap-4">
-      <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">Signing you in</h1>
-      <ContentSkeleton label="Please wait…" variant="detail" />
+      <h1 className="font-sans text-4xl leading-tight font-medium tracking-tight">{words.heading}</h1>
+      <ContentSkeleton label={words.wait} variant="detail" />
     </div>
   );
 }

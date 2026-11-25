@@ -2,6 +2,8 @@ import { preferenceStorage } from '@/lib/storageConsent';
 import { useSyncExternalStore } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
+import { useAppLanguage } from '@/lib/appLanguage';
+import { screenLanguage } from '@/lib/words/screens';
 import { LANDING_COPY, type LandingLanguage } from './landing-copy';
 
 /*
@@ -58,8 +60,12 @@ export function useLandingRoute() {
   return useLocation().pathname === '/' && !ownedStorageMode();
 }
 
-/** The shell's own labels: Spanish only while the landing is showing and Spanish is chosen. */
+/**
+ * The header's, footer's and skip link's labels: the landing's language on the landing, and the shell screen's elsewhere (spec 050 LS2-D2), so the
+ * landing and the signed-in shell share one text. The shell stays English until it is translated (LS2b).
+ */
 export function useShellCopy() {
   const { language } = useLandingLanguage();
-  return LANDING_COPY[useLandingRoute() ? language : 'en'];
+  const { language: app } = useAppLanguage();
+  return LANDING_COPY[useLandingRoute() ? language : screenLanguage(app, 'shell').language];
 }
