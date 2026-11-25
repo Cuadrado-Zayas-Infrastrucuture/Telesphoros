@@ -1,5 +1,5 @@
 import { ownedStorageMode } from '@/lib/storageMode';
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { Outlet, useMatches, useNavigation, useLocation } from 'react-router-dom';
 import type { UIMatch } from 'react-router-dom';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -38,7 +38,8 @@ export function AppFrame() {
   // Spec 050 LS1 (LS1-D1): the one place that sets <html lang>. The landing has its own language; every other page follows the app's (R3).
   const { language: app } = useAppLanguage();
   const { language: landingLanguage } = useLandingLanguage();
-  useEffect(() => {
+  // A layout effect, so the attribute is set in the same commit as the content it describes, before the page is shown.
+  useLayoutEffect(() => {
     document.documentElement.lang = landing ? landingLanguage : app;
   }, [landing, landingLanguage, app]);
   // The screen a route names in `handle.screen` (LS1-D2); a route with none is not translated (R6). The frame itself is the `shell`. The landing
