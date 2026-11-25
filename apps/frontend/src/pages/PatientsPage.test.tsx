@@ -62,8 +62,8 @@ describe('the Patients page (specs/034 D2)', () => {
     expect(fetchImpl.mock.calls.some(([input]) => String(input).endsWith('/api/v1/patients?page=1&pageSize=20&order=desc'))).toBe(true);
   });
 
-  // Specs/038 D17: the filter searches what the page has loaded. No server search exists, so the page says how far the filter reaches.
-  it('says the filter covers only the patients loaded so far while more remain, and all of them once every page is loaded', async () => {
+  // Specs/038 D17 and spec 040 PS-10: typing filters what the page has loaded, and the page says how far that reaches.
+  it('says typing covers only the patients loaded so far while more remain, and all of them once every page is loaded', async () => {
     const many = (from: number, count: number) =>
       Array.from({ length: count }, (_, index) => ({ ...PATIENT, id: `0f8fad5b-d9cb-469f-a165-7086772895${String(from + index).padStart(2, '0')}`, label: `SYN-${from + index}` }));
     const base = api(['clinician']);
@@ -75,13 +75,13 @@ describe('the Patients page (specs/034 D2)', () => {
     });
     open('/patients', ['clinician'], fetchImpl);
     const records = await roster();
-    const filter = await records.findByRole('textbox', { name: 'Find loaded patients' });
-    expect(filter).toHaveAccessibleDescription('Search covers only the patients loaded so far (20). Load more to expand it.');
+    const filter = await records.findByRole('textbox', { name: 'Find a patient' });
+    expect(filter).toHaveAccessibleDescription('Typing looks through the 20 patients loaded so far. Search all patients looks through every one.');
     await userEvent.type(filter, 'SYN-27');
-    expect(records.getByText('No match among loaded patients. Load more to keep looking.')).toBeVisible();
+    expect(records.getByText('No match among loaded patients. Search all patients to keep looking.')).toBeVisible();
     await userEvent.click(records.getByRole('button', { name: 'More patients' }));
     expect(await records.findByRole('link', { name: 'SYN-27' })).toBeVisible();
-    expect(filter).toHaveAccessibleDescription('Search covers all patients (22).');
+    expect(filter).toHaveAccessibleDescription('Typing looks through all 22 patients.');
   });
 
   it('shows a patient the chat adds while the page is open', async () => {
