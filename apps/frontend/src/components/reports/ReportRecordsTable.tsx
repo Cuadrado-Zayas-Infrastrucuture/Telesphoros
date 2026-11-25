@@ -145,7 +145,7 @@ export function ReportRecordsTable({
             !patientId &&
             canAttach && (
               <Button asChild variant="outline">
-                <Link to="/chat">Attach first report in chat</Link>
+                <Link to="/reports/upload">Attach the first report</Link>
               </Button>
             )
           )}

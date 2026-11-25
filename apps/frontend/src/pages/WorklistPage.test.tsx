@@ -66,7 +66,7 @@ it('is the home: its heading, the quick actions a clinician may use, then follow
   const start = within(screen.getByRole('group', { name: 'Start here' }));
   expect(start.getByRole('link', { name: 'Find a patient' })).toHaveAttribute('href', '/patients');
   expect(start.getByRole('link', { name: 'Add a patient' })).toHaveAttribute('href', '/patients/new');
-  expect(start.getByRole('link', { name: 'Attach a report' })).toHaveAttribute('href', '/chat');
+  expect(start.getByRole('link', { name: 'Attach a report' })).toHaveAttribute('href', '/reports/upload');
   await heldSection();
   const sections = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'));
   expect(sections.indexOf('Follow-ups assigned to you')).toBeLessThan(sections.indexOf('Held results'));

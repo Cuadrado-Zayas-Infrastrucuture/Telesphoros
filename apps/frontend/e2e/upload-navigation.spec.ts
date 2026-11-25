@@ -25,17 +25,17 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
 }
 async function navigateAwayAndBack(page: Page) {
-  await page.getByRole('button', { name: 'Close resume report upload', exact: true }).click();
-  // The panel opens over the chat, so closing it returns there (spec 049: the chat is at /chat, the home is the worklist).
-  await expect(page).toHaveURL(/\/chat$/);
+  // Attach a report is a page (spec 052 RC-3): Back to home leaves it for the worklist.
+  await page.getByRole('link', { name: 'Back to home', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace$/);
   // History updates before React commits the route. Back must follow the actual unmount,
   // otherwise both navigations can retain the submitting form instead of exercising recovery.
-  const panel = page.getByRole('dialog', { name: 'Resume report upload', exact: true });
-  await expect(panel).toHaveCount(0);
-  await expect(page.getByRole('textbox', { name: 'Question', exact: true })).toBeVisible();
+  const form = page.getByRole('heading', { level: 1, name: 'Attach a report', exact: true });
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1, name: 'Your worklist' })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/reports\/upload$/);
-  await expect(panel).toBeVisible();
+  await expect(form).toBeVisible();
 }
 async function holdFirstTransfer(page: Page) {
   const arrived = latch(), released = latch(), done = latch(); let first = true;

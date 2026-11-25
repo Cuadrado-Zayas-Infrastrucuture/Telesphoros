@@ -28,6 +28,7 @@ describe('the screen in view', () => {
     expect(helpScreenOf('/patients/new')).toBe('new-patient');
     expect(helpScreenOf('/patients/0f8fad5b-d9cb-469f-a165-70867728950e')).toBe('patient');
     expect(helpScreenOf('/reports')).toBe('reports');
+    expect(helpScreenOf('/reports/upload')).toBe('upload');
     expect(helpScreenOf('/follow-ups')).toBe('follow-ups');
     expect(helpScreenOf('/settings')).toBe('settings');
     expect(helpScreenOf('/usage')).toBe('usage');
