@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openChat, signInAs, signInWithPatient } from './helpers';
+import { signInWithPatient } from './helpers';
 
 const REPORT = Buffer.from('{"synthetic":true}');
 function latch() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
@@ -121,42 +121,4 @@ test('navigation keeps recovery cancellable and only server acknowledgement clea
     expect(cancels).toBe(1); expect(await record(page)).toBeNull();
     await fill(page, fixture, 'navigation-cancel.json'); await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   } finally { held.release(); releaseCancel.release(); }
-});
-
-test('searches all patients beyond page 1 in the chat upload drawer and keeps the chosen patient after clearing search (spec 040 slice C)', async ({ page }) => {
-  const me = page.waitForResponse(response => response.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/chat');
-  const authenticated = await me;
-  const api = new URL(authenticated.url()).origin;
-  const headers = { Authorization: authenticated.request().headers().authorization! };
-  const prefix = `SYN-${crypto.randomUUID().slice(0, 8)}`;
-  const created: { id: string; label: string }[] = [];
-  for (let index = 0; index < 25; index++) {
-    const res = await page.request.post(`${api}/api/v1/patients`, { headers, data: { label: `${prefix}-${index}` } });
-    expect(res.status()).toBe(201);
-    created.push(await res.json() as { id: string; label: string });
-  }
-  const oldest = created[0]!;
-  // Clicking Chat while already on /chat triggers announceNewChat(), remounting WorkspaceConversation without wiping auth so page 1 reloads with the 25 patients.
-  const page1 = page.waitForResponse(response => response.url().includes('/api/v1/patients?page=1') && response.status() === 200);
-  await openChat(page);
-  await page1;
-  await page.locator('input[type="file"]').setInputFiles({ name: 'drawer-search.json', mimeType: 'application/json', buffer: REPORT });
-  const dialog = page.getByRole('dialog', { name: 'Report details' });
-  await expect(dialog).toBeVisible();
-  const picker = dialog.getByRole('combobox', { name: 'Patient' });
-  await expect(picker.getByRole('option', { name: created[24]!.label, exact: true })).toHaveCount(1);
-  await expect(picker.getByRole('option', { name: oldest.label, exact: true })).toHaveCount(0);
-
-  const searchField = dialog.getByRole('textbox', { name: 'Find a patient' });
-  await searchField.fill(oldest.label);
-  await searchField.press('Enter');
-  await expect(dialog.getByText('Searched all patients: 1 match.')).toBeVisible();
-  await expect(picker.getByRole('option', { name: oldest.label, exact: true })).toHaveCount(1);
-  await picker.selectOption(oldest.id);
-  await expect(dialog.getByText(`This report will be saved in the record for ${oldest.label}.`)).toBeVisible();
-
-  await dialog.getByRole('button', { name: 'Clear patient search' }).click();
-  await expect(picker).toHaveValue(oldest.id);
-  await expect(dialog.getByText(`This report will be saved in the record for ${oldest.label}.`)).toBeVisible();
 });

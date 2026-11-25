@@ -10,12 +10,11 @@ import { SidebarLink } from '@/components/layout/SidebarLink';
 import { HelpButton } from '@/components/help/HelpButton';
 import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
-import { CHAT_PATH, LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
+import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
 import { preferenceStorage } from '@/lib/storageConsent';
 import { clampSidebarWidth, readSidebarCollapsed, readSidebarWidth, SIDEBAR_WIDTH, writeSidebarCollapsed, writeSidebarWidth } from '@/lib/sidebarPreference';
 import { cn } from '@/lib/utils';
 import { SidebarAccountMenu } from '@/components/layout/SidebarAccountMenu';
-import { announceNewChat } from '@/lib/workspaceEvents';
 import { Button } from '@/components/ui/Button';
 import { SIDEBAR_WORDS } from '@/lib/words/shell';
 import { useWords } from '@/lib/words/screens';
@@ -24,7 +23,7 @@ import { useWords } from '@/lib/words/screens';
 type PanelItem = { kind: 'link'; to: string; panel: string; label: string; icon: typeof FileText; show: boolean } | { kind: 'followups'; show: boolean };
 
 /**
- * The frame of every signed-in page (specs/018-unified-sidebar), laid out as specs/034: Home (the worklist, spec 049) and Chat, a short block
+ * The frame of every signed-in page (specs/018-unified-sidebar), laid out as specs/034: Home (the worklist, spec 049), Help, a short block
  * of destinations, one Recents list that takes the remaining height, and the account pinned at the bottom. On desktop it collapses to icons,
  * remembered in this browser; the layout narrows its column through `.workspace-layout:has(.is-collapsed)`. On small screens it is a
  * disclosure menu instead.
@@ -100,8 +99,8 @@ export function WorkspaceSidebar() {
   const { pathname } = useLocation();
   const lists = canRead && !pathname.startsWith('/local-');
   const followups = lists && roles.some((role) => role === 'clinician' || role === 'reviewer');
-  // The destinations (specs/034 D1, replacing the order of specs/024 D2), each only for the roles that may use it. Home and Chat sit above them
-  // (spec 049: "New chat" became Home, and the chat its own entry), Recents below them, and Settings with Sign out in the account menu at the bottom.
+  // The destinations (specs/034 D1, replacing the order of specs/024 D2), each only for the roles that may use it. Home sits above them (spec 049),
+  // Recents below them, and Settings with Sign out in the account menu at the bottom. The chat is gone (spec 052 RC1b, RC-6); Help stays.
   const everything: PanelItem[] = [
     ...(localWorkspaceAvailable()
       ? [
@@ -222,27 +221,6 @@ export function WorkspaceSidebar() {
                   <SidebarLink to={WORKSPACE_PATH} end data-panel-item="Home" onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
                     <House aria-hidden="true" className="size-4 shrink-0" />
                     <span className="workspace-link-label">{words.home}</span>
-                  </SidebarLink>
-                </LazyTooltip>
-              </li>
-            )}
-            {status === 'signedIn' && (
-              <li>
-                <LazyTooltip label={iconsOnly ? words.chat : undefined} side="right">
-                  <SidebarLink
-                    to={CHAT_PATH}
-                    end
-                    data-panel-item="Chat"
-                    onKeyDown={dismiss}
-                    onClick={() => {
-                      // From another page, Chat returns to the conversation in progress; on the chat itself it starts a new one, as "New chat" did.
-                      if (pathname === CHAT_PATH) announceNewChat();
-                      close();
-                    }}
-                    styleFor={linkClass}
-                  >
-                    <MessageSquare aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="workspace-link-label">{words.chat}</span>
                   </SidebarLink>
                 </LazyTooltip>
               </li>

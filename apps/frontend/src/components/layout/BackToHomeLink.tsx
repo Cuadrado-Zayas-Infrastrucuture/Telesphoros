@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom';
 import { WORKSPACE_PATH } from '@/lib/localWorkspace';
 
 /**
- * Returns to the worklist, the signed-in home (spec 049 section 5; it was "Back to chat", specs/041 C4). The conversation in progress stays
- * in memory, one click away as Chat in the sidebar.
+ * Returns to the worklist, the signed-in home (spec 049 section 5; it was "Back to chat", specs/041 C4). The chat itself is gone
+ * (spec 052 RC1b).
  */
 export function BackToHomeLink() {
   return (

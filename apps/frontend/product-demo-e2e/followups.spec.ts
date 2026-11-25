@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, openChat } from '../e2e/helpers';
+import { axeViolations, openPatients, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
 
 /** The sidebar link opens the Follow-ups page (specs/041 C2); its content is the page's main area. */
 async function openFollowups(page: Page) {
@@ -9,9 +9,8 @@ async function openFollowups(page: Page) {
   return page.getByRole('main');
 }
 
-test('a treatment follow-up saves its reminder, opens from chat and survives retry and reload', async ({ page }) => {
-  await signInAs(page, 'alice', '/chat');
-  await page.getByRole('textbox', { name: 'Question' }).fill('Keep this synthetic patient discussion');
+test('a treatment follow-up saves its reminder, opens from the Follow-ups page and survives retry and reload', async ({ page }) => {
+  await signInAs(page, 'alice', '/workspace');
   await openPatients(page); // specs/034 D2
   await page.getByRole('link', { name: 'Add patient', exact: true }).click();
   const label = `SYN-FOLLOWUP-${crypto.randomUUID().slice(0, 8)}`;
@@ -35,8 +34,6 @@ test('a treatment follow-up saves its reminder, opens from chat and survives ret
   await form.getByRole('button', { name: 'Schedule follow-up', exact: true }).click();
   await expect(followups.getByText('Follow-up saved.', { exact: true })).toBeVisible();
   await expect(followups.getByText('Overdue: 2026-01-01 (America/Puerto_Rico)', { exact: true })).toBeVisible();
-  await openChat(page);
-  await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this synthetic patient discussion');
   const inbox = await openFollowups(page);
   await expect(inbox.getByRole('link', { name: `${label} · hydralazine` })).toBeVisible();
   let summaryReads = 0;
@@ -123,7 +120,6 @@ test('a treatment follow-up saves its reminder, opens from chat and survives ret
   await followups.getByRole('button', { name: 'History', exact: true }).click();
   await expect(followups.getByRole('list', { name: 'Follow-up history' }).getByText('Version 1 · schedule')).toBeVisible();
   await followups.screenshot({ path: test.info().outputPath('followup-history.png') });
-  await openChat(page);
   await openFollowups(page);
   await inbox.getByRole('button', { name: 'Recorded treatment responses' }).click();
   await expect(summary.getByRole('row', { name: /^Improved/ }).getByRole('cell')).toHaveText(/[1-9][0-9]*/);

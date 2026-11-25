@@ -16,7 +16,6 @@ export const SIDEBAR_WORDS = defineWords({
     menu: 'Workspace navigation',
     primary: 'Primary',
     home: 'Home',
-    chat: 'Chat',
     workspace: 'Workspace',
     chatPreview: 'Chat preview',
     patients: 'Patients',

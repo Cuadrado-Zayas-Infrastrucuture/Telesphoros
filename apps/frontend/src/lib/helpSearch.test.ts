@@ -23,7 +23,6 @@ const ids = (results: ReturnType<typeof searchHelp>) => results.hits.map((hit) =
 describe('the screen in view', () => {
   it('names each screen an article can be about, and no other', () => {
     expect(helpScreenOf('/workspace')).toBe('worklist');
-    expect(helpScreenOf('/chat')).toBe('chat');
     expect(helpScreenOf('/patients')).toBe('patients');
     expect(helpScreenOf('/patients/new')).toBe('new-patient');
     expect(helpScreenOf('/patients/0f8fad5b-d9cb-469f-a165-70867728950e')).toBe('patient');
@@ -33,7 +32,7 @@ describe('the screen in view', () => {
     expect(helpScreenOf('/settings')).toBe('settings');
     expect(helpScreenOf('/usage')).toBe('usage');
     expect(helpScreenOf('/workspace/')).toBe('worklist');
-    for (const other of ['/', '/signin', '/patients/a/b', '/local-workspace']) expect(helpScreenOf(other), other).toBeNull();
+    for (const other of ['/', '/signin', '/patients/a/b', '/local-workspace', '/chat']) expect(helpScreenOf(other), other).toBeNull();
   });
 
   it('knows the same roles as the product', () => {

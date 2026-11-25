@@ -4,7 +4,7 @@ import { expect, test, type Page, type Locator } from '@playwright/test';
 import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 async function openPatient(page: Page) {
-  await signInAs(page, 'alice', '/chat');
+  await signInAs(page, 'alice', '/workspace');
   await openPatients(page); // specs/034 D2: the patient list and Add patient live on the Patients page
   const label = `SYN-MED-${crypto.randomUUID().slice(0, 8)}`;
   await page.getByRole('link', { name: 'Add patient' }).click();

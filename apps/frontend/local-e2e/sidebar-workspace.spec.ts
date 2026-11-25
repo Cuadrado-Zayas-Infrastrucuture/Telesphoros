@@ -51,9 +51,11 @@ test('report navigation is offered without owned storage, beside the local previ
   await expect(followups).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
   await expect(page.getByRole('link', { name: 'Chat preview', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Chat', exact: true }).click();
-  await expect(page).toHaveURL(/\/chat$/);
-  await expect(page.getByRole('button', { name: 'Attach a report', exact: true })).toBeVisible();
+  // Spec 052 RC1b: the chat is gone; Home is the way into the signed-in pages, and its quick action attaches a report.
+  await expect(page.getByRole('link', { name: 'Chat', exact: true })).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Home', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page.getByRole('main').getByRole('link', { name: 'Attach a report', exact: true })).toBeVisible();
   await openWorkspaceNavigation(page);
   await expect(followups).toBeVisible();
   await expect(followups).toHaveAttribute('href', '/follow-ups');

@@ -63,18 +63,16 @@ Written 2026-11-25 from the plan, after slice A merged (#390). P2: nothing runs 
 
 ## Slice C: the two pickers (after slice B's PR)
 
-Written 2026-11-25 from the approved plan, after slice B merged.
+Written 2026-11-25 from the plan, after slice B (#474) and spec 052 (#479, #481) merged. Spec 052 removed the chat, so one picker is left:
+Attach a report's (`UploadReportPage.tsx`). P2: CI is the first run of every test here.
 
-- [x] C1 `PatientSearchField` (`apps/frontend/src/components/patients/PatientSearchField.tsx`): reusable search input, "Search all patients"
-  button (Enter searches without submitting any outer form), local refusal message with 0 requests, status sentence, "More matches" paging,
-  Clear action, and inline error with Retry, wired to `usePatientSearch`.
-- [x] C2 `WorkspaceConversation.tsx` (PS-11, PS-12): mounts `PatientSearchField` above `PatientPicker`; passes matches while a 200 search
-  holds; keeps `selectedPatient` selectable across non-matching searches and after clearing a search-selected patient; `PatientPicker.tsx`
-  unchanged.
-- [x] C3 `UploadReportPage.tsx` (PS-11, PS-12): mounts `PatientSearchField` above `PatientPicker` inside the upload form without interfering
-  with outer form submission; passes matches while a 200 search holds; keeps `selectedPatient` selectable across non-matching searches and
-  after clearing a search-selected patient; hides `PatientPaging` while matches hold; `PatientPicker.tsx` unchanged.
-- [x] C4 Tests: `PatientSearchField.test.tsx`, `WorkspaceConversationSearch.test.tsx`, `UploadReportPageSearch.test.tsx` (failing-before
-  and passing-after covering 200, fallback + Retry on 400/403/429/500/network/malformed, local refusal with 0 requests, PS-12 abort/stale
-  drop, Enter not submitting outer form, clearing, and `selectedPatient` survival); `PatientPicker.test.tsx` unchanged and passing; 1
-  synthetic search case each in `e2e/upload.spec.ts` and `e2e/upload-navigation.spec.ts`.
+- [x] C1 `components/patients/PatientSearchField.tsx` (new): the field, Search all patients, the status line, the refusal, the failure
+  with Retry, and More matches, from slice B. Not a form: it sits inside the upload form, so Enter searches and never submits.
+- [x] C2 `UploadReportPage.tsx` (PS-11): the field above the picker, offered while the list has more than one page (D4); while a search
+  holds, the picker's choices are the matches and the page controls are hidden; the chosen patient stays a choice through
+  `selectedPatient`; any other answer keeps the loaded choices. `PatientPicker` unchanged.
+- [x] C3 Tests: `pages/UploadReportPage.search.test.tsx` (new); `e2e/upload.spec.ts` gains one search. `PatientPicker.test.tsx` is
+  unchanged. The plan also named `upload-navigation.spec.ts`; one browser search is enough for one picker, and that suite is about recovery.
+- [ ] C4 Breakages, one at a time, in a place where tests run: the matches never shown (the first case); the chosen patient dropped from
+  the choices (PS-11 case); Enter submitting the upload (Enter case); the fallback removed (failure case). The founder's browser check from
+  the written steps in `docs/verification/2026-11-25-patient-search-upload.md`.

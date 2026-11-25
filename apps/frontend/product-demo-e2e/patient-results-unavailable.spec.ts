@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { openPatients, signInAs } from '../e2e/helpers';
 
 test('the storage prototype reports disabled processing without inventing stored results', async ({ page }) => {
-  await signInAs(page, 'alice', '/chat');
+  await signInAs(page, 'alice', '/workspace');
   await openPatients(page); // specs/034 D2
   await page.getByRole('link', { name: 'Add patient', exact: true }).click();
   const label = `SYN-RESULTS-${crypto.randomUUID().slice(0, 8)}`;

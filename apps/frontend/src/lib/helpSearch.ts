@@ -10,7 +10,6 @@ import type { GlossaryEntry, HelpArticle, HelpScreen } from '@telesphoros/help-c
 export function helpScreenOf(pathname: string): HelpScreen | null {
   const path = pathname.replace(/\/+$/, '') || '/';
   if (path === '/workspace') return 'worklist';
-  if (path === '/chat') return 'chat';
   if (path === '/patients') return 'patients';
   if (path === '/patients/new') return 'new-patient';
   if (/^\/patients\/[^/]+$/.test(path)) return 'patient';

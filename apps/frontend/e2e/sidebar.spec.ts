@@ -3,14 +3,16 @@ import { axeViolations, openAccountMenu, openWorkspaceNavigation, signInAs } fro
 
 const primary = (page: import('@playwright/test').Page) => page.getByRole('navigation', { name: 'Primary', exact: true });
 
-test('workspace panels return to the shared sidebar and chat attachment action', async ({ page }) => {
+test('the shared sidebar holds Home and the destinations, no Chat, and Home leads to attaching a report (spec 052 RC-2, RC-6)', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');
   await openWorkspaceNavigation(page);
-  for (const name of ['Home', 'Chat', 'Patients', 'Reports']) await expect(primary(page).getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['Home', 'Patients', 'Reports']) await expect(primary(page).getByRole('link', { name, exact: true })).toBeVisible();
+  await expect(primary(page).getByRole('link', { name: 'Chat', exact: true })).toHaveCount(0);
   await expect(page.locator('header.workspace-navigation')).toBeVisible();
-  // Closing the panel returned to the chat; Chat there starts a new conversation (spec 049, as New chat did).
-  await primary(page).getByRole('link', { name: 'Chat', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Attach a report', exact: true })).toBeVisible();
+  await primary(page).getByRole('link', { name: 'Home', exact: true }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Attach a report', exact: true }).click();
+  await expect(page).toHaveURL(/\/reports\/upload$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
 });
 
 test.describe('desktop collapse', () => {

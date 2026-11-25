@@ -5,8 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { PatientSearchField } from '@/components/patients/PatientSearchField';
 import type { PatientSearch } from '@/hooks/usePatientSearch';
 
+// Spec 040 slice C. From #483, adapted to the field that merged in #482: it has no Clear button; changing the text drops the search.
 describe('PatientSearchField (spec 040 slice C)', () => {
-  it('submits trimmed text on Enter without submitting an outer form, and clears back to idle', async () => {
+  it('searches the trimmed text on Enter without submitting an outer form, and changing the text drops the search', async () => {
     const onOuterSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
     const onSearch = vi.fn();
     const onReset = vi.fn();
@@ -23,9 +24,10 @@ describe('PatientSearchField (spec 040 slice C)', () => {
     expect(onSearch).toHaveBeenCalledExactlyOnceWith('SYN-42');
     expect(onOuterSubmit).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear patient search' }));
+    onReset.mockClear();
+    await userEvent.clear(input);
     expect(input).toHaveValue('');
-    expect(onReset).toHaveBeenCalledOnce();
+    expect(onReset).toHaveBeenCalled();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -37,7 +39,7 @@ describe('PatientSearchField (spec 040 slice C)', () => {
 
     const input = screen.getByRole('textbox', { name: 'Find a patient' });
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(input).toHaveAccessibleDescription('Use letters, numbers and hyphens only.');
+    expect(input).toHaveAccessibleDescription(expect.stringContaining('Use letters, numbers and hyphens only.'));
 
     const found: PatientSearch = {
       status: 'found',
@@ -49,7 +51,7 @@ describe('PatientSearchField (spec 040 slice C)', () => {
       moreFailed: true,
     };
     rerender(<PatientSearchField state={found} onSearch={onSearch} onMore={onMore} onReset={vi.fn()} />);
-    expect(input).toHaveAccessibleDescription('Searched all patients: 25 matches.');
+    expect(input).toHaveAccessibleDescription('Searched all patients: 25 matches. The choices below are the matches.');
     expect(screen.getByRole('alert')).toHaveTextContent('More matches could not be loaded. Please retry.');
     await userEvent.click(screen.getByRole('button', { name: 'More matches' }));
     expect(onMore).toHaveBeenCalledOnce();
