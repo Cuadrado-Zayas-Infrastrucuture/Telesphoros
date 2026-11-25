@@ -23,8 +23,10 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/Input';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { usePatientSearch } from '@/hooks/usePatientSearch';
 import { PatientPicker } from '@/components/PatientPicker';
 import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
+import { PatientSearchField } from '@/components/patients/PatientSearchField';
 import { AddPatientPanel } from '@/components/upload/AddPatientPanel';
 import { PatientPaging } from '@/components/upload/PatientPaging';
 import { UploadReceived } from '@/components/upload/UploadReceived';
@@ -73,6 +75,11 @@ export default function UploadReportPage() {
   );
   const { patients, loading: patientsLoading, error: patientError, requestedPage, load: loadPatients } = usePatientPages();
   const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
+  // Spec 040 slice C (PS-11): while a search of every patient holds, the choices are its matches; the chosen patient stays a choice.
+  const { state: patientSearch, search: searchPatients, more: moreMatches, reset: resetSearch } = usePatientSearch();
+  const matches = patientSearch.status === 'found' ? patientSearch.patients : null;
+  const choices = matches ?? patients?.data ?? null;
+  const searchOffered = (patients?.meta.totalPages ?? 0) > 1 || patientSearch.status !== 'idle';
 
   const [serverError, setServerError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
@@ -107,7 +114,7 @@ export default function UploadReportPage() {
   }, [patientsLoading, form]);
   // The list row of the chosen patient carries `demographicsComplete`; a just-created patient gets it once the page reloads.
   const chosenPatientId = useWatch({ control: form.control, name: 'patientId' });
-  const chosenRow = patients?.data.find((patient) => patient.id === chosenPatientId);
+  const chosenRow = choices?.find((patient) => patient.id === chosenPatientId);
 
   async function addPatient() {
     setAdded(null);
@@ -302,6 +309,7 @@ export default function UploadReportPage() {
                     <legend className="sr-only">Report details</legend>
 
                     <div hidden={guided && step !== 0} className={guided && step !== 0 ? 'hidden' : 'flex flex-col gap-2'}>
+                      {searchOffered && <PatientSearchField state={patientSearch} onSearch={searchPatients} onMore={moreMatches} onReset={resetSearch} />}
                       <FormField
                         control={form.control}
                         name="patientId"
@@ -311,7 +319,7 @@ export default function UploadReportPage() {
                             <FormControl>
                               <PatientPicker
                                 {...field}
-                                patients={patients?.data ?? null}
+                                patients={choices}
                                 selectedPatient={selectedPatient}
                                 loading={patientsLoading}
                                 error={patientError}
@@ -320,7 +328,7 @@ export default function UploadReportPage() {
                                 onRetry={() => loadPatients(requestedPage)}
                                 onValueChange={(id) => {
                                   field.onChange(id);
-                                  setSelectedPatient(patients?.data.find((patient) => patient.id === id) ?? null);
+                                  setSelectedPatient(choices?.find((patient) => patient.id === id) ?? null);
                                 }}
                               />
                             </FormControl>
@@ -338,7 +346,7 @@ export default function UploadReportPage() {
                         )}
                       />
 
-                      <PatientPaging patients={patients} loading={patientsLoading} error={patientError} busy={isSubmitting} onPage={loadPatients} />
+                      {!matches && <PatientPaging patients={patients} loading={patientsLoading} error={patientError} busy={isSubmitting} onPage={loadPatients} />}
                       {added && (
                         <p role="status" className="text-sm text-muted-foreground">
                           {added}
