@@ -1,8 +1,41 @@
 # Investor prototype: presentation and acceptance
 
-Date: 2026-11-02
+Date: 2026-11-02; computed result on staging added 2026-11-24
 
-## Scope
+There are two demonstrations. **Lead with the computed result on staging** (below): a structured synthetic report, reviewed by a second person, computed by the deterministic engine against invented knowledge and stored with its basis. Keep **the local storage prototype** (from "Scope" on) as the fallback: it shows the chat workspace, upload, follow-up and fixed sample results, and computes nothing.
+
+## Computed result on staging (lead)
+
+Synthetic staging has had the synthetic assessment on since 2026-11-05 ([environments](ops/environments.md), [switch](ops/synthetic-assessment-switch.md)). It never runs in the local prototype: the API refuses `SYNTHETIC_ASSESSMENT` in a disposable local run (`apps/backend/src/config/env.ts`), so this part is shown on staging only.
+
+What happens, and what does not:
+
+- The input is the committed demonstration package `data/fixtures/pgx-structured-demo/package.json` (format `pgx-synthetic-0.1`, `synthetic: true`). The backend test `synthetic-assessment.e2e-spec.ts` assesses it byte for byte and expects two results: DRUGQ "Q normal." and DRUGZ "Z normal-low.".
+- The genes (GENEA, GENEB) and drugs (DRUGQ, DRUGZ) are invented. The knowledge is the synthetic set baked into the image (`data/fixtures/knowledge/synthetic-structured/`), not CPIC content. Present it as the mechanism on invented data, never as a pharmacogenomic answer.
+- Nothing is computed until a second person, who did not upload the report, has verified the patient link and decided every finding. The engine is deterministic and copies its wording from the guideline cell it cites. The result is stored, and the screen says "Synthetic data only. Clinical use is not approved."
+- Not shown: report extraction from a PDF, FHIR input, the real codeine module, any medication check. FHIR intake and the signed codeine module are not on staging.
+
+### Five-minute presentation (staging)
+
+Before the meeting, sign in on two browser profiles: a **clinician** account and a **reviewer** account that will not upload anything (Kevin, or a demo reviewer). Create a fictional patient first, and keep the package file ready in a file picker. The package refers to its patient by a laboratory reference (`syn-patient-demo`); the reviewer decides whether that reference belongs to the patient it was uploaded for. Use a 1280×800 window.
+
+| Time | Who | Action | Presenter wording |
+| --- | --- | --- | --- |
+| 0:00–0:30 | Clinician | Open the fictional patient | “Labs increasingly send structured results. This is an invented one, with invented genes.” |
+| 0:30–1:10 | Clinician | Upload the demonstration package; open its structured preview, where **Run synthetic assessment** is disabled and reads “Available once every saved finding has an independent decision.” | “Nothing is computed from what one person uploaded.” |
+| 1:10–2:10 | Reviewer | Open the same report; confirm that its laboratory patient reference belongs to this patient; accept each finding | “A second clinician checks the identity and every finding. The uploader cannot review their own report.” |
+| 2:10–3:10 | Clinician | Choose **Run synthetic assessment**; open DRUGZ and DRUGQ and their details | “The engine is deterministic. Each line is the wording of the guideline cell it cites, and the screen names the knowledge set and engine version.” |
+| 3:10–3:50 | Clinician | Choose **Run synthetic assessment** again; then **Open this patient’s stored results** | “Running it again returns the same stored assessment, not a second one. It is kept with the findings and review it was computed from.” |
+| 3:50–4:40 | Presenter | The path to real use | “The same flow runs with the first real module, codeine with CYP2D6, once two pharmacists have signed it. Then come real lab formats.” |
+
+### Rehearsal (staging)
+
+- Confirm staging serves the assessment: the structured preview shows the **Synthetic assessment** section, and a run stores a result. If the section is missing, or a run says “The synthetic assessment is not switched on in this environment.”, do not present this part.
+- Confirm the reviewer account holds the reviewer role and did not create, request or upload the report.
+- Run the sequence twice by hand on the meeting machine, with a fresh upload each time.
+- Review that no screen or narration implies a real gene, a real drug, a clinical recommendation or a medication check.
+
+## Scope (local storage prototype, fallback)
 
 The local synthetic prototype now starts in **chat**. Attaching a report opens a compact details dialog; patient creation and demographics open the patient record. Medications are recorded there. Report history and settings open over chat, and returning from a patient keeps the unsent question and attachment. The legacy upload route remains a compatibility panel for recovery links.
 
@@ -20,7 +53,7 @@ The presentation demonstrates real patient creation, validated report upload and
 
 Follow-up preparation authorized by the founder: run the core presentation sequence twice using temporary local browser automation, measure each scene, and create an English synthetic-voice recording with captions from the second run. Keep temporary tooling and media outside git. Check real patient/upload/result/hold transitions and inspect the exported recording. No product code, deployment or clinical gate changes. Automated timed rehearsals do not certify the presenter's delivery or the eventual meeting machine.
 
-## Five-minute presentation
+## Five-minute presentation (local storage prototype)
 
 Start the demo and sign in before the meeting. Use a 1280×800 browser window. Keep the original D01 and D08 fixture PDFs ready in a file picker. Do not spend presentation time on dependency setup or the fake identity provider.
 
@@ -38,7 +71,7 @@ Use in-app links throughout. To show a second upload, close report history and a
 | 3:24–3:50 | Close Follow-ups; attach and upload D08 for the same fictional patient; open Show held sample | “This fixed example illustrates unsupported evidence: a reason is shown, with no gene or drug result. Unmatched files get no sample interpretation.” |
 | 3:50–4:28 | Return to chat and describe the next milestone | “The workflow is working. Actual report extraction and validated computation come next; optional AI notes and governed Data Insights remain future work.” |
 
-Patient demographics, medication capture and follow-up documentation use the real local API and database. The medication and recorded response are fictional examples, not treatment advice. Describe reminders as in-app; no email or push notification is sent. The response chart includes all recorded follow-ups, including closed reminders, and its clinic totals do not change when reminder filters change. Do not substitute hosted staging: the fixed-result screens are intentionally loopback-only and absent from its normal build.
+Patient demographics, medication capture and follow-up documentation use the real local API and database. The medication and recorded response are fictional examples, not treatment advice. Describe reminders as in-app; no email or push notification is sent. The response chart includes all recorded follow-ups, including closed reminders, and its clinic totals do not change when reminder filters change. Do not substitute hosted staging for this part: the fixed-result screens are intentionally loopback-only and absent from its normal build. The computed result is the staging part above.
 
 ## Rehearsal
 
