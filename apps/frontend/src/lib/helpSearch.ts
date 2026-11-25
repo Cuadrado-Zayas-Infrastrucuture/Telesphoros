@@ -31,9 +31,14 @@ export function articlesFor(articles: readonly HelpArticle[], screen: HelpScreen
   return screen === null ? [] : articles.filter((article) => article.screens.includes(screen) && visibleTo(article, roles));
 }
 
+const MARKS = /\p{M}+/gu;
+const NOT_A_WORD = /[^\p{L}\p{N}]+/gu;
+/** The text without its accents: "Cómo" reads "Como". */
+const withoutAccents = (text: string) => text.normalize('NFD').replace(MARKS, '');
+
 /** Letters and digits only, lower case, accents removed, one space between words: "Cómo  AÑADIR" reads "como anadir". */
 export function normalizeHelpText(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return withoutAccents(text).toLowerCase().replace(NOT_A_WORD, ' ').trim();
 }
 
 /** Words that carry no topic, in English and Spanish, as normalized. */
@@ -145,7 +150,7 @@ const CLINICAL_WORDS = new Set([
  * general question; it is never the only safeguard, because no article speaks about a patient.
  */
 export function isPatientQuestion(question: string): boolean {
-  const text = question.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+  const text = withoutAccents(question).toLowerCase();
   if (/\bsyn-[a-z0-9][a-z0-9-]*/.test(text)) return true;
   if (/\*\s?\d+/.test(text)) return true;
   if (/\bactivity score\s*(of\s*)?\d/.test(text) || /\bpuntuacion de actividad\s*(de\s*)?\d/.test(text)) return true;
