@@ -80,4 +80,4 @@ KMS cannot rotate an asymmetric key, and a signer keeps their id because it is t
 
 1. Plan and apply a replacement of that signer's key only (`-replace='aws_kms_key.knowledge_signer["<id>"]'`), as for any change in [deployment.md](deployment.md). The old key is scheduled for deletion, and the API gets the new public key under the same id.
 2. From then on, every file that signer signed fails to load until it is signed again, which is the intended effect.
-3. Re-sign those files with the new key (step 4) and release them.
+3. Re-sign those files with the new key (step 5) and release them.
