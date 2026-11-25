@@ -62,9 +62,9 @@ test('landing has working anchors, readable responsive layout and honest preview
     await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: label, exact: true }).click();
     expect(new URL(page.url()).hash).toBe(hash);
   }
-  const question = page.locator('summary').filter({ hasText: 'Does the chat interpret my reports?' });
+  const question = page.locator('summary').filter({ hasText: 'Does Help answer questions about a patient?' });
   await question.focus(); await page.keyboard.press('Enter');
-  await expect(page.getByText(/^No. In this prototype the chat uploads a report and shows its status/)).toBeVisible();
+  await expect(page.getByText(/^No. Help explains how to use the app, from reviewed articles/)).toBeVisible();
   await checkLayout(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
@@ -96,11 +96,11 @@ test('landing motion is decorative, finite and leaves a complete still page for 
     new PerformanceObserver(list => { for (const entry of list.getEntries() as (PerformanceEntry & { value: number; hadRecentInput: boolean })[]) if (!entry.hadRecentInput) shift += entry.value; }).observe({ type: 'layout-shift', buffered: true });
     setTimeout(() => resolve(shift), 200);
   }))).toBeLessThan(0.01);
-  // Reading down the page plays each fragment once; the chat sample ends on the note the chat really shows.
+  // Reading down the page plays each fragment once; the Help sample ends on an answer about using the app (LC-D2).
   await scrollThrough(page);
   await page.locator('#platform').scrollIntoViewIfNeeded();
   await expect(page.locator('.landing-fragment-answer')).toBeVisible();
-  await expect(page.locator('.landing-fragment-answer')).toHaveText('Interpretation is not available in the prototype yet.');
+  await expect(page.locator('.landing-fragment-answer')).toHaveText('Choose Attach a report on your home page.');
   await checkLayout(page);
   await page.locator('#platform').screenshot({ path: `../../docs/design/previews/landing-fragments-${info.project.name}.png` });
   expect(apiRequests).toEqual([]);
