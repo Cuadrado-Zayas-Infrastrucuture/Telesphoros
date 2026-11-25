@@ -91,6 +91,11 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     [],
   );
 
+  // PatientSearchField unmounts whenever `file` clears; reset and abort the hook state so the next attachment starts clean while selectedPatient stays kept.
+  useEffect(() => {
+    if (!file) resetPatientSearch();
+  }, [file, resetPatientSearch]);
+
   const update = (id: number, change: Partial<UploadEntry>) =>
     setEntries((list) => list.map((entry) => (entry.id === id && entry.kind === 'upload' ? { ...entry, ...change } : entry)));
 

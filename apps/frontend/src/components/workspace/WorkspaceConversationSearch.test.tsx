@@ -91,6 +91,8 @@ describe('WorkspaceConversation patient search (spec 040 slice C, PS-11, PS-12)'
     expect(picker).toHaveValue(patient(20).id);
     await userEvent.type(field, 'SYN-99{Enter}');
     expect(await dialog.findByText('Searched all patients: no match.')).toBeVisible();
+    // Enter searched without submitting the outer PromptInput form.
+    expect(dialog.queryByText('Confirm the file is synthetic.')).not.toBeInTheDocument();
     expect(picker).toHaveValue(patient(20).id);
     expect(dialog.getByRole('option', { name: 'SYN-20' })).toBeInTheDocument();
     expect(dialog.getByText('This report will be saved in the record for SYN-20.')).toBeVisible();
@@ -177,5 +179,28 @@ describe('WorkspaceConversation patient search (spec 040 slice C, PS-11, PS-12)'
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(dialog.getByText('Searched all patients: 1 match.')).toBeVisible();
     expect(dialog.queryByRole('option', { name: 'SYN-40' })).not.toBeInTheDocument();
+  });
+
+  it('resets search state when the attachment is removed, restoring loaded choices on the next attachment while keeping selectedPatient', async () => {
+    const fetchImpl = api(() => json(pageOf([patient(42)], 1, 1)));
+    const { dialog, field, picker } = await openUploadDrawer(fetchImpl);
+
+    await userEvent.type(field, 'SYN-42{Enter}');
+    await dialog.findByRole('option', { name: 'SYN-42' });
+    await userEvent.selectOptions(picker, patient(42).id);
+    expect(dialog.getByText('Searched all patients: 1 match.')).toBeVisible();
+
+    await userEvent.click(dialog.getByRole('button', { name: 'Remove file' }));
+    const nextFile = new File(['{"synthetic":true}'], 'synthetic-2.json', { type: 'application/json' });
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type=file]')!, nextFile);
+
+    const nextDialog = within(await screen.findByRole('dialog', { name: 'Report details' }));
+    expect(nextDialog.getByRole('textbox', { name: 'Find a patient' })).toHaveValue('');
+    expect(nextDialog.queryByText(/Searched all patients/)).not.toBeInTheDocument();
+    expect(nextDialog.getByRole('option', { name: 'SYN-20' })).toBeInTheDocument();
+    expect(nextDialog.getByRole('button', { name: 'More patients' })).toBeVisible();
+    expect(nextDialog.getByRole('combobox', { name: 'Patient' })).toHaveValue(patient(42).id);
+    expect(nextDialog.getByRole('option', { name: 'SYN-42' })).toBeInTheDocument();
+    expect(nextDialog.getByText('This report will be saved in the record for SYN-42.')).toBeVisible();
   });
 });

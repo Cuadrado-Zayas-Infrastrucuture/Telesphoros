@@ -313,7 +313,13 @@ export default function UploadReportPage() {
 
                     <div hidden={guided && step !== 0} className={guided && step !== 0 ? 'hidden' : 'flex flex-col gap-2'}>
                       {((patients && patients.meta.total > 0) || patientSearch.status !== 'idle') && (
-                        <PatientSearchField state={patientSearch} onSearch={searchAllPatients} onMore={moreMatches} onReset={resetPatientSearch} disabled={isSubmitting} />
+                        <PatientSearchField
+                          state={patientSearch}
+                          onSearch={searchAllPatients}
+                          onMore={moreMatches}
+                          onReset={resetPatientSearch}
+                          disabled={isSubmitting || cancelling}
+                        />
                       )}
                       <FormField
                         control={form.control}

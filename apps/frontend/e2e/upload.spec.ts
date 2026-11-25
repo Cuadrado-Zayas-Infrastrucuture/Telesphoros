@@ -306,7 +306,10 @@ test('searches all patients beyond page 1 on the upload page and keeps the chose
     created.push(await res.json() as { id: string; label: string });
   }
   const target = created[24]!;
+  await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+  const refreshed = page.waitForResponse(response => response.url().includes('/api/v1/patients?page=1') && response.status() === 200);
   await page.getByRole('button', { name: 'Refresh patients' }).click();
+  await refreshed;
   await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
   await expect(page.getByRole('option', { name: target.label, exact: true })).toHaveCount(0);
 

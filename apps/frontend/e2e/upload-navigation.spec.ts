@@ -125,7 +125,7 @@ test('navigation keeps recovery cancellable and only server acknowledgement clea
 
 test('searches all patients beyond page 1 in the chat upload drawer and keeps the chosen patient after clearing search (spec 040 slice C)', async ({ page }) => {
   const me = page.waitForResponse(response => response.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/workspace');
+  await signInAs(page, 'alice', '/chat');
   const authenticated = await me;
   const api = new URL(authenticated.url()).origin;
   const headers = { Authorization: authenticated.request().headers().authorization! };
@@ -137,7 +137,10 @@ test('searches all patients beyond page 1 in the chat upload drawer and keeps th
     created.push(await res.json() as { id: string; label: string });
   }
   const oldest = created[0]!;
+  // Clicking Chat while already on /chat triggers announceNewChat(), remounting WorkspaceConversation without wiping auth so page 1 reloads with the 25 patients.
+  const page1 = page.waitForResponse(response => response.url().includes('/api/v1/patients?page=1') && response.status() === 200);
   await openChat(page);
+  await page1;
   await page.locator('input[type="file"]').setInputFiles({ name: 'drawer-search.json', mimeType: 'application/json', buffer: REPORT });
   const dialog = page.getByRole('dialog', { name: 'Report details' });
   await expect(dialog).toBeVisible();
