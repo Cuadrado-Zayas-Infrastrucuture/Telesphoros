@@ -4,6 +4,8 @@ import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
 import { useFollowups } from '@/hooks/useFollowups';
 import type { FollowupInboxFilters } from '@telesphoros/shared-types';
+import { SIDEBAR_WORDS } from '@/lib/words/shell';
+import { useWords } from '@/lib/words/screens';
 
 const allFilters: FollowupInboxFilters = { assignment: 'all', status: 'all' };
 
@@ -21,7 +23,8 @@ export function FollowupsNavLink({
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
 }) {
   const { data, error } = useFollowups(undefined, undefined, allFilters);
-  const label = `Follow-ups${data && !error ? ` (${data.counts.overdue + data.counts.today})` : ''}`;
+  const words = useWords(SIDEBAR_WORDS);
+  const label = data && !error ? words.followupsCount(String(data.counts.overdue + data.counts.today)) : words.followups;
   return (
     <LazyTooltip label={iconsOnly ? label : undefined} side="right">
       <SidebarLink to="/follow-ups" end data-panel-item="Follow-ups" onKeyDown={onKeyDown} onClick={onClick} styleFor={className}>

@@ -11,6 +11,7 @@ The clinician-facing web app (Vite, React, Tailwind). **Synthetic data only.** D
 | A page and the components it uses | [`src/pages/`](src/pages), [`src/components/`](src/components) |
 | Browser identity and roles | [`src/auth/`](src/auth), [`src/auth/roles.ts`](src/auth/roles.ts) |
 | Build-time modes (`VITE_LOCAL_STORAGE_INTAKE`, `VITE_SYNTHETIC_ASSESSMENT`) | [`src/lib/storageMode.ts`](src/lib/storageMode.ts) |
+| The founders' Spanish preview (`VITE_LANGUAGE_PREVIEW`, development, test and e2e builds only; spec 050 LS2-D1) | [`src/lib/languagePreview.ts`](src/lib/languagePreview.ts) |
 | API shapes shared with the backend | [`../../packages/shared-types`](../../packages/shared-types) |
 | Fonts and literal colors (the only place they may be defined) | [`src/styles/tokens.css`](src/styles/tokens.css) |
 

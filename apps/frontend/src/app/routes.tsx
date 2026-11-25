@@ -1,4 +1,5 @@
 import { ownedStorageMode, syntheticStagingMode } from '@/lib/storageMode';
+import { languagePreviewEnabled } from '@/lib/languagePreview';
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
@@ -19,6 +20,7 @@ import { RouteLoading } from '@/components/RouteLoading';
 // Read once at start-up so an invalid owned-storage setting fails here, before anything renders, rather than being taken for "off".
 ownedStorageMode();
 syntheticStagingMode();
+languagePreviewEnabled();
 
 export const routes: RouteObject[] = [
   {
@@ -29,7 +31,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, lazy: async () => ({ Component: (await import('@/pages/HomePage')).default }) },
       { path: 'signin', handle: { screen: 'sign-in' }, lazy: async () => ({ Component: (await import('@/pages/SignInPage')).default }) },
-      { path: 'auth/callback', lazy: async () => ({ Component: (await import('@/pages/AuthCallbackPage')).default }) },
+      { path: 'auth/callback', handle: { screen: 'sign-in' }, lazy: async () => ({ Component: (await import('@/pages/AuthCallbackPage')).default }) },
       { path: 'signed-out', handle: { screen: 'sign-in' }, lazy: async () => ({ Component: (await import('@/pages/SignedOutPage')).default }) },
       {
         element: <ProtectedRoute />,
