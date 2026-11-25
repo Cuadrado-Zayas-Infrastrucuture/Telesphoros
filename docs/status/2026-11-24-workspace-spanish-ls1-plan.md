@@ -13,4 +13,4 @@ A plan, `specs/050-workspace-spanish/plan-slice-ls1.md`, for the language layer 
 - a pull-request line on Spanish.
 
 It writes no Spanish, and nothing changes on screen. The account menu still says "Español: aún no disponible". Five decisions, LS1-D1 to
-LS1-D5, are put to the founder. Not approved yet. No code change.
+LS1-D5, were put to the founder, who approved all five as recommended on 2026-11-25. No code change.

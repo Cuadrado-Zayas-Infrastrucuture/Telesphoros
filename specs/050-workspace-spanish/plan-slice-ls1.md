@@ -1,7 +1,7 @@
 # Plan: spec 050, slice LS1, the language layer
 
-**Status**: **proposed, 2026-11-24. Not approved.** No code until the founder approves LS1-D1 to LS1-D5. Read against `main` at `64253c3d`,
-after #461 (spec 050, approved with LS-D1 to LS-D8 as recommended).
+**Status**: **approved by the founder on 2026-11-25: LS1-D1 to LS1-D5 as recommended.** Read against `main` at `64253c3d`, after #461
+(spec 050, approved with LS-D1 to LS-D8 as recommended). Built in the pull request after the one that merges this plan.
 
 LS1 builds the layer every later slice uses. **It writes no Spanish, and nothing changes on screen.** The account menu keeps "Español: aún
 no disponible" (LS-D2). The Spanish choice can be set only by tests until LS6.
