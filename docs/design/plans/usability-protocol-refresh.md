@@ -2,7 +2,7 @@
 
 Date: 2026-11-25
 
-Status: **plan only, waiting for the founder's decisions (section 4).** No document, code or test changes yet.
+Status: **approved by the founder on 2026-11-25: UP-D1, UP-D2 and UP-D3 as recommended.** Plan only: no document, code or test changes.
 
 ## 1. Why
 
@@ -79,18 +79,18 @@ The synthetic drug and gene names come from the e2e fixtures, as they do in the 
 
 ## 4. Decisions for the founder
 
-- **UP-D1. Session length.** Twelve tasks at up to three minutes each is longer than ten.
+- **UP-D1. Session length.** Twelve tasks at up to three minutes each is longer than ten. **Decided 2026-11-25: as recommended.**
   - **Recommended:** keep all twelve in one session. Tasks 11 and 12 test the newest clinical words, and the stop-a-release rule needs
     them seen by the same five participants.
   - **Alternative:** keep ten tasks by dropping task 6 (the withdrawn result) and task 8 (the blocked follow-up save). Both are kept
     as browser tests already.
 - **UP-D2. Task 4's pass criterion**, the medication question. This is a clinical reading, so it is yours and the co-founder's to
-  word.
+  word. **Decided 2026-11-25: as recommended.**
   - **Recommended:** the participant names the gene results, and says the guidance rests on the genes alone and does not take the
     medication into account, even where a notice says a medication can change the gene.
   - **Alternative:** split it in two. Task 4 keeps only the gene question, and task 11 carries the whole medication reading.
 
-- **UP-D3. Session data for the notice (task 11).** No build today loads a modifier list without signatures.
+- **UP-D3. Session data for the notice (task 11).** No build today loads a modifier list without signatures. **Decided 2026-11-25: as recommended.**
   - **Recommended:** keep task 11 in the protocol, marked "only when the session build shows a notice", and make the session data its
     own slice with its own plan. That slice would be a local-only script that signs a synthetic list with throwaway test keys, as the
     backend test does, never with the founders' keys. Until it exists, a session skips task 11, and the record says so.

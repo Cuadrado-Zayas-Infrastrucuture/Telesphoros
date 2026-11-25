@@ -8,7 +8,7 @@ not used" has two readings since the notices arrived. The plan rewrites five tas
 (task 12).
 
 Found while planning: no session build can show a notice today, because the API loads only signed modifier lists and the synthetic ones
-are unsigned. Three decisions are waiting: the session length (UP-D1), task 4's pass criterion (UP-D2) and the session data for the
-notice (UP-D3).
+are unsigned. The founder decided all three as recommended: twelve tasks in one session (UP-D1); task 4 passes when the participant says the guidance
+rests on the genes alone (UP-D2); task 11 stays, run only once a later slice prepares a test-signed list (UP-D3).
 
 Record: [the plan](../design/plans/usability-protocol-refresh.md). No code, test, fixture or protocol change yet.
