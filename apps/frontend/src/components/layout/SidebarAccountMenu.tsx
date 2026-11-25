@@ -6,16 +6,22 @@ import { AccountMenuDisclosure } from '@/components/layout/AccountMenuDisclosure
 import { AccountMenuLink } from '@/components/layout/AccountMenuLink';
 import { useStorageConsent } from '@/components/privacy/StorageConsentProvider';
 import { ACCOUNT_MENU_ICON as ICON, ACCOUNT_MENU_ROW as ITEM, type AccountMenuKeyHandler as KeyHandler } from '@/lib/accountMenu';
+import { useAppLanguage } from '@/lib/appLanguage';
 import { HELP_LINKS, POLICY_LINKS } from '@/lib/helpLinks';
+import { languagePreviewEnabled } from '@/lib/languagePreview';
 import { THEME_PREFERENCES, type ThemePreference } from '@/lib/theme';
+import type { Words } from '@/lib/words/defineWords';
+import { ACCOUNT_MENU_WORDS } from '@/lib/words/shell';
+import { useWords } from '@/lib/words/screens';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/theme/ThemeProvider';
 
-const THEME_OPTIONS: Record<ThemePreference, { label: string; name: string }> = {
-  system: { label: 'Auto', name: 'Auto (match this device)' },
-  light: { label: 'Light', name: 'Light' },
-  dark: { label: 'Dark', name: 'Dark' },
-};
+type MenuWords = Words<(typeof ACCOUNT_MENU_WORDS)['en']>;
+const themeOptions = (words: MenuWords): Record<ThemePreference, { label: string; name: string }> => ({
+  system: { label: words.themeAuto, name: words.themeAutoName },
+  light: { label: words.themeLight, name: words.themeLight },
+  dark: { label: words.themeDark, name: words.themeDark },
+});
 /** The stops for ↑ and ↓: each link and button outside a closed section, and the theme choice as one stop (its checked radio; ← and → change it). */
 const STOPS = 'a[href], button, input[type=radio]:checked';
 
@@ -35,6 +41,9 @@ export function SidebarAccountMenu({ open, name, onClose, onKeyDown }: { open: b
   const { email, signOut } = useAuth();
   const { preference, setPreference } = useTheme();
   const { openPreferences, reopenLabel } = useStorageConsent();
+  const words = useWords(ACCOUNT_MENU_WORDS);
+  const { language, setLanguage } = useAppLanguage();
+  const options = themeOptions(words);
   const menu = useRef<HTMLDivElement>(null);
   const themeLabel = useId();
   useEffect(() => {
@@ -68,45 +77,57 @@ export function SidebarAccountMenu({ open, name, onClose, onKeyDown }: { open: b
         <li>
           <NavLink to="/settings" onKeyDown={onKeyDown} onClick={onClose} className={ITEM}>
             <Settings aria-hidden="true" className={ICON} />
-            Settings
+            {words.settings}
           </NavLink>
         </li>
-        <AccountMenuDisclosure icon={Globe} label="Language" value="English" onKeyDown={onKeyDown}>
+        <AccountMenuDisclosure icon={Globe} label={words.language} value={words.english} onKeyDown={onKeyDown}>
           {/* The signed-in app is written in English only; the public landing alone has Spanish. Nothing here pretends otherwise. */}
           <li className="account-menu-row flex items-center justify-between gap-3 px-3 text-sm">
-            English
-            <Check aria-label="Current language" className="size-4 shrink-0 text-primary" />
+            {words.english}
+            <Check aria-label={words.currentLanguage} className="size-4 shrink-0 text-primary" />
           </li>
           <li lang="es" className="account-menu-row flex items-center px-3 text-sm text-muted-foreground">
             Español: aún no disponible
           </li>
+          {/* Spec 050 LS2-D1: the founders' preview, only in a development, test or e2e build. Not translated: it is not part of the app. */}
+          {languagePreviewEnabled() && (
+            <li className="account-menu-row flex items-center gap-2 px-3 text-xs text-muted-foreground">
+              <span>Preview:</span>
+              <button type="button" lang="en" aria-pressed={language === 'en'} onClick={() => setLanguage('en')} className="underline underline-offset-2">
+                English
+              </button>
+              <button type="button" lang="es" aria-pressed={language === 'es'} onClick={() => setLanguage('es')} className="underline underline-offset-2">
+                Español
+              </button>
+            </li>
+          )}
         </AccountMenuDisclosure>
-        <AccountMenuDisclosure icon={CircleHelp} label="Help" onKeyDown={onKeyDown}>
+        <AccountMenuDisclosure icon={CircleHelp} label={words.help} onKeyDown={onKeyDown}>
           <li>
             <AccountMenuLink href={HELP_LINKS.help} onKeyDown={onKeyDown}>
-              Get help
+              {words.getHelp}
             </AccountMenuLink>
           </li>
           <li>
             <AccountMenuLink href={HELP_LINKS.feedback} onKeyDown={onKeyDown}>
-              Send feedback
+              {words.sendFeedback}
             </AccountMenuLink>
           </li>
           <li>
             <AccountMenuLink href={HELP_LINKS.bug} onKeyDown={onKeyDown}>
-              Report a bug
+              {words.reportBug}
             </AccountMenuLink>
           </li>
         </AccountMenuDisclosure>
         <li className="account-menu-row flex items-center justify-between gap-2 px-3">
           <span id={themeLabel} className="flex items-center gap-3 text-sm">
             <Palette aria-hidden="true" className={ICON} />
-            Theme
+            {words.theme}
           </span>
           {/* Native radios, visually hidden but focusable, as on the Settings page: ← and → move between them. */}
           <div role="radiogroup" aria-labelledby={themeLabel} className="flex rounded-md bg-muted p-0.5">
             {THEME_PREFERENCES.map((option) => {
-              const { label, name: optionName } = THEME_OPTIONS[option];
+              const { label, name: optionName } = options[option];
               const checked = preference === option;
               return (
                 <label key={option} htmlFor={`account-theme-${option}`} title={optionName} className="cursor-pointer">
@@ -135,16 +156,16 @@ export function SidebarAccountMenu({ open, name, onClose, onKeyDown }: { open: b
             })}
           </div>
         </li>
-        <AccountMenuDisclosure icon={Info} label="Learn more" onKeyDown={onKeyDown}>
+        <AccountMenuDisclosure icon={Info} label={words.learnMore} onKeyDown={onKeyDown}>
           <li>
             <AccountMenuLink href={HELP_LINKS.changelog} onKeyDown={onKeyDown}>
-              View changelog
+              {words.changelog}
             </AccountMenuLink>
           </li>
-          {POLICY_LINKS.map(({ label, href }) => (
+          {POLICY_LINKS.map(({ word, href }) => (
             <li key={href}>
               <AccountMenuLink href={href} onKeyDown={onKeyDown}>
-                {label}
+                {words[word]}
               </AccountMenuLink>
             </li>
           ))}
@@ -168,7 +189,7 @@ export function SidebarAccountMenu({ open, name, onClose, onKeyDown }: { open: b
         <li>
           <button type="button" onKeyDown={onKeyDown} className={ITEM} onClick={() => void signOut()}>
             <LogOut aria-hidden="true" className={ICON} />
-            Sign out
+            {words.signOut}
           </button>
         </li>
       </ul>

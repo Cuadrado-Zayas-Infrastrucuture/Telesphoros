@@ -66,7 +66,7 @@
       "id": "find-or-add-a-patient",
       "title": "Finding or adding a patient",
       "body": [
-        "Patients are identified by a synthetic label. Open Patients and type part of the label to find one.",
+        "Patients are identified by a synthetic label. Open Patients and type part of the label to find one. While more patients remain to load, choose Search all patients to look through every one.",
         "A clinician can choose Add patient to create one. The label is recorded first, then the fictional demographics on the patient's page."
       ],
       "screens": ["worklist", "patients", "new-patient"],
