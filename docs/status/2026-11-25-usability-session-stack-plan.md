@@ -17,4 +17,6 @@ The founder decided all three as recommended:
 - hydralazine as task 11's medication, paired with the invented gene, with the briefing saying every pairing is invented (SD-D2);
 - throwaway keys per run (SD-D3).
 
+S1 is built in a session with the sealed sandbox, from [the S1 brief](../design/plans/usability-session-stack-s1-brief.md).
+
 Record: [the plan](../design/plans/usability-session-stack.md). No code, script or test change.

@@ -90,7 +90,8 @@ Not in the slice:
 
 ## 5. The slices
 
-1. **S1, the launcher and the seed.** Scripts under `scripts/session/`, the CI test above, the `demo:session` command, a README, and
+1. **S1, the launcher and the seed.** The founder chose (2026-11-25) to build it in a session with the sealed sandbox, from
+   [the S1 brief](usability-session-stack-s1-brief.md), so the launcher runs while it is written. Scripts under `scripts/session/`, the CI test above, the `demo:session` command, a README, and
    the protocol's "Before the session" pointing to it. Plan approval covers it; it gets a status fragment and a verification record.
 2. **S2, only if S1's test shows a gap.** For example, a held result the seed cannot create through the routes. Any such gap is
    named in S1's PR and gets its own plan; S1 does not work around it by writing to tables.
