@@ -1,0 +1,195 @@
+{
+  "language": "en",
+  "refusal": {
+    "body": "Help explains how the product works. It does not answer questions about a patient. Open the patient's page to see their results and where each one comes from.",
+    "status": "draft",
+    "signedBy": []
+  },
+  "articles": [
+    {
+      "id": "what-help-answers",
+      "title": "What Help can and cannot answer",
+      "body": [
+        "Help explains how the product works: what a screen shows, what a word or a status means, and why a control may be unavailable to you or in this environment.",
+        "It does not answer questions about a patient. A patient's page shows their results, and each result shows where it comes from."
+      ],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "roles": "all",
+      "keywords": ["help", "question", "ask", "answer", "assistant"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "the-worklist",
+      "title": "What the home page shows",
+      "body": [
+        "The home page is your worklist: what needs a person today. It lists the follow-ups assigned to you and the results that are held, each line opening the patient's page where the work is done.",
+        "The list is in a fixed order. It does not rank anything by clinical urgency, and an empty section only says that nothing is listed there."
+      ],
+      "screens": ["worklist"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["home", "worklist", "today", "work", "list", "start"],
+      "links": [{ "label": "Open Patients", "screen": "patients" }],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "held-results",
+      "title": "What a held result means",
+      "body": [
+        "A result is held when the product could not produce guidance from a report, for example because the report's findings have not been reviewed yet or a needed gene result is missing.",
+        "A held result shows no guidance. Its line says why it is held and what a reviewer can do about it. Holding is how the product avoids showing guidance it cannot back up."
+      ],
+      "screens": ["worklist", "patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["held", "hold", "on hold", "blocked", "waiting", "result"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "follow-ups",
+      "title": "Follow-ups",
+      "body": [
+        "A follow-up is a reminder to check on a patient's treatment later, for example some weeks after a medication is started. Each one has a date, a time zone and the person it is assigned to.",
+        "Overdue means the reminder date has passed. It does not say how urgent the patient's situation is. The Follow-ups page lists the clinic's follow-ups, with filters."
+      ],
+      "screens": ["worklist", "follow-ups", "patient"],
+      "roles": ["clinician", "reviewer"],
+      "keywords": ["follow-up", "follow up", "reminder", "overdue", "due", "assigned"],
+      "links": [{ "label": "Open Follow-ups", "screen": "follow-ups" }],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "find-or-add-a-patient",
+      "title": "Finding or adding a patient",
+      "body": [
+        "Patients are identified by a synthetic label. Open Patients and type part of the label to find one.",
+        "A clinician can choose Add patient to create one. The label is recorded first, then the fictional demographics on the patient's page."
+      ],
+      "screens": ["worklist", "patients", "new-patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["patient", "find", "search", "add", "new", "create", "label"],
+      "links": [{ "label": "Open Patients", "screen": "patients" }],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "attach-a-report",
+      "title": "Attaching a report",
+      "body": [
+        "Reports are attached in Chat. Choose Attach a report, choose the patient in Report details, confirm that the file holds synthetic data only, then upload.",
+        "The Reports page lists every report and whether its file was verified. Verifying a file confirms that it was stored unchanged. It does not check what the report says."
+      ],
+      "screens": ["worklist", "chat", "reports"],
+      "roles": ["clinician"],
+      "keywords": ["report", "attach", "upload", "file", "pdf", "lab"],
+      "links": [
+        { "label": "Open Chat", "screen": "chat" },
+        { "label": "Open Reports", "screen": "reports" }
+      ],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "the-genomic-profile",
+      "title": "The genomic profile",
+      "body": [
+        "A patient's page shows their genomic profile: each gene from their accepted reports, with its phenotype and the report it came from, and their current medications checked against the guidelines loaded in the product.",
+        "Each medication shows the guideline's own wording. Why, and the evidence opens where that wording comes from. When two reports disagree about a gene, both are shown and the product does not choose between them."
+      ],
+      "screens": ["patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["genomic", "profile", "gene", "genes", "phenotype", "medication", "guideline", "evidence"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "phenoconversion-notice",
+      "title": "When another medication can change a gene's effect",
+      "body": [
+        "Another medication can change how well a gene's protein works, so a person can respond differently from what their genes predict. This is called phenoconversion.",
+        "When a current medication is listed by the FDA as a strong or moderate inhibitor or inducer of a gene that guidance relies on, the patient's page says so beside that guidance. The guidance itself is still based on the genes alone.",
+        "The FDA list is not complete, and stopped medications are not checked."
+      ],
+      "screens": ["patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["phenoconversion", "inhibitor", "inducer", "medication", "interaction", "notice", "fda"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "recording-a-decision",
+      "title": "Recording a decision",
+      "body": [
+        "A clinician records a decision on a result: accepted, modified, rejected, deferred or clarification requested, with a note in their own words.",
+        "Decisions can be switched off in an environment. The page then says that decisions are not switched on in this environment and offers no form. That is a setting of the environment, not something about the patient."
+      ],
+      "screens": ["patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["decision", "record", "accept", "reject", "defer", "switched off", "disabled"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "roles",
+      "title": "What each role can do",
+      "body": [
+        "A reader reads patient records and results. A clinician can also add patients, attach reports and record medications, decisions and follow-ups. A reviewer reads records and does the reviews that need a second person.",
+        "An administrator manages the organization's members and sees its usage, but nothing clinical. A control your role cannot use is not shown to you."
+      ],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "roles": "all",
+      "keywords": ["role", "roles", "permission", "access", "reader", "clinician", "reviewer", "administrator", "admin", "cannot", "missing"],
+      "links": [{ "label": "Open account preferences", "screen": "settings" }],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "synthetic-data-only",
+      "title": "Synthetic data only",
+      "body": [
+        "Everything in this product is synthetic: invented patients, invented reports and test settings. It is not approved for clinical use.",
+        "Do not enter real patient information anywhere in it."
+      ],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "roles": "all",
+      "keywords": ["synthetic", "real", "clinical use", "approved", "test", "demo"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "words-used-here",
+      "title": "The words used on the screens",
+      "body": [
+        "Words such as phenotype, diplotype and poor metabolizer have short explanations. On a patient's page, a word with an explanation is a button: select it to read what it means, and Words used here lists them all.",
+        "Each explanation says whether a pharmacist has reviewed it yet."
+      ],
+      "screens": ["worklist", "patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["word", "words", "glossary", "meaning", "mean", "define", "term"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "policies",
+      "title": "Where the policies are",
+      "body": [
+        "The product's policies, its privacy policy included, have not been published yet. Help will point to them here once they are."
+      ],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "roles": "all",
+      "keywords": ["policy", "policies", "privacy", "terms", "data", "legal"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    }
+  ]
+}
