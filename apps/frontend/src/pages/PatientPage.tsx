@@ -17,6 +17,7 @@ import { when } from '@/lib/formatWhen';
 import { SubmitError } from '@/lib/api';
 import { getDemographics, getPatient, type DemographicsRead } from '@/lib/patientDemographics';
 import { failsThePage, IDENTITY_TABLE, RecordingHeldContext } from '@/lib/patientIdentity';
+import { PATIENT_PAGE_WORDS } from '@/lib/words/patient';
 import { useWords } from '@/lib/words/screens';
 import { PatientBanner } from '@/components/patients/PatientBanner';
 import { PatientLabelContext } from '@/lib/patientLabel';
@@ -45,7 +46,8 @@ export default function PatientPage() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [identityAttempt, setIdentityAttempt] = useState(0);
-  const words = useWords(IDENTITY_TABLE);
+  const identityWords = useWords(IDENTITY_TABLE);
+  const pageWords = useWords(PATIENT_PAGE_WORDS);
   // A version number or an error belongs to one patient. Opening another chart (the same page, a new id) starts it at its current record, with its
   // identity banner, and drops the previous patient's error; it is reset here, during render, so the reads below never run with the old values.
   const [shownId, setShownId] = useState(id);
@@ -54,7 +56,7 @@ export default function PatientPage() {
     setVersion(undefined);
     setError(null);
   }
-  usePageTitle(patient ? `Patient ${patient.label}` : 'Patient');
+  usePageTitle(patient ? pageWords.titleWithLabel(patient.label) : pageWords.title);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,10 +66,10 @@ export default function PatientPage() {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted || caught instanceof SessionEndedError) return;
-        setError(caught instanceof SubmitError ? caught.message : 'The patient could not be loaded. Please retry.');
+        setError(caught instanceof SubmitError ? caught.message : pageWords.loadFailed);
       });
     return () => controller.abort();
-  }, [apiFetch, id, attempt]);
+  }, [apiFetch, id, attempt, pageWords.loadFailed]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,7 +100,7 @@ export default function PatientPage() {
   if (error) {
     return (
       <div className="flex flex-col items-start gap-3">
-        <h1 className="text-2xl font-semibold">Patient</h1>
+        <h1 className="text-2xl font-semibold">{pageWords.heading}</h1>
         <p role="alert" className="text-destructive">
           {error}
         </p>
@@ -111,26 +113,26 @@ export default function PatientPage() {
               setAttempt((n) => n + 1);
             }}
           >
-            Retry
+            {pageWords.retry}
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/patients">Back to patients</Link>
+            <Link to="/patients">{pageWords.backToPatients}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/workspace">Back to home</Link>
+            <Link to="/workspace">{pageWords.backToHome}</Link>
           </Button>
         </div>
       </div>
     );
   }
   if (!patient || patient.id !== id || !identity || identity.patientId !== id) {
-    return <ContentSkeleton label="Loading patient record…" variant="detail" />;
+    return <ContentSkeleton label={pageWords.loading} variant="detail" />;
   }
 
   const read = identity.read;
   // B-D3: while the identity is unknown, nothing that records something for this patient is offered.
   const held = read.kind === 'unknown';
-  const clinical = held ? <p className="max-w-3xl text-sm text-muted-foreground">{words.held}</p> : <PatientClinicalSections key={`clinical-${id}`} patientId={id} />;
+  const clinical = held ? <p className="max-w-3xl text-sm text-muted-foreground">{identityWords.held}</p> : <PatientClinicalSections key={`clinical-${id}`} patientId={id} />;
   return (
     <PatientLabelContext.Provider value={patient.label}>
       <RecordingHeldContext.Provider value={held}>
@@ -138,11 +140,11 @@ export default function PatientPage() {
           <div className="flex max-w-3xl flex-col gap-6">
             <div className="flex flex-col gap-1">
               <div className="flex flex-wrap items-center justify-between gap-x-4">
-                <Breadcrumb trail={[{ to: '/patients', label: 'Patients' }]} current={patient.label} />
+                <Breadcrumb trail={[{ to: '/patients', label: pageWords.patientsBreadcrumb }]} current={patient.label} />
                 <BackToHomeLink />
               </div>
               <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
-              <p className="text-sm text-muted-foreground">Synthetic patient · Added {when(patient.createdAt)}</p>
+              <p className="text-sm text-muted-foreground">{pageWords.syntheticAdded(when(patient.createdAt))}</p>
               {/* The current identity only: while an earlier version is being viewed, the table below is the one place that shows it. */}
               {read.kind === 'found' && version === undefined && <PatientBanner value={read.value} />}
               {held && <IdentityUnknown label={patient.label} onRetry={retryIdentity} />}
