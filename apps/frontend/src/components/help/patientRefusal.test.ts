@@ -21,9 +21,10 @@ describe('isPatientQuestion (spec 051 section 5, H-D6)', () => {
     'este paciente puede tomar este medicamento',
     'qué dosis para mi paciente',
     'el paciente necesita cambiar de tratamiento',
-    // Signal 4: bundled drug name together with a patient word
+    // Signal 4: bundled drug name (ingredient or brand) together with a patient word
     'can my patient take clopidogrel',
     "this patient's clopidogrel",
+    "this patient's Plavix",
     'warfarin for my patient',
     'patient omeprazole',
   ];
@@ -32,6 +33,7 @@ describe('isPatientQuestion (spec 051 section 5, H-D6)', () => {
     'what is a held result',
     'how do I add a patient',
     'how do I find a patient',
+    'patient follow-up date',
     'what does phenotype mean',
     'what is phenoconversion',
     'how do I attach a report',

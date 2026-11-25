@@ -1,18 +1,35 @@
-import { expect, test } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs, signInWithPatient } from './helpers';
+import { expect, test, type Page } from '@playwright/test';
+import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, signInWithPatient } from './helpers';
 
 // Spec 051 slice H2: the curated Help panel in a real browser at both configured viewports (375 and 1280 px),
 // light and dark themes, by keyboard, with 44 px targets and zero WCAG A/AA violations.
 
+/** Opens the patient's page via client-side navigation (a full reload would wipe the in-memory session). */
+async function openPatientPage(page: Page, label: string) {
+  await openPatients(page);
+  await expect(page.getByRole('list', { name: 'Patients' })).toBeVisible();
+  const link = page.getByRole('link', { name: label, exact: true });
+  const more = page.getByRole('button', { name: 'More patients', exact: true });
+  for (let attempts = 0; attempts < 100 && (await link.count()) === 0; attempts++) {
+    if ((await more.count()) === 0) break;
+    await more.click();
+    await expect.poll(async () => (await link.count()) > 0 || (await more.count()) === 0 || (await more.isEnabled())).toBe(true);
+  }
+  await link.click();
+}
+
 for (const colorScheme of ['light', 'dark'] as const) {
-  test(`Help drawer opens on screen-contextual articles, searches without network calls, closes on Escape, and has no axe violations (${colorScheme})`, async ({ page }) => {
+  test(`Help drawer opens by keyboard on screen-contextual articles, searches without network calls, closes on Escape, and has no axe violations (${colorScheme})`, async ({
+    page,
+  }) => {
     await page.emulateMedia({ colorScheme });
     await signInAs(page, 'alice', '/workspace');
     await openWorkspaceNavigation(page);
 
     const helpButton = page.locator('header.workspace-navigation').getByRole('button', { name: 'Help', exact: true });
     await expect(helpButton).toBeVisible();
-    await helpButton.click();
+    await helpButton.focus();
+    await page.keyboard.press('Enter');
 
     const drawer = page.locator('#help-drawer');
     await expect(drawer).toBeVisible();
@@ -49,22 +66,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     page.off('request', recordRequest);
 
-    // Escape closes the drawer and returns focus to the Help button on desktop.
+    // Escape closes the drawer and returns focus to the Help button on both desktop and mobile.
     await page.keyboard.press('Escape');
     await expect(drawer).toBeHidden();
-    if ((page.viewportSize()?.width ?? 0) >= 1024) {
-      await expect(helpButton).toBeFocused();
-    }
+    await expect(helpButton).toBeFocused();
   });
 }
 
 test('refuses patient questions before searching and links to the patient results on a patient page', async ({ page }) => {
   const patient = await signInWithPatient(page);
-  await page.goto(`/patients/${patient.id}`);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await openPatientPage(page, patient.label);
+  await expect(page.getByRole('heading', { level: 1, name: patient.label })).toBeVisible();
 
   await openWorkspaceNavigation(page);
-  await page.locator('header.workspace-navigation').getByRole('button', { name: 'Help', exact: true }).click();
+  const helpButton = page.locator('header.workspace-navigation').getByRole('button', { name: 'Help', exact: true });
+  await helpButton.focus();
+  await page.keyboard.press('Enter');
 
   const drawer = page.locator('#help-drawer');
   await expect(drawer).toBeVisible();

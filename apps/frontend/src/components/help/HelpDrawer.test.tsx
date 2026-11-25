@@ -89,21 +89,53 @@ describe('HelpDrawer (spec 051 slice H2)', () => {
     expect(within(drawer).getByText('No article answers that exactly. These are the closest:')).toBeInTheDocument();
   });
 
-  it('refuses patient questions before searching and links to the patient results on a patient page', async () => {
+  it('refuses patient questions before searching, suppresses matching articles, and preserves query params on patient results links', async () => {
     const user = userEvent.setup();
     const fetchMock = makeFetch(['clinician']);
-    renderApp('/patients/patient-1', { signedInAs: ['clinician'], fetchImpl: fetchMock as unknown as typeof fetch });
+    renderApp('/patients/patient-1?result=res-1', { signedInAs: ['clinician'], fetchImpl: fetchMock as unknown as typeof fetch });
 
     await user.click(await screen.findByRole('button', { name: 'Help' }));
     const drawer = await screen.findByRole('dialog', { name: 'Help' });
     const search = within(drawer).getByRole('searchbox', { name: 'Search help' });
 
     const callsBeforeTyping = fetchMock.mock.calls.length;
-    await user.type(search, 'can my patient take clopidogrel');
+    // 'SYN-0042 held result' contains 'held result' which WOULD match 'What a held result means' if search were not gated.
+    await user.type(search, 'SYN-0042 held result');
 
     expect(fetchMock.mock.calls.length).toBe(callsBeforeTyping);
     expect(within(drawer).getByText(HELP_EN.refusal!.body)).toBeInTheDocument();
-    expect(within(drawer).getByRole('link', { name: /this patient's results/i })).toHaveAttribute('href', '/patients/patient-1#genomic-profile-heading');
     expect(within(drawer).queryByText('What a held result means')).not.toBeInTheDocument();
+
+    // Bundled drug + patient question is also refused without network calls.
+    await user.clear(search);
+    await user.type(search, 'can my patient take clopidogrel');
+    expect(fetchMock.mock.calls.length).toBe(callsBeforeTyping);
+    expect(within(drawer).getByText(HELP_EN.refusal!.body)).toBeInTheDocument();
+
+    const resultsLink = within(drawer).getByRole('link', { name: /this patient's results/i });
+    expect(resultsLink).toHaveAttribute('href', '/patients/patient-1?result=res-1#genomic-profile-heading');
+
+    await user.click(resultsLink);
+    expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument();
+  });
+
+  it('stays closed after leaving signed-in routes and returning to the workspace', async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetch(['clinician']);
+    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl: fetchMock as unknown as typeof fetch });
+
+    await user.click(await screen.findByRole('button', { name: 'Help' }));
+    expect(await screen.findByRole('dialog', { name: 'Help' })).toBeInTheDocument();
+
+    // Navigate to public landing (sidebar becomes false), then return to workspace (sidebar becomes true).
+    const brandLink = document.querySelector<HTMLAnchorElement>('header.workspace-navigation a.workspace-brand')!;
+    fireEvent.click(brandLink);
+
+    const openWorkspace = await screen.findByRole('link', { name: 'Open workspace' });
+    expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument();
+
+    await user.click(openWorkspace);
+    await screen.findByRole('button', { name: 'Help' });
+    expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument();
   });
 });

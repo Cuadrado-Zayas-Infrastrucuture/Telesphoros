@@ -37,6 +37,11 @@ export function AppFrame() {
   const mainRef = useRef<HTMLElement>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpMounted, setHelpMounted] = useState(false);
+  const [prevSidebar, setPrevSidebar] = useState(sidebar);
+  if (prevSidebar !== sidebar) {
+    setPrevSidebar(sidebar);
+    if (!sidebar && helpOpen) setHelpOpen(false);
+  }
   const drawerOpen = sidebar && helpOpen;
   const openHelp = () => {
     setHelpMounted(true);

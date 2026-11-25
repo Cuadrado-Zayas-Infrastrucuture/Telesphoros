@@ -19,7 +19,7 @@ type SelectedItem = { kind: 'article'; article: HelpArticle } | { kind: 'glossar
  * refuses patient-specific questions before searching.
  */
 export function HelpDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { roles } = useAuth();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<SelectedItem | null>(null);
@@ -59,6 +59,7 @@ export function HelpDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     const target = document.getElementById('genomic-profile-heading');
     if (target) {
       target.scrollIntoView?.({ block: 'start' });
+      target.focus?.();
     }
   }
 
@@ -90,13 +91,13 @@ export function HelpDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             <p className="text-xs text-muted-foreground">{glossaryFoot(refusal)}</p>
             {currentScreen === 'patient' ? (
               <div>
-                <a
-                  href={`${pathname}#genomic-profile-heading`}
+                <Link
+                  to={{ pathname, search, hash: '#genomic-profile-heading' }}
                   onClick={openPatientResults}
                   className="inline-flex min-h-control items-center text-sm font-medium text-primary underline underline-offset-4"
                 >
                   Open this patient&apos;s results
-                </a>
+                </Link>
               </div>
             ) : canReadClinical ? (
               <div>

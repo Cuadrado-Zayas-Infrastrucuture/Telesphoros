@@ -29,13 +29,18 @@ const CLINICAL_WORD_PATTERN =
 
 const BUNDLED_DRUG_NAMES: readonly string[] = (() => {
   const names = new Set<string>();
+  const add = (raw: string) => {
+    const normalized = normalizeHelpText(raw);
+    if (normalized.length >= 3) names.add(normalized);
+  };
   for (const entry of BUNDLED_DRUG_LIST?.entries ?? []) {
-    for (const raw of [entry.name, entry.displayName]) {
-      const normalized = normalizeHelpText(raw);
-      if (normalized.length >= 3) names.add(normalized);
-      // Also include single-word base ingredient names (e.g. "clopidogrel" from "clopidogrel bisulfate").
-      const firstWord = normalized.split(/[^a-z0-9]+/)[0];
-      if (firstWord && firstWord.length >= 4) names.add(firstWord);
+    add(entry.name);
+    add(entry.displayName);
+    if (entry.tty === 'MIN' || entry.name.includes(' / ')) {
+      for (const part of entry.name.split(' / ')) add(part);
+    }
+    for (const brand of entry.brands ?? []) {
+      add(brand.name);
     }
   }
   return [...names];
