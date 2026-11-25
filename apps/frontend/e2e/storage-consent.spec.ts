@@ -69,11 +69,12 @@ test('first-visit preferences start off, support keyboard cancellation and follo
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
-test('the first-visit bar leaves chat controls usable without deciding and gives acceptance and rejection equal weight', async ({ page }, info) => {
+test('the first-visit bar leaves the upload page usable without deciding and gives acceptance and rejection equal weight', async ({ page }, info) => {
   const insets = { top: 24, right: 16, bottom: 34, left: 16 };
   const device = await page.context().newCDPSession(page);
   await device.send('Emulation.setSafeAreaInsetsOverride', { insets });
-  await signInAs(page, 'alice', '/chat', 'unanswered');
+  // The chat was the page here until spec 052 RC1b; Attach a report is where a person now starts work with a file.
+  await signInAs(page, 'alice', '/reports/upload', 'unanswered');
   const bar = page.getByRole('region', { name: 'Cookies and browser storage', exact: true });
   await expect(bar).toBeVisible();
   const reject = bar.getByRole('button', { name: 'Use necessary only', exact: true });
@@ -94,19 +95,18 @@ test('the first-visit bar leaves chat controls usable without deciding and gives
     const [rejectColor, acceptColor] = await Promise.all([reject, accept].map((button) => button.evaluate((element) => getComputedStyle(element).backgroundColor)));
     expect(acceptColor).toBe(rejectColor);
   }).toPass({ timeout: 5000 });
-  const send = page.getByRole('button', { name: 'Send', exact: true });
-  await send.scrollIntoViewIfNeeded();
-  const sendBox = await send.boundingBox();
+  const control = page.getByLabel(/synthetic patient \(required\)/i);
+  await control.scrollIntoViewIfNeeded();
+  const controlBox = await control.boundingBox();
   const barBox = await bar.boundingBox();
   const viewport = page.viewportSize()!;
   expect(barBox!.x).toBeGreaterThanOrEqual(insets.left);
   expect(barBox!.x + barBox!.width).toBeLessThanOrEqual(viewport.width - insets.right);
   expect(barBox!.y).toBeGreaterThanOrEqual(insets.top);
   expect(barBox!.y + barBox!.height).toBeLessThanOrEqual(viewport.height - insets.bottom);
-  expect(sendBox!.y + sendBox!.height).toBeLessThanOrEqual(barBox!.y);
-  const heading = await page.getByRole('heading', { name: 'Start with a synthetic report.', exact: true }).boundingBox();
-  const composer = await page.getByRole('form', { name: 'Report and question' }).boundingBox();
-  expect(heading!.y + heading!.height).toBeLessThanOrEqual(composer!.y);
+  expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(barBox!.y);
+  const heading = await page.getByRole('heading', { level: 1, name: 'Attach a report', exact: true }).boundingBox();
+  expect(heading!.y + heading!.height).toBeLessThanOrEqual(controlBox!.y);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await axeViolations(page)).toEqual([]);
   await page.screenshot({ path: info.outputPath('consent-bar-workspace.png') });

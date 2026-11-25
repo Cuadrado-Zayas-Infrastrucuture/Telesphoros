@@ -64,7 +64,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
   it('frames Settings with the sidebar, holding the feature panel for a clinician', async () => {
     open('/settings', ['clinician']);
     // Follow-ups is a link to its page now (specs/041 C2), not a button that opened a drawer.
-    expect(await linkNames()).toEqual(['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups']);
+    expect(await linkNames()).toEqual(['Home', 'Patients', 'Reports', 'Follow-ups']);
     expect(sidebar()).not.toBeNull();
   });
 
@@ -73,7 +73,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     try {
       open('/settings', ['clinician']);
       // Recents loads on its own and may already show its rows: compare only the destinations above it, as linkNames() does.
-      expect(await linkNames()).toEqual(['Home', 'Chat', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
+      expect(await linkNames()).toEqual(['Home', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
       const nav = await primary();
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {
@@ -83,8 +83,8 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
 
   it('gives an administrator Usage and no clinical link that would lead to "no access"', async () => {
     open('/usage', ['admin']);
-    expect(await linkNames()).toEqual(['Chat', 'Usage']);
-    expect(await panelItems()).toEqual(['Chat', 'Usage']);
+    expect(await linkNames()).toEqual(['Usage']);
+    expect(await panelItems()).toEqual(['Usage']);
   });
 
   it('keeps the site header on the public landing page, even when signed in', async () => {
@@ -232,16 +232,16 @@ describe('the sidebar width (specs/034 D8)', () => {
 describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
   it('lists, in order, only the items the role may use', async () => {
     const cases: [Role[], string[]][] = [
-      // Spec 049: Home (the worklist) for the clinical read roles, and Chat for every signed-in member, where New chat was.
-      [['clinician'], ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
-      [['reader'], ['Home', 'Chat', 'Patients', 'Reports', 'Recents']],
-      [['reviewer'], ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
-      [['admin'], ['Chat', 'Usage']],
+      // Spec 049: Home (the worklist) for the clinical read roles. Spec 052 RC-6: no Chat for anyone; Help is a button, not a panel item.
+      [['clinician'], ['Home', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+      [['reader'], ['Home', 'Patients', 'Reports', 'Recents']],
+      [['reviewer'], ['Home', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+      [['admin'], ['Usage']],
       [
         ['admin', 'clinician'],
-        ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Usage', 'Recents'],
+        ['Home', 'Patients', 'Reports', 'Follow-ups', 'Usage', 'Recents'],
       ],
-      [[], ['Chat']],
+      [[], []],
     ];
     for (const [roles, expected] of cases) {
       const { unmount } = open('/settings', roles);
@@ -260,13 +260,14 @@ describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
     });
   });
 
-  it('points each link where its page is: Home at /workspace and Chat at /chat (spec 049), Patients at its page (specs/034 D2)', async () => {
+  it('points each link where its page is: Home at /workspace (spec 049), Patients at its page (specs/034 D2), and no link to the chat (spec 052)', async () => {
     open('/settings', ['admin', 'clinician']);
     const nav = await primary();
     const href = (name: string) => nav.getByRole('link', { name }).getAttribute('href');
-    expect({ home: href('Home'), chat: href('Chat'), patients: href('Patients'), reports: href('Reports'), usage: href('Usage') }).toEqual({
+    expect(nav.queryByRole('link', { name: 'Chat' })).toBeNull();
+    expect(nav.getAllByRole('link').map((link) => link.getAttribute('href'))).not.toContain('/chat');
+    expect({ home: href('Home'), patients: href('Patients'), reports: href('Reports'), usage: href('Usage') }).toEqual({
       home: '/workspace',
-      chat: '/chat',
       patients: '/patients',
       reports: '/reports',
       usage: '/usage',

@@ -20,7 +20,6 @@ its row here fails the test.
 | `shell-sidebar.menu` | Workspace navigation |  |
 | `shell-sidebar.primary` | Primary |  |
 | `shell-sidebar.home` | Home |  |
-| `shell-sidebar.chat` | Chat |  |
 | `shell-sidebar.workspace` | Workspace |  |
 | `shell-sidebar.chatPreview` | Chat preview |  |
 | `shell-sidebar.patients` | Patients |  |

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient, openChat } from './helpers';
+import { axeViolations, openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from './helpers';
 
 const insets = { top: 24, right: 32, bottom: 34, left: 32 };
 async function cutout(page: Page) {
@@ -17,7 +17,7 @@ async function withinSafeArea(page: Page, control: Locator) {
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height - insets.bottom + 1);
 }
 
-test('the page, navigation and chat controls stay inside device safe areas', async ({ page }, info) => {
+test('the page, navigation and home controls stay inside device safe areas', async ({ page }, info) => {
   await cutout(page);
   const signedIn = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/me');
   await signInAs(page, 'alice', '/workspace');
@@ -39,8 +39,8 @@ test('the page, navigation and chat controls stay inside device safe areas', asy
   // A second sign-in would use the identity provider's existing session and skip its persona picker.
   await page.locator('header.workspace-navigation a[href="/"]').click();
   await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
-  // "Open workspace" opens the worklist home (spec 049); the chat's controls are on Chat.
-  await openChat(page);
+  // "Open workspace" opens the worklist home (spec 049); its quick actions are the controls to check (the chat is gone, spec 052 RC1b).
+  await expect(page.getByRole('heading', { level: 1, name: 'Your worklist' })).toBeVisible();
   await openWorkspaceNavigation(page);
   await expect(page.getByRole('list', { name: 'Recent reports' }).getByRole('listitem')).toHaveCount(20);
   if (page.viewportSize()!.width < 1024) await page.getByRole('button', { name: 'Workspace navigation', exact: true }).click();
@@ -48,12 +48,12 @@ test('the page, navigation and chat controls stay inside device safe areas', asy
   await expect(page.locator('body')).toHaveCSS('padding-left', '32px');
   await expect(page.locator('body')).toHaveCSS('padding-right', '32px');
   await expect(page.locator('body')).toHaveCSS('padding-bottom', '34px');
-  await withinSafeArea(page, page.getByRole('button', { name: 'Send', exact: true }));
+  await withinSafeArea(page, page.getByRole('main').getByRole('link', { name: 'Attach a report', exact: true }));
   await openWorkspaceNavigation(page);
   await withinSafeArea(page, page.locator('header.workspace-navigation').getByRole('button', { name: /^Account, / }));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await axeViolations(page)).toEqual([]);
-  await page.screenshot({ path: info.outputPath('safe-area-chat.png'), fullPage: true });
+  await page.screenshot({ path: info.outputPath('safe-area-home.png'), fullPage: true });
 });
 
 test('report details and its close button avoid the cutout and home indicator', async ({ page }, info) => {

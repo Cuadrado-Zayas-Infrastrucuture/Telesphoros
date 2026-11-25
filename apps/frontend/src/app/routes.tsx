@@ -1,6 +1,6 @@
 import { ownedStorageMode, syntheticStagingMode } from '@/lib/storageMode';
 import { languagePreviewEnabled } from '@/lib/languagePreview';
-import type { RouteObject } from 'react-router-dom';
+import { Navigate, type RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, FOLLOWUP_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
@@ -36,13 +36,13 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
-          // The signed-in frame, in every build, for any signed-in member: it keeps the chat (specs/024) in memory while other pages are visited.
-          // Spec 049: the home at /workspace is the worklist, and the chat has its own address, /chat, until the help assistant replaces it (W-D2).
+          // The signed-in pages, in every build, for any signed-in member. Spec 049: the home at /workspace is the worklist. Spec 052 RC1b: the chat
+          // is gone; Help (spec 051) answers how-to questions and Attach a report (/reports/upload) attaches reports.
           {
-            lazy: async () => ({ Component: (await import('@/pages/WorkspacePage')).default }),
             children: [
               { path: 'workspace', handle: { screen: 'home' }, lazy: async () => ({ Component: (await import('@/pages/WorklistPage')).default }) },
-              { path: 'chat', element: null },
+              // RC-5, RC-D2: an old link or bookmark to the chat lands on the home, never on an error.
+              { path: 'chat', element: <Navigate to="/workspace" replace /> },
               // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
               { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
               // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).
