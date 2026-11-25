@@ -65,6 +65,11 @@ The five-minute table follows the same route. The second upload (D08) starts fro
   - **Recommended:** I change only the two lines that name the chat: the 0:00 scene, "Introduce the chat workspace", and the 3:50
     scene, "Return to chat". I draft their replacements and mark both in the PR for you to reword. Every other spoken line stays word
     for word, since none depends on the chat.
+  - **Correction, found while building (2026-11-25):** the 0:00 and 3:50 scenes name the chat in their *Action* column, not in the
+    spoken words, which stay as they are. The two spoken lines that do depend on the chat are the 0:27 scene ("The report stays attached
+    while we create the patient's record") and the 1:26 scene ("The note and attachment are preserved"): the upload page has no note
+    and no attachment kept while a patient is created. Those two are the ones drafted and marked. The decision is unchanged: two
+    lines, drafted, for the founders to reword.
   - **Alternative:** I change only the Action column and leave the whole wording column to you.
 - **WT-D2. The narrated backup recording**, `chat-first-2026-11-02`. It shows the chat, so it no longer matches the live demo, and the
   document tells the presenter to fall back to it if the live demo fails. **Decided 2026-11-25: as recommended.**
