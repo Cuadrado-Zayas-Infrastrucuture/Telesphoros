@@ -12,9 +12,9 @@ Task 11 also needs a signed modifier list, and the only signed one is made insid
 build, seeds the protocol's data through the API's own routes, and signs a copy of a synthetic list with throwaway keys generated per
 run. A CI test checks the stack against the protocol's machine-checkable pass conditions.
 
-Decisions waiting:
-- where the sessions run (SD-D1);
-- which real drug stands for task 11's medication against the invented gene (SD-D2);
-- the signing keys (SD-D3).
+The founder decided all three as recommended:
+- a new `pnpm demo:session` (SD-D1);
+- hydralazine as task 11's medication, paired with the invented gene, with the briefing saying every pairing is invented (SD-D2);
+- throwaway keys per run (SD-D3).
 
 Record: [the plan](../design/plans/usability-session-stack.md). No code, script or test change.

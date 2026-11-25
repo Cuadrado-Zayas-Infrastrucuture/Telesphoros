@@ -2,7 +2,7 @@
 
 Date: 2026-11-25
 
-Status: **plan only, waiting for the founder's decisions (section 4).** No code, script or test changes yet.
+Status: **approved by the founder on 2026-11-25: SD-D1, SD-D2 and SD-D3 as recommended.** Plan only: no code, script or test changes.
 
 ## 1. Why
 
@@ -74,16 +74,16 @@ Not in the slice:
 
 ## 4. Decisions for the founder
 
-- **SD-D1. Where the sessions run.**
+- **SD-D1. Where the sessions run.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** the new local launcher above, on the moderator's machine.
   - **Alternative:** a `--session` flag on `pnpm demo:review`. This means fewer files, but one launcher would serve two different
     purposes, and the review tool's capture routes would show in the session.
-- **SD-D2. The task 11 medication.** It must be a real drug from the bundled list, paired with the invented `GENEA`. A pharmacist
+- **SD-D2. The task 11 medication.** It must be a real drug from the bundled list, paired with the invented `GENEA`. **Decided 2026-11-25: as recommended (hydralazine).** A pharmacist
   participant may know the drug and be distracted by an "inhibitor" claim they know is not true of it.
   - **Recommended:** hydralazine, as the backend test uses. The moderator's briefing says before task 1 that every gene and every
     drug–gene pairing in the session is invented.
   - **Alternative:** you or the co-founder choose a drug from the bundled list that participants are less likely to know well.
-- **SD-D3. The signing keys.**
+- **SD-D3. The signing keys.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** two throwaway keys per run, as in section 3.
   - **Alternative:** one fixed pair of test keys committed to the repository. This is simpler, but a committed private key is a
     pattern the secret scan and agent policy would rightly question.
