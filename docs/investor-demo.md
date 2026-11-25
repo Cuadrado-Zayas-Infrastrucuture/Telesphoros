@@ -2,7 +2,7 @@
 
 Date: 2026-11-02; computed result on staging added 2026-11-24
 
-There are two demonstrations. **Lead with the computed result on staging** (below): a structured synthetic report, reviewed by a second person, computed by the deterministic engine against invented knowledge and stored with its basis. Keep **the local storage prototype** (from "Scope" on) as the fallback: it shows the chat workspace, upload, follow-up and fixed sample results, and computes nothing.
+There are two demonstrations. **Lead with the computed result on staging** (below): a structured synthetic report, reviewed by a second person, computed by the deterministic engine against invented knowledge and stored with its basis. Keep **the local storage prototype** (from "Scope" on) as the fallback: it shows the worklist home, upload, follow-up and fixed sample results, and computes nothing.
 
 ## Computed result on staging (lead)
 
@@ -40,15 +40,15 @@ Before the meeting, sign in on two browser profiles: a **clinician** account and
 
 ## Scope (local storage prototype, fallback)
 
-The local synthetic prototype now starts in **chat**. Attaching a report opens a compact details dialog; patient creation and demographics open the patient record. Medications are recorded there. Report history and settings open over chat, and returning from a patient keeps the unsent question and attachment. The legacy upload route remains a compatibility panel for recovery links.
+The local synthetic prototype starts on the worklist home. **Attach a report** is a page of its own, where a synthetic patient can be added before the upload; demographics and medications are recorded on the patient record. Reports and Settings are pages of their own. The chat was retired on 2026-11-25 ([spec 052](../specs/052-retire-the-chat/spec.md)).
 
-The prototype includes treatment-linked follow-up documentation and persistent in-app reminders on the patient record and in a chat-side panel. It does not enable clinical interpretation, model inference or external notifications. See the [physician workspace plan](design/plans/physician-chat-and-patient-record.md), [workspace verification](verification/physician-workspace.md) and [follow-up verification](verification/treatment-followups.md).
+The prototype includes treatment-linked follow-up documentation and persistent in-app reminders on the patient record, on the home and on the Follow-ups page. It does not enable clinical interpretation, model inference or external notifications. See the [physician workspace plan](design/plans/physician-chat-and-patient-record.md), [workspace verification](verification/physician-workspace.md) and [follow-up verification](verification/treatment-followups.md).
 
-The Follow-ups panel also offers a Recorded treatment responses disclosure with complete clinic counts and explicit missing-assessment categories. It summarizes saved synthetic documentation, including closed reminders. Its [metric definition](design/followup-response-summary.md) and [verification](verification/followup-response-summary.md) distinguish this physician view from clinical effectiveness evidence and a governed Data Insights release.
+The Follow-ups page also offers a Recorded treatment responses disclosure with complete clinic counts and explicit missing-assessment categories. It summarizes saved synthetic documentation, including closed reminders. Its [metric definition](design/followup-response-summary.md) and [verification](verification/followup-response-summary.md) distinguish this physician view from clinical effectiveness evidence and a governed Data Insights release.
 
 Use **Open follow-up** on a reminder to jump directly to its current documentation form on the patient record. Closed reminders and reviewer accounts open the record/history without a write form. This shortcut works beyond the first patient-list page and still requires an explicit save.
 
-In the same panel, choose **Assigned to me** and a reminder status to focus the list. Filtering covers all pages, resets to page one, and never changes the clinic-wide totals or recorded-response chart. **Clear filters** returns to all open clinic reminders.
+On the same page, choose **Assigned to me** and a reminder status to focus the list. Filtering covers all pages, resets to page one, and never changes the clinic-wide totals or recorded-response chart. **Clear filters** returns to all open clinic reminders.
 
 The patient record also has **Recorded results**, decision/history controls and explicit decision-linked follow-up. These consume actual stored evaluations; fixed sample results cannot create decisions. In the storage-only investor prototype, the processing API remains disabled and this section reports that status. The reader engine still needs design and implementation, as clarified by the founder on 2026-11-02. The downstream browser tests use disclosed upstream stand-ins and are not an extraction demonstration. See [verification](verification/patient-result-decisions.md).
 
@@ -60,19 +60,19 @@ Follow-up preparation authorized by the founder: run the core presentation seque
 
 Start the demo and sign in before the meeting. Use a 1280×800 browser window. Keep the original D01 and D08 fixture PDFs ready in a file picker. Do not spend presentation time on dependency setup or the fake identity provider.
 
-Use in-app links throughout. To show a second upload, close report history and attach the next file in chat. A browser refresh or address-bar navigation intentionally clears the in-memory sign-in and requires signing in again.
+Use in-app links throughout. To show a second upload, choose **Home** in the sidebar, then **Attach a report**. A browser refresh or address-bar navigation intentionally clears the in-memory sign-in and requires signing in again.
 
 | Time | Action | Presenter wording |
 | --- | --- | --- |
-| 0:00–0:27 | Introduce the chat workspace | “Reports and follow-up work belong in the physician workflow. This demonstration uses fictional patients; interpretation examples are fixed.” |
-| 0:27–0:55 | Attach D01 in chat; add a note; choose Add patient from the details panel and create `SYN-INVESTOR-01` | “The report stays attached while we create the patient's record. Nothing uploads until the physician confirms.” |
+| 0:00–0:27 | Introduce the worklist home | “Reports and follow-up work belong in the physician workflow. This demonstration uses fictional patients; interpretation examples are fixed.” |
+| 0:27–0:55 | Choose Attach a report; choose Add a synthetic patient and create `SYN-INVESTOR-01`; open the patient from Patients | **Draft, for the founders to reword:** “The patient's record is created first, by its synthetic label. Nothing uploads until the physician confirms.” |
 | 0:55–1:26 | Record a synthetic medication and its source; schedule a follow-up for today with a goal, timezone and responsible clinician | “The patient page holds medications and follow-up documentation. Reminders are saved without relying on a model.” |
-| 1:26–1:54 | Chat in the sidebar; reopen Report details; confirm and upload; open All reports and the uploaded file | “The note and attachment are preserved. The server verifies the stored file, which establishes file identity rather than clinical accuracy.” |
+| 1:26–1:54 | Home, then Attach a report; choose `SYN-INVESTOR-01`, Lab report (PDF) and D01; confirm and upload; View reports and open the uploaded file | **Draft, for the founders to reword:** “The server verifies the stored file, which establishes file identity rather than clinical accuracy.” |
 | 1:54–2:20 | Show fixed sample result | “These invented values illustrate the result experience. No engine processed this upload, and fixed samples cannot create clinical decisions.” |
-| 2:20–2:51 | Close report panels; open Follow-ups → Open follow-up; record response, symptoms, source and note; choose In 14 days and save | “The reminder opens the relevant form. The physician saves documentation and the explicit next reminder together.” |
-| 2:51–3:24 | Return to chat; filter Follow-ups by Assigned to me and Upcoming; expand Recorded treatment responses | “This chart summarizes saved documentation and missing assessments. It is a foundation for Data Insights, not evidence of treatment effectiveness.” |
-| 3:24–3:50 | Close Follow-ups; attach and upload D08 for the same fictional patient; open Show held sample | “This fixed example illustrates unsupported evidence: a reason is shown, with no gene or drug result. Unmatched files get no sample interpretation.” |
-| 3:50–4:28 | Return to chat and describe the next milestone | “The workflow is working. Actual report extraction and validated computation come next; optional AI notes and governed Data Insights remain future work.” |
+| 2:20–2:51 | Back to reports, then Home; under Follow-ups assigned to you, Open follow-up; record response, symptoms, source and note; choose In 14 days and save | “The reminder opens the relevant form. The physician saves documentation and the explicit next reminder together.” |
+| 2:51–3:24 | Follow-ups in the sidebar; filter by Assigned to me and Upcoming; expand Recorded treatment responses | “This chart summarizes saved documentation and missing assessments. It is a foundation for Data Insights, not evidence of treatment effectiveness.” |
+| 3:24–3:50 | Home, then Attach a report; upload D08 for the same fictional patient; View reports, open it and choose Show held sample | “This fixed example illustrates unsupported evidence: a reason is shown, with no gene or drug result. Unmatched files get no sample interpretation.” |
+| 3:50–4:28 | Home in the sidebar; describe the next milestone | “The workflow is working. Actual report extraction and validated computation come next; optional AI notes and governed Data Insights remain future work.” |
 
 Patient demographics, medication capture and follow-up documentation use the real local API and database. The medication and recorded response are fictional examples, not treatment advice. Describe reminders as in-app; no email or push notification is sent. The response chart includes all recorded follow-ups, including closed reminders, and its clinic totals do not change when reminder filters change. Do not substitute hosted staging for this part: the fixed-result screens are intentionally loopback-only and absent from its normal build. The computed result is the staging part above.
 
@@ -98,15 +98,15 @@ The required `browser` check runs the same suite on every pull request that chan
 Before a meeting, complete these checks on the exact presentation machine:
 
 - Start from a fresh owned run; record its source commit and tool versions.
-- Pass the complete product-demo browser suite and inspect the patient, chat intake, follow-up and result/held screenshots.
+- Pass the complete product-demo browser suite and inspect the patient, attach-a-report, follow-up and result/held screenshots.
 - Perform the five-minute sequence twice by hand, including file selection and the second upload.
-- Open the current narrated backup on the meeting machine and check playback, captions and audio output. Keep the MP4 and screenshots available locally. Record a replacement only if the presented source or narration changes.
+- Record a new narrated backup from the current app: the chat-first package below shows the retired chat. Then open it on the meeting machine and check playback, captions and audio output. Keep the MP4 and screenshots available locally.
 - Review that no screen or narration implies computed results, clinical validation or a connected medication–gene analysis.
 - Read that run’s `blast-radius.md` before teardown. Stop through its foreground launcher or its exact UUID; never kill a process by port.
 
 Use the recording if a live demonstration fails. Do not repeatedly troubleshoot during the meeting. The narrated backup is an automated synthetic demonstration; it does not replace the presenter's own rehearsal.
 
-The current media package is `/workspace/investor-demo-assets/chat-first-2026-11-02/`, built from merged commit `e6b7be432786f403d69739f45946258b7199aba0`. Open `index.html` for offline playback and chapters, or play `investor-walkthrough.mp4` directly. The package includes captions, a transcript, presenter cues, screenshots and source/checksum evidence. The narration uses a local synthetic voice and lasts about four minutes and 28 seconds. Share `/workspace/investor-demo-assets/telesphoros-investor-demo-2026-11-02.zip`, the curated archive excluding raw browser recordings, private service state and temporary tooling. Extract it before opening the player; if the meeting browser blocks local HTML, play the MP4 directly.
+**Historical:** the media package `/workspace/investor-demo-assets/chat-first-2026-11-02/` shows the chat, retired on 2026-11-25, so it no longer matches the live demo. Do not present it as the current backup; record a new one before the next meeting (above). It was built from merged commit `e6b7be432786f403d69739f45946258b7199aba0`. Open `index.html` for offline playback and chapters, or play `investor-walkthrough.mp4` directly. The package includes captions, a transcript, presenter cues, screenshots and source/checksum evidence. The narration uses a local synthetic voice and lasts about four minutes and 28 seconds. Share `/workspace/investor-demo-assets/telesphoros-investor-demo-2026-11-02.zip`, the curated archive excluding raw browser recordings, private service state and temporary tooling. Extract it before opening the player; if the meeting browser blocks local HTML, play the MP4 directly.
 
 The earlier `/workspace/investor-demo-assets/narrated/` recording and `investor-prototype-preview.mp4` predate this workflow. Keep them as historical artifacts, not as current presentation material. The new package's verification record distinguishes automated rehearsal from the remaining human meeting-machine checks.
 
@@ -124,4 +124,4 @@ The earlier 3–7 working-day estimate is a planning range for packaging and reh
 
 ## Evidence
 
-Current rehearsal results and media checks are recorded in [the chat-first package verification](verification/chat-first-demo-package.md). The [earlier investor rehearsal](verification/investor-demo-2026-11-02.md) and [2026-10-26 browser evidence](verification/fixture-product-demo.md) remain historical records.
+The [chat-first package verification](verification/chat-first-demo-package.md) records the last rehearsal and media checks, of the app before the chat was retired; it is historical until a new backup is recorded. The [earlier investor rehearsal](verification/investor-demo-2026-11-02.md) and [2026-10-26 browser evidence](verification/fixture-product-demo.md) remain historical records.
