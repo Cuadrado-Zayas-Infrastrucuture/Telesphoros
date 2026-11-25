@@ -41,6 +41,14 @@ The screens mapped to routes in LS1:
 
 Every other route has no `handle.screen`, which means "not translated": the same as being unlisted.
 
+**As built (2026-11-25):**
+- **No wrapper element.** `ScreenLanguage` adds no element: it passes the `lang` to put on the screen's own root, which is `<main>` in
+  `AppFrame`. A wrapper that appears only in Spanish would remount the page below it, losing the chat the signed-in frame keeps across pages.
+  It would also break `.workspace-layout > .workspace-navigation` if put around the sidebar.
+- **The `shell` is the whole frame.** That is the sidebar, or the public header and footer. Its `lang` goes on `.app-frame`.
+- **Route screen names are checked.** `SCREENS` lists the valid names, and a test walks the route tree against it, because a route's
+  `handle` is not type-checked.
+
 ## 3. The pull-request line (R8)
 
 One line is added under "Safety invariants" in `.github/pull_request_template.md`:

@@ -40,7 +40,7 @@ test('saved preferences can be withdrawn in Settings while current appearance an
   await page.screenshot({ path: info.outputPath('consent-preferences-dark.png') });
   await dialog.getByRole('button', { name: 'Save choices', exact: true }).click();
   await expect(reopen).toBeFocused();
-  expect(await page.evaluate(() => ['telesphoros.theme', 'telesphoros.sidebar', 'telesphoros.landing.language'].map((key) => localStorage.getItem(key)))).toEqual([null, null, null]);
+  expect(await page.evaluate(() => ['telesphoros.theme', 'telesphoros.sidebar', 'telesphoros.landing.language', 'telesphoros.app.language'].map((key) => localStorage.getItem(key)))).toEqual([null, null, null, null]);
   expect(await page.evaluate(() => sessionStorage.getItem('consent.synthetic-check'))).toBe('keep');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });

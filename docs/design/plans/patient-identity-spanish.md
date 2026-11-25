@@ -65,6 +65,9 @@ should match it. No other Spanish term for these screens exists yet.
 
 ## 4. What this touches (option (a))
 
+*Since spec 050 LS1 (2026-11-25):* the five strings are a word table, `IDENTITY_TABLE`, so the signed Spanish goes in its `es` with its
+`signedBy`. That replaces a separate `IDENTITY_WORDS_ES`, and LS1's checks then apply to it.
+
 - `apps/frontend/src/lib/patientIdentity.ts`: `IDENTITY_WORDS_ES`, with the same keys as `IDENTITY_WORDS`, and the signers and date in its
   comment. No component reads it.
 - `apps/frontend/src/lib/patientIdentity.test.ts` (new): the checks in section 5.

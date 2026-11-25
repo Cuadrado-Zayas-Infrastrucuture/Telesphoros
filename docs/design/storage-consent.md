@@ -10,6 +10,7 @@ Date: 2026-11-01. Public Telesphoros. The original implementation began at `45ce
 | `telesphoros.sidebar` | Optional; same gate for collapsed/expanded preference. |
 | `telesphoros.sidebar-width` | Optional; same gate for the dragged sidebar width, a number of rem within fixed bounds (specs/034 D8). |
 | `telesphoros.landing.language` | Optional; language remains usable in the current tab without persistence. |
+| `telesphoros.app.language` | Optional; the signed-in app's language (spec 050 LS1), separate from the landing's, with the same gate. English unless Spanish is chosen; nothing offers the choice until slice LS6. |
 | `telesphoros.storage-consent.v1` | Required local record of `{version: 1, preferences: boolean}`. No tracking identifier. Invalid JSON, wrong versions or wrong field types do not enable optional storage. |
 | Auth/PKCE and upload-recovery session storage | Existing behavior retained. Never passed through the optional preference store or removed on withdrawal. |
 | Identity-provider session and first-party record events | Outside this control. No provider/backend/event contract change. |
