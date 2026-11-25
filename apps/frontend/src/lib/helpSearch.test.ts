@@ -109,6 +109,7 @@ describe('searching', () => {
     expect(ids(searchHelp('what is a held result', HELP_EN.articles, GLOSSARY_EN, 'worklist', ['reader']))[0]).toBe('held-results');
     expect(ids(searchHelp('how do I add a patient', HELP_EN.articles, GLOSSARY_EN, 'patients', ['clinician']))[0]).toBe('find-or-add-a-patient');
     expect(ids(searchHelp('what does phenotype mean', HELP_EN.articles, GLOSSARY_EN, 'patient', ['reader']))).toContain('word:phenotype');
+    expect(ids(searchHelp('how do I check a drug before prescribing', HELP_EN.articles, GLOSSARY_EN, 'patient', ['clinician']))[0]).toBe('checking-a-drug');
     expect(ids(searchHelp('how do I change the theme', HELP_EN.articles, GLOSSARY_EN, 'settings', ['reader']))[0]).toBe('your-settings');
     expect(ids(searchHelp('what does the usage page count', HELP_EN.articles, GLOSSARY_EN, 'usage', ['admin']))[0]).toBe('the-usage-page');
     expect(ids(searchHelp('what does the usage page count', HELP_EN.articles, GLOSSARY_EN, 'usage', ['reader']))).not.toContain('the-usage-page');

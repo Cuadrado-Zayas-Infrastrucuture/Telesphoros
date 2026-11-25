@@ -123,6 +123,21 @@
       "signedBy": []
     },
     {
+      "id": "checking-a-drug",
+      "title": "Checking a drug before prescribing",
+      "body": [
+        "On a patient's page, Check a drug before prescribing looks up one drug, chosen by its name as a medication is, against this patient's confirmed gene results and the guidelines loaded in the product. Nothing is saved: the check records no prescription, no medication and no decision.",
+        "The answer uses the same words as the patient's current medications, and each word has a short explanation. No guideline loaded means only that the loaded guidelines do not cover the drug. It does not mean genes do not matter for it.",
+        "If the drug is listed as changing a gene that this patient's current guidance rests on, the check says so."
+      ],
+      "screens": ["patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["check", "checking", "drug", "before", "prescribe", "prescribing", "new", "lookup"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
       "id": "recording-a-decision",
       "title": "Recording a decision",
       "body": [
