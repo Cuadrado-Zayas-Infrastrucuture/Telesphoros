@@ -5,20 +5,32 @@ import type { DemographicsCompleteness } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { IncompleteWord } from '@/components/patients/IncompleteWord';
 import { Button } from '@/components/ui/Button';
+import { usePatientSearch } from '@/hooks/usePatientSearch';
 import { useWorkspacePatients } from '@/hooks/useWorkspacePatients';
 import { Input } from '@/components/ui/Input';
 import { getCompleteness } from '@/lib/patientDemographics';
 import { onPatientAdded } from '@/lib/workspaceEvents';
 import { patientSummary } from '@/lib/patientSummary';
 
+/** The sentence under the field: how far the list below has been searched. Only a 200 from the server says "all" while pages remain. */
+function scopeSentence(loaded: number, hasMore: boolean, matches: number | null) {
+  if (matches !== null) return matches === 0 ? 'Searched all patients: no match.' : `Searched all patients: ${matches} ${matches === 1 ? 'match' : 'matches'}.`;
+  return hasMore ? `Typing looks through the ${loaded} patients loaded so far. Search all patients looks through every one.` : `Typing looks through all ${loaded} patients.`;
+}
+
 /**
  * The Patients page's roster (specs/034, from the panel's former list, specs/024 D2a): the synthetic labels, newest first, each a link to the
  * patient's page and marked "Incomplete" when its demographics are missing, under a line counting complete demographics.
+ *
+ * Finding a patient (spec 040 slice B, D4): typing filters the loaded rows at once. While more pages remain, "Search all patients" (or Enter)
+ * asks the server, and only its 200 replaces the rows with the matches. Any other answer keeps the loaded rows and their filter, and says the
+ * whole list was not searched, with Retry. Changing the text returns to the loaded rows.
  */
 export function PatientRoster() {
   const { apiFetch } = useAuth();
   const { patients, loading, error, hasMore, loadMore } = useWorkspacePatients();
   const [filter, setFilter] = useState('');
+  const { state: search, search: searchAll, more: moreMatches, reset: resetSearch } = usePatientSearch();
   const [counts, setCounts] = useState<DemographicsCompleteness | null>(null);
 
   // The line is an extra: when the counts cannot be read (the in-memory store has none), it is left out, with no alert.
@@ -41,7 +53,10 @@ export function PatientRoster() {
       stop();
     };
   }, [loadCounts]);
-  const visible = patients?.filter((patient) => patient.label.toLowerCase().includes(filter.trim().toLowerCase()));
+  const text = filter.trim();
+  const found = search.status === 'found' ? search : null;
+  const visible = found ? found.patients : patients?.filter((patient) => patient.label.toLowerCase().includes(text.toLowerCase()));
+  const describedBy = search.status === 'refused' ? 'patient-roster-refused patient-roster-scope' : 'patient-roster-scope';
 
   return (
     <section aria-labelledby="patient-roster-heading" className="flex flex-col gap-3 rounded-lg border border-divider bg-panel px-4 py-4 sm:px-5">
@@ -59,24 +74,54 @@ export function PatientRoster() {
         )}
       </div>
       {patients && patients.length > 5 && (
-        <div className="flex max-w-sm flex-col gap-1 text-sm">
-          <label htmlFor="patient-roster-filter" className="flex flex-col gap-1">
-            Find loaded patients
+        <form
+          className="flex max-w-lg flex-col gap-1 text-sm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (hasMore) searchAll(text);
+          }}
+        >
+          <label htmlFor="patient-roster-filter">Find a patient</label>
+          <div className="flex flex-wrap gap-2">
             <Input
               id="patient-roster-filter"
-              aria-describedby="patient-roster-scope"
+              className="min-w-0 flex-1 basis-48"
+              aria-describedby={describedBy}
+              aria-invalid={search.status === 'refused' || undefined}
               value={filter}
-              onChange={(event) => setFilter(event.target.value)}
+              onChange={(event) => {
+                setFilter(event.target.value);
+                resetSearch();
+              }}
               autoComplete="off"
               spellCheck={false}
               placeholder="Patient code"
             />
-          </label>
-          {/* The API has no patient search, so the filter reaches only what this page has loaded, and says so (specs/038 D17). */}
-          <p id="patient-roster-scope" className="text-xs text-muted-foreground">
-            {hasMore ? `Search covers only the patients loaded so far (${patients.length}). Load more to expand it.` : `Search covers all patients (${patients.length}).`}
+            {hasMore && (
+              <Button type="submit" variant="outline" className="min-h-control" pending={search.status === 'searching'} pendingLabel="Searching all patients…">
+                Search all patients
+              </Button>
+            )}
+          </div>
+          {search.status === 'refused' && (
+            <p id="patient-roster-refused" className="text-xs text-destructive">
+              {search.message}
+            </p>
+          )}
+          <p id="patient-roster-scope" aria-live="polite" className="text-xs text-muted-foreground">
+            {scopeSentence(patients.length, hasMore, found ? found.total : null)}
           </p>
-        </div>
+          {search.status === 'failed' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <p role="alert" className="text-destructive">
+                {search.message}
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => searchAll(search.text)} aria-label="Retry searching all patients">
+                Retry
+              </Button>
+            </div>
+          )}
+        </form>
       )}
       {error && (
         <div className="flex flex-col items-start gap-1 text-sm">
@@ -114,14 +159,24 @@ export function PatientRoster() {
               </li>
             ))}
           </ul>
-          {visible?.length === 0 && (
+          {visible?.length === 0 && !found && (
             <p role="status" className="text-sm text-muted-foreground">
-              No match among loaded patients.{hasMore ? ' Load more to keep looking.' : ''}
+              No match among loaded patients.{hasMore ? ' Search all patients to keep looking.' : ''}
             </p>
           )}
         </>
       )}
-      {hasMore && !error && (
+      {found?.moreFailed && (
+        <p role="alert" className="text-sm text-destructive">
+          More matches could not be loaded. Please retry.
+        </p>
+      )}
+      {found?.hasMore && (
+        <Button variant="outline" size="sm" className="self-start" pending={found.loadingMore} pendingLabel="Loading matches…" onClick={moreMatches}>
+          More matches
+        </Button>
+      )}
+      {hasMore && !error && !found && (
         <Button variant="outline" size="sm" className="self-start" pending={loading} pendingLabel="Loading patients…" onClick={loadMore}>
           More patients
         </Button>

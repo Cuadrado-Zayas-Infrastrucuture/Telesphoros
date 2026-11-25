@@ -8,6 +8,8 @@ import { ReportStatusText } from '@/components/ReportStatusText';
 import { RemoveUnfinishedReport } from '@/components/workspace/RemoveUnfinishedReport';
 import { listReports } from '@/lib/ownedStorageApi';
 import { onReportsChanged } from '@/lib/workspaceEvents';
+import { SIDEBAR_WORDS } from '@/lib/words/shell';
+import { useWords } from '@/lib/words/screens';
 
 /** The file name without its report extension; the full name stays in the row's tooltip. */
 const shortName = (filename: string) => filename.replace(/\.(json|pdf)$/i, '') || filename;
@@ -18,6 +20,7 @@ const shortName = (filename: string) => filename.replace(/\.(json|pdf)$/i, '') |
  * Reloads when the chat or the upload form uploads, cancels, checks or removes a report.
  */
 export function SidebarReports({ onNavigate }: { onNavigate?: () => void }) {
+  const words = useWords(SIDEBAR_WORDS);
   const { apiFetch } = useAuth();
   const [reports, setReports] = useState<ReportDto[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -47,11 +50,11 @@ export function SidebarReports({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <section aria-labelledby="panel-reports-heading" data-panel-item="Recents" className="workspace-panel-section workspace-recents flex min-h-0 flex-col gap-1">
       <p id="panel-reports-heading" className="workspace-group-label px-3 text-xs font-medium text-muted-foreground">
-        Recents
+        {words.recents}
       </p>
       {failed ? (
         <div role="alert" className="flex flex-col items-start gap-1 px-3 text-xs">
-          <span className="text-destructive">Reports could not be loaded.</span>
+          <span className="text-destructive">{words.reportsFailed}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -61,18 +64,18 @@ export function SidebarReports({ onNavigate }: { onNavigate?: () => void }) {
               load();
             }}
           >
-            Retry
+            {words.retry}
           </Button>
         </div>
       ) : reports === null ? (
         <div className="px-3">
-          <ContentSkeleton label="Loading reports…" variant="compact" />
+          <ContentSkeleton label={words.loadingReports} variant="compact" />
         </div>
       ) : reports.length === 0 ? (
-        <p className="px-3 text-xs text-muted-foreground">No reports yet.</p>
+        <p className="px-3 text-xs text-muted-foreground">{words.noReports}</p>
       ) : (
-        <div role="region" aria-label="Recent reports" tabIndex={0} className="workspace-recents-list rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
-          <ul aria-label="Recent reports" className="flex flex-col">
+        <div role="region" aria-label={words.recentReports} tabIndex={0} className="workspace-recents-list rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+          <ul aria-label={words.recentReports} className="flex flex-col">
             {reports.map((report) => (
               <li key={report.id} className="flex min-w-0 flex-wrap items-center">
                 <Link

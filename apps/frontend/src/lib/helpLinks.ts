@@ -12,8 +12,9 @@ export const HELP_LINKS = {
   changelog: file('CHANGELOG.md'),
 } as const;
 
-export const POLICY_LINKS: readonly { label: string; href: string }[] = [
-  { label: 'Security policy', href: file('SECURITY.md') },
-  { label: 'Code of conduct', href: file('CODE_OF_CONDUCT.md') },
-  { label: 'License', href: file('LICENSE') },
+/** Each entry names its words in `ACCOUNT_MENU_WORDS` (`lib/words/shell.ts`), so the menu shows them in the shell's language. */
+export const POLICY_LINKS: readonly { word: 'securityPolicy' | 'codeOfConduct' | 'license'; href: string }[] = [
+  { word: 'securityPolicy', href: file('SECURITY.md') },
+  { word: 'codeOfConduct', href: file('CODE_OF_CONDUCT.md') },
+  { word: 'license', href: file('LICENSE') },
 ];

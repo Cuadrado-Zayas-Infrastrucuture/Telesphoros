@@ -7,6 +7,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
 import { LazyTooltip } from '@/components/arc/LazyTooltip';
 import { SidebarLink } from '@/components/layout/SidebarLink';
+import { HelpButton } from '@/components/help/HelpButton';
 import { FollowupsNavLink } from '@/components/workspace/FollowupsNavLink';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
 import { CHAT_PATH, LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
@@ -16,8 +17,11 @@ import { cn } from '@/lib/utils';
 import { SidebarAccountMenu } from '@/components/layout/SidebarAccountMenu';
 import { announceNewChat } from '@/lib/workspaceEvents';
 import { Button } from '@/components/ui/Button';
+import { SIDEBAR_WORDS } from '@/lib/words/shell';
+import { useWords } from '@/lib/words/screens';
 
-type PanelItem = { kind: 'link'; to: string; label: string; icon: typeof FileText; show: boolean } | { kind: 'followups'; show: boolean };
+// `panel` is a fixed name for the tests and the panel's own markup; `label` is the word shown, in the shell's language (spec 050 LS2a).
+type PanelItem = { kind: 'link'; to: string; panel: string; label: string; icon: typeof FileText; show: boolean } | { kind: 'followups'; show: boolean };
 
 /**
  * The frame of every signed-in page (specs/018-unified-sidebar), laid out as specs/034: Home (the worklist, spec 049) and Chat, a short block
@@ -27,6 +31,7 @@ type PanelItem = { kind: 'link'; to: string; label: string; icon: typeof FileTex
  */
 export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: boolean; onOpenHelp?: () => void } = {}) {
   const { status, roles, preferredName } = useAuth();
+  const words = useWords(SIDEBAR_WORDS);
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   const [width, setWidth] = useState(readSidebarWidth);
@@ -100,14 +105,14 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
   const everything: PanelItem[] = [
     ...(localWorkspaceAvailable()
       ? [
-          { kind: 'link' as const, to: LOCAL_WORKSPACE_PATH, label: 'Workspace', icon: Sparkles, show: true },
-          { kind: 'link' as const, to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true },
+          { kind: 'link' as const, to: LOCAL_WORKSPACE_PATH, panel: 'Workspace', label: words.workspace, icon: Sparkles, show: true },
+          { kind: 'link' as const, to: '/local-interpretation', panel: 'Chat preview', label: words.chatPreview, icon: MessageSquare, show: true },
         ]
       : []),
-    { kind: 'link', to: '/patients', label: 'Patients', icon: Users, show: canRead },
-    { kind: 'link', to: '/reports', label: 'Reports', icon: FileText, show: canRead },
+    { kind: 'link', to: '/patients', panel: 'Patients', label: words.patients, icon: Users, show: canRead },
+    { kind: 'link', to: '/reports', panel: 'Reports', label: words.reports, icon: FileText, show: canRead },
     { kind: 'followups', show: followups },
-    { kind: 'link', to: '/usage', label: 'Usage', icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
+    { kind: 'link', to: '/usage', panel: 'Usage', label: words.usage, icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
   ];
   const items = everything.filter((item) => item.show);
   // The open drawer (phones only: the menu button is hidden on desktop) keeps Tab inside it and closes on Escape from anywhere in it.
@@ -169,7 +174,9 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
       toggle.current?.focus();
     }
   }
-  const role = primaryRole(roles) ?? 'user with no role';
+  const primary = primaryRole(roles);
+  const roleWords = { admin: words.roleAdmin, reviewer: words.roleReviewer, clinician: words.roleClinician, reader: words.roleReader };
+  const role = primary ? roleWords[primary] : words.roleNone;
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     cn('flex min-h-control items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted', isActive ? 'bg-muted text-primary' : 'text-muted-foreground');
   return (
@@ -177,15 +184,15 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
       <div className="workspace-brand-row">
         <NavLink to="/" onClick={close} className="workspace-brand inline-flex min-h-control min-w-0 items-center gap-2 rounded-sm">
           {/* Specs/034 D7: the wordmark alone; the byline stays on the public pages and the sign-in header. */}
-          <img src={productMark} alt="Telesphoros shield and Rx logo" width="64" height="66" loading="eager" className="brand-mark h-auto w-9 shrink-0" />
+          <img src={productMark} alt={words.logoAlt} width="64" height="66" loading="eager" className="brand-mark h-auto w-9 shrink-0" />
           <span className="workspace-brand-text min-w-0 truncate font-heading text-lg font-semibold tracking-tight">Telesphoros</span>
         </NavLink>
-        <LazyTooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} side={collapsed ? 'right' : 'bottom'}>
+        <LazyTooltip label={collapsed ? words.expand : words.collapse} side={collapsed ? 'right' : 'bottom'}>
           <Button
             variant="ghost"
             size="sm"
             className="workspace-collapse-toggle shrink-0 text-muted-foreground"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? words.expand : words.collapse}
             onClick={toggleCollapsed}
           >
             {collapsed ? <PanelLeftOpen aria-hidden="true" className="size-4" /> : <PanelLeftClose aria-hidden="true" className="size-4" />}
@@ -196,7 +203,7 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
           ref={toggle}
           variant="ghost"
           size="sm"
-          aria-label="Workspace navigation"
+          aria-label={words.menu}
           aria-expanded={open}
           aria-controls="workspace-navigation-content"
           className="workspace-menu-toggle"
@@ -206,22 +213,22 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
         </Button>
       </div>
       <div id="workspace-navigation-content" className={cn('workspace-navigation-content', open && 'is-open')}>
-        <nav aria-label="Primary" className="workspace-primary flex min-h-0 flex-1 flex-col gap-5">
+        <nav aria-label={words.primary} className="workspace-primary flex min-h-0 flex-1 flex-col gap-5">
           <ul className="flex flex-col gap-0.5">
             {status === 'signedIn' && canRead && (
               <li>
                 {/* Collapsed to icons, each destination shows its name in a tooltip beside it (specs/018 D3, specs/042 D6). */}
-                <LazyTooltip label={iconsOnly ? 'Home' : undefined} side="right">
+                <LazyTooltip label={iconsOnly ? words.home : undefined} side="right">
                   <SidebarLink to={WORKSPACE_PATH} end data-panel-item="Home" onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
                     <House aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="workspace-link-label">Home</span>
+                    <span className="workspace-link-label">{words.home}</span>
                   </SidebarLink>
                 </LazyTooltip>
               </li>
             )}
             {status === 'signedIn' && (
               <li>
-                <LazyTooltip label={iconsOnly ? 'Chat' : undefined} side="right">
+                <LazyTooltip label={iconsOnly ? words.chat : undefined} side="right">
                   <SidebarLink
                     to={CHAT_PATH}
                     end
@@ -235,7 +242,7 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
                     styleFor={linkClass}
                   >
                     <MessageSquare aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="workspace-link-label">Chat</span>
+                    <span className="workspace-link-label">{words.chat}</span>
                   </SidebarLink>
                 </LazyTooltip>
               </li>
@@ -244,7 +251,7 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
               item.kind === 'link' ? (
                 <li key={item.to}>
                   <LazyTooltip label={iconsOnly ? item.label : undefined} side="right">
-                    <SidebarLink to={item.to} end data-panel-item={item.label} onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
+                    <SidebarLink to={item.to} end data-panel-item={item.panel} onKeyDown={dismiss} onClick={close} styleFor={linkClass}>
                       <item.icon aria-hidden="true" className="size-4 shrink-0" />
                       <span className="workspace-link-label">{item.label}</span>
                     </SidebarLink>
@@ -255,6 +262,11 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
                   <FollowupsNavLink iconsOnly={iconsOnly} className={linkClass} onClick={close} onKeyDown={dismiss} />
                 </li>
               ),
+            )}
+            {status === 'signedIn' && (
+              <li>
+                <HelpButton iconsOnly={iconsOnly} onKeyDown={dismiss} />
+              </li>
             )}
           </ul>
           {lists && <SidebarReports onNavigate={close} />}
@@ -285,12 +297,12 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
           </div>
         )}
         <div className="workspace-account relative border-t border-divider pt-3">
-          <LazyTooltip label={iconsOnly ? `Account, ${role}` : undefined} side="right">
+          <LazyTooltip label={iconsOnly ? words.account(role) : undefined} side="right">
             <button
               ref={accountToggle}
               type="button"
               onKeyDown={dismiss}
-              aria-label={`Account, ${role}`}
+              aria-label={words.account(role)}
               aria-expanded={accountOpen}
               aria-controls="workspace-account-menu"
               onClick={() => setAccountOpen((current) => !current)}
@@ -305,7 +317,7 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
               {/* The preferred name when set (Settings), with the role beside the environment, as a chat app shows the name and the plan. */}
               <span className="workspace-link-label min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">{preferredName ?? role}</span>
-                <span className="block truncate text-xs text-muted-foreground">{preferredName ? `${role} · Synthetic` : 'Synthetic environment'}</span>
+                <span className="block truncate text-xs text-muted-foreground">{preferredName ? words.roleSynthetic(role) : words.syntheticEnvironment}</span>
               </span>
               <ChevronsUpDown aria-hidden="true" className="workspace-link-label size-4 shrink-0 text-muted-foreground" />
             </button>
@@ -324,14 +336,14 @@ export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: 
           // A slider (not a focusable separator): it sets one value, the width, from the mouse or the keys.
           role="slider"
           aria-orientation="horizontal"
-          aria-label="Sidebar width"
+          aria-label={words.width}
           aria-controls="workspace-navigation-content"
           aria-valuemin={SIDEBAR_WIDTH.min}
           aria-valuemax={SIDEBAR_WIDTH.max}
           aria-valuenow={width}
-          aria-valuetext={`${width} rem wide`}
+          aria-valuetext={words.widthValue(String(width))}
           tabIndex={0}
-          title="Drag to resize. Double-click to reset."
+          title={words.resizeHint}
           className="workspace-resize-handle"
           onPointerDown={startDrag}
           onPointerMove={moveDrag}

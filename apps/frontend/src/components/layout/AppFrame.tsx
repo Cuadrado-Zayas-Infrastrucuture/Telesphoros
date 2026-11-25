@@ -15,7 +15,8 @@ import { useRouteFocus } from '@/hooks/useRouteFocus';
 import { useAppLanguage } from '@/lib/appLanguage';
 import { useLandingLanguage } from '@/lib/landing/landing-language';
 import { SIGN_IN_FLOW } from '@/lib/theme';
-import { ScreenLanguageContext, screenLanguage, type Screen } from '@/lib/words/screens';
+import { ScreenLanguageContext, screenLanguage, wordsIn, type Screen } from '@/lib/words/screens';
+import { FRAME_WORDS } from '@/lib/words/shell';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
 /** The screen the deepest matched route names in `handle.screen`, if any. */
@@ -52,13 +53,16 @@ export function AppFrame() {
   // Spec 050 LS1 (LS1-D1): the one place that sets <html lang>. The landing has its own language; every other page follows the app's (R3).
   const { language: app } = useAppLanguage();
   const { language: landingLanguage } = useLandingLanguage();
-  useEffect(() => {
+  // A layout effect, so the attribute is set in the same commit as the content it describes, before the page is shown.
+  useLayoutEffect(() => {
     document.documentElement.lang = landing ? landingLanguage : app;
   }, [landing, landingLanguage, app]);
   // The screen a route names in `handle.screen` (LS1-D2); a route with none is not translated (R6). The frame itself is the `shell`. The landing
   // keeps its own language and copy, so neither the shell's nor a screen's language is marked there.
   const screen = namedScreen(useMatches());
   const shell = screenLanguage(app, 'shell');
+  // The frame provides the shell's language, so it reads its own words for it directly rather than through `useWords`.
+  const frameWords = wordsIn(FRAME_WORDS, shell.language);
 
   // The one-screen workspace (specs/016) is its own frame: no site header, sidebar or footer.
   if (pathname === '/local-workspace') {
@@ -88,7 +92,7 @@ export function AppFrame() {
           <div className={sidebar ? 'workspace-body' : 'contents'}>
             {/* Announced politely while a lazy route's JavaScript is being fetched. */}
             <div role="status" aria-live="polite" className="mx-auto w-full max-w-page px-4 sm:px-6">
-              {navigation.state === 'loading' && <p className="sr-only">Loading page…</p>}
+              {navigation.state === 'loading' && <p className="sr-only">{frameWords.loadingPage}</p>}
             </div>
             <ScreenLanguage screen={screen} inherits={shell.language}>
               {(lang) => (

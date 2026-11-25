@@ -22,16 +22,19 @@ Before the meeting, sign in on two browser profiles: a **clinician** account and
 | Time | Who | Action | Presenter wording |
 | --- | --- | --- | --- |
 | 0:00–0:30 | Clinician | Open the fictional patient | “Labs increasingly send structured results. This is an invented one, with invented genes.” |
-| 0:30–1:10 | Clinician | Upload the demonstration package; open its structured preview, where **Run synthetic assessment** is disabled and reads “Available once every saved finding has an independent decision.” | “Nothing is computed from what one person uploaded.” |
-| 1:10–2:10 | Reviewer | Open the same report; confirm that its laboratory patient reference belongs to this patient; accept each finding | “A second clinician checks the identity and every finding. The uploader cannot review their own report.” |
-| 2:10–3:10 | Clinician | Choose **Run synthetic assessment**; open DRUGZ and DRUGQ and their details | “The engine is deterministic. Each line is the wording of the guideline cell it cites, and the screen names the knowledge set and engine version.” |
-| 3:10–3:50 | Clinician | Choose **Run synthetic assessment** again; then **Open this patient’s stored results** | “Running it again returns the same stored assessment, not a second one. It is kept with the findings and review it was computed from.” |
-| 3:50–4:40 | Presenter | The path to real use | “The same flow runs with the first real module, codeine with CYP2D6, once two pharmacists have signed it. Then come real lab formats.” |
+| 0:30–1:10 | Clinician | **Upload report** with the type “Structured PGx report (JSON)”; open it from **Reports** and choose **Show structured findings**. The preview reads “Verify the patient link before saving findings for review.” | “Nothing is computed from what one person uploaded.” |
+| 1:10–1:50 | Reviewer | Open the same report; **Review patient link**; **Confirm patient match** with a reason; **Record patient-link decision** | “A second clinician confirms the report belongs to this patient. The uploader cannot make that decision.” |
+| 1:50–2:10 | Clinician | **Reload saved findings**; **Save findings for review** | “The findings are saved as evidence. Nobody has accepted them yet.” |
+| 2:10–2:40 | Reviewer | **Reload saved findings**; **Matches source** on each finding, until “Findings review complete” | “The second clinician checks every finding against its source.” |
+| 2:40–3:30 | Clinician | **Reload saved findings**; **Run synthetic assessment**; open DRUGZ and DRUGQ and their details | “The engine is deterministic. Each line is the wording of the guideline cell it cites, and the screen names the knowledge set and engine version.” |
+| 3:30–4:00 | Clinician | Choose **Run synthetic assessment** again; then **Open this patient’s stored results** | “Running it again returns the same stored assessment, not a second one. It is kept with the findings and review it was computed from.” |
+| 4:00–4:40 | Presenter | The path to real use | “The same flow runs with the first real module, codeine with CYP2D6, once two pharmacists have signed it. Then come real lab formats.” |
 
 ### Rehearsal (staging)
 
 - Confirm staging serves the assessment: the structured preview shows the **Synthetic assessment** section, and a run stores a result. If the section is missing, or a run says “The synthetic assessment is not switched on in this environment.”, do not present this part.
 - Confirm the reviewer account holds the reviewer role and did not create, request or upload the report.
+- Keep the order: the reviewer decides the patient link, the **clinician** saves the findings, the reviewer decides each finding, the clinician runs the assessment. **Save findings for review** appears only once the link is verified, and a reviewer who saves the findings can no longer review them (“A reviewer who did not upload or save this evidence must record it”).
 - Run the sequence twice by hand on the meeting machine, with a fresh upload each time.
 - Review that no screen or narration implies a real gene, a real drug, a clinical recommendation or a medication check.
 
