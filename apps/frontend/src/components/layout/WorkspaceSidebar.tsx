@@ -102,10 +102,12 @@ export function WorkspaceSidebar() {
   // The destinations (specs/034 D1, replacing the order of specs/024 D2), each only for the roles that may use it. Home sits above them (spec 049),
   // Recents below them, and Settings with Sign out in the account menu at the bottom. The chat is gone (spec 052 RC1b, RC-6); Help stays.
   const everything: PanelItem[] = [
-    ...(localWorkspaceAvailable()
+    // DEV first, so a production build drops these entries and their words (check-foundation.mjs refuses "AI preview" in production assets).
+    // The preview's name is English only: it never reaches a build that could offer Spanish.
+    ...(import.meta.env.DEV && localWorkspaceAvailable()
       ? [
           { kind: 'link' as const, to: LOCAL_WORKSPACE_PATH, panel: 'Workspace', label: words.workspace, icon: Sparkles, show: true },
-          { kind: 'link' as const, to: '/local-interpretation', panel: 'AI preview', label: words.aiPreview, icon: MessageSquare, show: true },
+          { kind: 'link' as const, to: '/local-interpretation', panel: 'AI preview', label: 'AI preview', icon: MessageSquare, show: true },
         ]
       : []),
     { kind: 'link', to: '/patients', panel: 'Patients', label: words.patients, icon: Users, show: canRead },
