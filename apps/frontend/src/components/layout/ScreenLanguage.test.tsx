@@ -101,4 +101,13 @@ describe('<html lang> on the app (R3), with no screen translated yet (LS1)', () 
     expect(heading.closest('[lang]')).toHaveAttribute('lang', 'en');
     expect(document.querySelector('.app-frame')).toHaveAttribute('lang', 'en');
   });
+
+  it('with the shell untranslated (LS2a), the header, skip link and consent bar stay English under Spanish (LS2-D2, LS2-D3)', async () => {
+    setAppLanguage('es');
+    renderApp('/signed-out', { storageChoice: 'unknown' });
+    await screen.findByRole('heading', { level: 1, name: 'You have been signed out' });
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Cookies and browser storage' })).toBeVisible();
+    expect(screen.queryByText('Cookies y almacenamiento del navegador')).toBeNull();
+  });
 });

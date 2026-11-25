@@ -5,7 +5,9 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { Label } from '@/components/ui/Label';
 import { useLandingLanguage, useLandingRoute } from '@/lib/landing/landing-language';
+import { useAppLanguage } from '@/lib/appLanguage';
 import { preferenceStorage } from '@/lib/storageConsent';
+import { screenLanguage } from '@/lib/words/screens';
 import type { ConsentSnapshot } from '@/lib/storageConsent';
 import '@/styles/storage-consent.css';
 
@@ -58,7 +60,9 @@ export function StorageConsentProvider({ children }: { children: ReactNode }) {
   const snapshot = useSyncExternalStore(preferenceStorage.subscribe, preferenceStorage.getSnapshot, preferenceStorage.getServerSnapshot);
   const landing = useLandingRoute();
   const { language } = useLandingLanguage();
-  const copy = landing && language === 'es' ? ES : EN;
+  const { language: app } = useAppLanguage();
+  // The landing's language on the landing; elsewhere the shell screen's, which stays English until it is translated (spec 050 LS2-D3).
+  const copy = (landing ? language : screenLanguage(app, 'shell').language) === 'es' ? ES : EN;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(false);
   const [problem, setProblem] = useState<'clear' | 'temporary' | null>(null);

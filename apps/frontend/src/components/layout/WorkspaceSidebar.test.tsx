@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setAppLanguage } from '@/lib/appLanguage';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
 const sidebar = () => document.querySelector<HTMLElement>('header.workspace-navigation');
@@ -380,5 +381,43 @@ describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
     fireEvent.keyDown(screen.getByRole('link', { name: 'Reports' }), { key: 'Escape' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).toHaveFocus();
+  });
+});
+
+// Spec 050 LS2-D1: the founders' preview of the app's Spanish, only with VITE_LANGUAGE_PREVIEW in a development, test or e2e build.
+describe('the language preview', () => {
+  afterEach(() => {
+    act(() => setAppLanguage('en'));
+    vi.unstubAllEnvs();
+  });
+
+  async function openLanguage() {
+    await primary();
+    const account = document.querySelector<HTMLElement>('.workspace-account')!;
+    await userEvent.click(within(account).getByRole('button', { name: 'Account, clinician' }));
+    await userEvent.click(within(account).getByRole('button', { name: /^Language/ }));
+    return within(account);
+  }
+
+  it('is not offered without the flag', async () => {
+    open('/reports', ['clinician']);
+    const account = await openLanguage();
+    expect(account.queryByText('Preview:')).toBeNull();
+    expect(account.getByText('Español: aún no disponible')).toBeVisible();
+  });
+
+  it('with the flag, switches the app language; the untranslated shell stays English, marked lang="en"', async () => {
+    vi.stubEnv('VITE_LANGUAGE_PREVIEW', 'true');
+    open('/reports', ['clinician']);
+    const account = await openLanguage();
+    const spanish = account.getByRole('button', { name: 'Español' });
+    expect(spanish).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(spanish);
+    expect(spanish).toHaveAttribute('aria-pressed', 'true');
+    expect(document.documentElement.lang).toBe('es');
+    expect(document.querySelector('.app-frame')).toHaveAttribute('lang', 'en');
+    expect(screen.getByRole('button', { name: /^(Collapse|Expand) sidebar$/ })).toBeVisible();
+    await userEvent.click(account.getByRole('button', { name: 'English' }));
+    expect(document.documentElement.lang).toBe('en');
   });
 });

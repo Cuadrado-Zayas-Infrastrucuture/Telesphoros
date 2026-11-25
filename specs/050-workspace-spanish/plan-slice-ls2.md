@@ -50,6 +50,18 @@ needs a Spanish-speaking reviewer"** (`docs/status/2026-10-31-staging-landing-re
    shows, any placeholder, any name pair, and a blank Spanish column. A test keeps it in step with the tables, so a string cannot be added
    without a row.
 
+**LS2a as built (2026-11-25):**
+- **72 strings, not about 55:** 31 in the sidebar with Recents, 19 in the account menu, 1 in the frame, and 21 on the sign-in pages.
+- **Role words included:** the role names shown in the account button ("clinician", "user with no role") are interface words, so they are in
+  the sidebar table.
+- **Two pieces stay out of the tables:**
+  - `Breadcrumb` belongs to each page's own content, not the frame, so it is translated with those pages.
+  - "Español: aún no disponible" is already Spanish and stays in the component, marked `lang="es"`, until LS6 (LS2-D5).
+- **The preview control** ("Preview: English / Español") is not translated. It exists only in development, test and e2e builds, and is not
+  part of the app.
+- **Navigation names stay fixed:** `data-panel-item` keeps its English names, which the tests and the panel's markup read. Only the visible
+  word and the accessible names come from the tables.
+
 ### LS2b: the Spanish
 
 Once the founders send the filled list:

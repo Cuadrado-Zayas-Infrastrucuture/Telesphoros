@@ -13,7 +13,8 @@ import { useRouteFocus } from '@/hooks/useRouteFocus';
 import { useAppLanguage } from '@/lib/appLanguage';
 import { useLandingLanguage } from '@/lib/landing/landing-language';
 import { SIGN_IN_FLOW } from '@/lib/theme';
-import { ScreenLanguageContext, screenLanguage, type Screen } from '@/lib/words/screens';
+import { ScreenLanguageContext, screenLanguage, wordsIn, type Screen } from '@/lib/words/screens';
+import { FRAME_WORDS } from '@/lib/words/shell';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
 /** The screen the deepest matched route names in `handle.screen`, if any. */
@@ -46,6 +47,8 @@ export function AppFrame() {
   // keeps its own language and copy, so neither the shell's nor a screen's language is marked there.
   const screen = namedScreen(useMatches());
   const shell = screenLanguage(app, 'shell');
+  // The frame provides the shell's language, so it reads its own words for it directly rather than through `useWords`.
+  const frameWords = wordsIn(FRAME_WORDS, shell.language);
 
   // The one-screen workspace (specs/016) is its own frame: no site header, sidebar or footer.
   if (pathname === '/local-workspace') {
@@ -75,7 +78,7 @@ export function AppFrame() {
           <div className={sidebar ? 'workspace-body' : 'contents'}>
             {/* Announced politely while a lazy route's JavaScript is being fetched. */}
             <div role="status" aria-live="polite" className="mx-auto w-full max-w-page px-4 sm:px-6">
-              {navigation.state === 'loading' && <p className="sr-only">Loading page…</p>}
+              {navigation.state === 'loading' && <p className="sr-only">{frameWords.loadingPage}</p>}
             </div>
             <ScreenLanguage screen={screen} inherits={shell.language}>
               {(lang) => (
