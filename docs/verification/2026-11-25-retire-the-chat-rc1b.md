@@ -13,6 +13,7 @@ wrote this; CI is the first run of every test named here.
 | `lib/localWorkspace.ts`, `lib/workspaceEvents.ts` | `CHAT_PATH`, `announceNewChat` and `onNewChat` removed |
 | `packages/help-content/src/help.ts`, `help.en.json`; `lib/helpSearch.ts` | The screen `chat` removed; `/chat` is no screen of Help's |
 | `components/settings/PreferredName.tsx` | The hint says where the preferred name is shown (the account at the foot of the sidebar), not "your chat welcome" |
+| `scripts/check-chunks.mjs` | `WorkspacePage` leaves the list of pages that must be their own chunk, since the page no longer exists |
 | Removed (RC-D5) | `pages/WorkspacePage.tsx`, `components/workspace/WorkspaceConversation.tsx`, `ConversationEntries.tsx`, `ConversationWelcome.tsx`, `RemovedAttachmentNotice.tsx`, `hooks/useRemovedAttachment.ts`, `lib/workspaceFileRule.ts`, and their tests |
 
 Not changed: the upload page and its recovery; the local preview (`/local-*`, "Chat preview"); the public landing page's copy, which still
