@@ -26,7 +26,7 @@ test.describe('signing in', () => {
 
   test('a clinician signs in through the identity provider and lands on the page they wanted', async ({ page }) => {
     await signInAs(page, 'alice');
-    await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
     await openAccountMenu(page);
     await expect(page.locator('#workspace-account-menu').getByText(ROLE.alice, { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
@@ -72,7 +72,7 @@ test.describe('signing in', () => {
 test.describe('where the token lives', () => {
   test('never in localStorage, sessionStorage, cookies or IndexedDB, and not in the URL', async ({ page }) => {
     await signInAs(page, 'alice');
-    await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
     const stored = await page.evaluate(async () => ({
       local: JSON.stringify({ ...localStorage }),
       session: JSON.stringify({ ...sessionStorage }),
@@ -96,7 +96,7 @@ test.describe('where the token lives', () => {
     await expect(page).toHaveURL(/\/signin$/); // nothing was kept: the app starts signed out
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForURL('**/reports/upload');
-    await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
     expect(loginPosts).toEqual([]); // no second login prompt
   });
 });

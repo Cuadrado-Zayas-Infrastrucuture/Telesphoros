@@ -78,22 +78,17 @@ test('Reports opens as a page and the chat keeps the same draft', async ({ page 
   await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Unsent synthetic question');
 });
 
-for (const [link, title] of [['Settings', 'Account preferences']] as const) {
-  test(`${link} opens as a panel and returns to the same draft`, async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
-    await page.getByRole('textbox', { name: 'Question' }).fill('Unsent synthetic question');
-    // Settings is in the account menu at the sidebar's foot (specs/034 D4).
-    await openAccountMenu(page);
-    await page.locator('header.workspace-navigation').getByRole('link', { name: link, exact: true }).click();
-    const panel = page.getByRole('dialog', { name: title, exact: true });
-    await expect(panel).toBeVisible();
-    await expect(panel.getByRole('heading', { name: title, exact: true })).toBeFocused();
-    await page.keyboard.press('Tab');
-    expect(await page.evaluate(() => document.activeElement?.closest('dialog')?.id)).toBe('workspace-panel');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: test.info().outputPath(`${link.toLowerCase().replaceAll(' ', '-')}-panel.png`) });
-    await page.keyboard.press('Escape');
-    await expect(panel).not.toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Unsent synthetic question');
-  });
-}
+// Spec 052 RC-3: Settings is a page in the main area, not a panel over the chat; Chat still returns to the same draft until RC1b.
+test('Settings opens as a page, and Chat returns to the same draft', async ({ page }) => {
+  await signInAs(page, 'alice', '/chat');
+  await page.getByRole('textbox', { name: 'Question' }).fill('Unsent synthetic question');
+  // Settings is in the account menu at the sidebar's foot (specs/034 D4).
+  await openAccountMenu(page);
+  await page.locator('header.workspace-navigation').getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Account preferences' })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('settings-page.png') });
+  await openChat(page);
+  await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Unsent synthetic question');
+});

@@ -85,7 +85,10 @@ describe('reports page with real auth and route guards', () => {
       expect(screen.queryByRole('dialog', { name: 'Report details' })).not.toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Sample question' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Chat preview' })).toHaveAttribute('href', '/local-interpretation');
-      expect(Boolean(screen.queryByRole('link', { name: 'Attach report in chat' }))).toBe(roles.includes('clinician'));
+      const attach = screen.queryByRole('link', { name: 'Attach a report' });
+      expect(Boolean(attach)).toBe(roles.includes('clinician'));
+      // Spec 052 RC-2: attaching is a page of its own, not the chat.
+      if (attach) expect(attach).toHaveAttribute('href', '/reports/upload');
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
       const drawer = screen.getByRole('dialog', { name: 'Report details' });
       expect(within(drawer).getByRole('heading', { name: 'Report details' })).toHaveFocus();
@@ -118,7 +121,7 @@ describe('reports page with real auth and route guards', () => {
       renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
       await screen.findByRole('button', { name: 'Open synthetic.json' });
-      expect(Boolean(screen.queryByRole('link', { name: 'Attach report in chat' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
+      expect(Boolean(screen.queryByRole('link', { name: 'Attach a report' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: 'Open synthetic.json' }));
       expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.json' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
@@ -278,7 +281,9 @@ describe('reports page with real auth and route guards', () => {
   ] as [Role[], boolean][])('offers empty-state upload only for an existing writer role: %j', async (roles, allowed) => {
     renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles, async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
     await screen.findByText('No reports found for this selection.');
-    expect(Boolean(screen.queryByRole('link', { name: 'Attach first report in chat' }))).toBe(allowed);
+    const first = screen.queryByRole('link', { name: 'Attach the first report' });
+    expect(Boolean(first)).toBe(allowed);
+    if (first) expect(first).toHaveAttribute('href', '/reports/upload');
   });
   it('returns an emptied later page to page one while retaining the patient filter', async () => {
     const api = fetcher(['reviewer'], async (url) =>

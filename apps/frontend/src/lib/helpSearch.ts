@@ -15,6 +15,7 @@ export function helpScreenOf(pathname: string): HelpScreen | null {
   if (path === '/patients/new') return 'new-patient';
   if (/^\/patients\/[^/]+$/.test(path)) return 'patient';
   if (path === '/reports') return 'reports';
+  if (path === '/reports/upload') return 'upload';
   if (path === '/follow-ups') return 'follow-ups';
   if (path === '/settings') return 'settings';
   if (path === '/usage') return 'usage';

@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/Input';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { PatientPicker } from '@/components/PatientPicker';
+import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
 import { AddPatientPanel } from '@/components/upload/AddPatientPanel';
 import { PatientPaging } from '@/components/upload/PatientPaging';
 import { UploadReceived } from '@/components/upload/UploadReceived';
@@ -53,7 +54,7 @@ const GUIDE_STEPS = ['Choose patient', 'Choose file', 'Review upload'] as const;
 const STEP_FIELDS = [['patientId'], ['reportType', 'file'], ['syntheticConfirmed']] as const;
 
 export default function UploadReportPage() {
-  usePageTitle('Upload report');
+  usePageTitle('Attach a report');
   const { apiFetch, recoverySession } = useAuth();
   // After a reload the browser may still hold an interrupted upload of this tab: offer to finish or cancel it.
   const [interrupted, setInterrupted] = useInterruptedUpload(recoverySession);
@@ -221,7 +222,9 @@ export default function UploadReportPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl leading-tight font-bold">Upload report</h1>
+        {/* A page in the main area (spec 052 RC-3), named as the home's quick action names it (RC-D3). */}
+        <BackToHomeLink />
+        <h1 className="text-3xl leading-tight font-bold">Attach a report</h1>
         <p className="text-muted-foreground">Synthetic test reports only. Fields marked required must be completed.</p>
       </div>
 
