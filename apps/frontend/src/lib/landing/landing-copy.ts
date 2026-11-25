@@ -1,8 +1,9 @@
 /*
  * All text of the product landing, in the two supported languages (plan: docs/design/plans/landing-alignment.md, S3).
  *
- * - `en` is the source of truth. It was refreshed on 2026-10-31 to match the prototype as it is: the chat home (specs/024),
- *   adding a patient from the panel, JSON-only intake on staging, and the public site's PGx-interpretation framing.
+ * - `en` is the source of truth. It was refreshed on 2026-10-31, and again on 2026-11-25 (docs/design/plans/landing-copy-refresh.md) for
+ *   the worklist home (spec 049), Help (spec 051), the retired chat (spec 052) and the patient search (spec 040).
+ * - Where `es` still describes the chat (LC-D3: the English first), its rows are marked for the founders' rewrite.
  * - `es` is a DRAFT translation that has not been reviewed by a Spanish-speaking reviewer. It must not ship before that
  *   review (see docs/STATUS.md). Every boundary statement (synthetic data only, not for clinical use, no medication or
  *   dose recommendation, verification is storage and not clinical review) must keep exactly the same meaning in both.
@@ -53,35 +54,36 @@ const en = {
     p2: 'Our goal is to help clinicians and pharmacists bring pharmacogenomic information into prescribing decisions.',
     todayTitle: 'Where we are today',
     today:
-      'The prototype starts with patient-linked reports, verified file storage and a chat home that shows each report’s status. Clinical interpretation and prescribing recommendations are not available yet.',
+      'The prototype starts with patient-linked reports, verified file storage and a worklist home that shows what needs a person today. Clinical interpretation and prescribing recommendations are not available yet.',
     source: 'About pharmacogenomics · NHGRI',
   },
   capabilities: {
     eyebrow: 'Available in this prototype',
     title: ['Built around', 'the report.'],
-    intro: 'A chat home with every feature in a side panel, patient-linked intake and a status for every file.',
+    intro: 'A worklist home, a patient list you can search, patient-linked intake and a status for every file.',
     rows: [
       {
         title: 'Keep the patient and report connected.',
-        text: 'Choose a synthetic patient, or add one by label from the side panel, then attach a structured JSON report. Raw genomic files are not accepted.',
+        text: 'Find a synthetic patient by label, or add one on the Patients page, then attach a structured JSON report on Attach a report. Raw genomic files are not accepted.',
         note: 'Uploads require a clinician role.',
       },
       {
         title: 'Find a file. Check its status.',
-        text: 'Past reports sit in the side panel with their status. All reports lists every report you can see, with its format and upload status.',
+        text: 'Recent reports sit in the sidebar with their status. The Reports page lists every report you can see, with its format and upload status.',
         note: 'File verification confirms storage, not clinical review.',
       },
       {
-        title: 'Start from the chat.',
-        text: 'After you sign in, the chat is your home. Attach a report and send it to see its status in the conversation. A typed question gets a note, not an answer.',
+        title: 'Start from your worklist.',
+        text: 'After you sign in, your home is a worklist: the follow-ups assigned to you and the results that are held. Help, in the sidebar, explains each page in plain words.',
         note: 'No live AI or prescribing recommendations.',
       },
     ],
   },
   fragments: {
     patient: 'Example patient',
-    question: 'What does this report show?',
-    answer: 'Interpretation is not available in the prototype yet.',
+    // LC-D2: a Help exchange about using the app, which is what Help answers; never a question about a patient.
+    question: 'How do I attach a report?',
+    answer: 'Choose Attach a report on your home page.',
   },
   questions: {
     eyebrow: 'Before you begin',
@@ -104,8 +106,8 @@ const en = {
         a: 'No. Less trial-and-error prescribing is our direction, not an outcome established by this prototype. It does not recommend medications or doses, and is not for clinical use.',
       },
       {
-        q: 'Does the chat interpret my reports?',
-        a: 'No. In this prototype the chat uploads a report and shows its status. A typed question gets the note “Interpretation is not available in the prototype yet.”',
+        q: 'Does Help answer questions about a patient?',
+        a: 'No. Help explains how to use the app, from reviewed articles. A question about a patient gets a fixed sentence pointing to that patient’s results, never an answer.',
       },
     ],
   },
@@ -166,6 +168,7 @@ const es: LandingCopy = {
     p1: 'Las personas responden de manera distinta a los medicamentos. La farmacogenómica estudia cómo las diferencias genéticas influyen en esa respuesta, junto con otros factores que importan en la atención.',
     p2: 'Nuestro objetivo es ayudar a clínicos y farmacéuticos a incorporar la información farmacogenómica en las decisiones de prescripción.',
     todayTitle: 'Dónde estamos hoy',
+    // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
     today:
       'El prototipo comienza con informes vinculados a pacientes, almacenamiento de archivos verificado y un inicio de chat que muestra el estado de cada informe. La interpretación clínica y las recomendaciones de prescripción aún no están disponibles.',
     source: 'Acerca de la farmacogenómica · NHGRI',
@@ -173,19 +176,23 @@ const es: LandingCopy = {
   capabilities: {
     eyebrow: 'Disponible en este prototipo',
     title: ['Construido en torno', 'al informe.'],
+    // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
     intro: 'Un inicio de chat con todas las funciones en un panel lateral, carga vinculada a pacientes y un estado para cada archivo.',
     rows: [
       {
         title: 'Mantén unidos al paciente y al informe.',
+        // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
         text: 'Elige un paciente sintético, o agrega uno por etiqueta desde el panel lateral, y luego adjunta un informe JSON estructurado. No se aceptan archivos genómicos sin procesar.',
         note: 'Cargar requiere un rol de clínico.',
       },
       {
         title: 'Encuentra un archivo. Revisa su estado.',
+        // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
         text: 'Los informes anteriores aparecen en el panel lateral con su estado. Todos los informes muestra cada informe que puedes ver, con su formato y el estado de carga.',
         note: 'La verificación del archivo confirma el almacenamiento, no una revisión clínica.',
       },
       {
+        // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
         title: 'Empieza desde el chat.',
         text: 'Al iniciar sesión, el chat es tu inicio. Adjunta un informe y envíalo para ver su estado en la conversación. Una pregunta escrita recibe una nota, no una respuesta.',
         note: 'Sin IA en vivo ni recomendaciones de prescripción.',
@@ -194,6 +201,7 @@ const es: LandingCopy = {
   },
   fragments: {
     patient: 'Paciente de ejemplo',
+    // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
     question: '¿Qué muestra este informe?',
     answer: 'La interpretación aún no está disponible en el prototipo.',
   },
@@ -218,6 +226,7 @@ const es: LandingCopy = {
         a: 'No. Reducir la prescripción por ensayo y error es nuestra dirección, no un resultado establecido por este prototipo. No recomienda medicamentos ni dosis, y no es para uso clínico.',
       },
       {
+        // Waiting for the founders' rewrite: still describes the chat (landing copy refresh, LC-D3).
         q: '¿El chat interpreta mis informes?',
         a: 'No. En este prototipo el chat carga un informe y muestra su estado. Una pregunta escrita recibe la nota «La interpretación aún no está disponible en el prototipo».',
       },
