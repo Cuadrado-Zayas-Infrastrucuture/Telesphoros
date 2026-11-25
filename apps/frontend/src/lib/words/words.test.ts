@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RouteObject } from 'react-router-dom';
 import { routes } from '@/app/routes';
-import { defineWords, type AnyWordTable, type WordValue } from './defineWords';
+import { defineWords, type AnyWordTable, type WordShape, type WordValue } from './defineWords';
 import { WORD_TABLES } from './index';
 import { SCREENS, TRANSLATED_SCREENS, wordsIn } from './screens';
 
@@ -14,7 +14,8 @@ const placeholders = (value: WordValue) => (typeof value === 'function' ? value.
 
 function tableProblems(table: AnyWordTable): string[] {
   const problems: string[] = [];
-  const languages = table.es ? ([['en', table.en], ['es', table.es]] as const) : ([['en', table.en]] as const);
+  const languages: [string, WordShape][] = [['en', table.en]];
+  if (table.es) languages.push(['es', table.es]);
   if (table.es) {
     const en = Object.keys(table.en).sort();
     const es = Object.keys(table.es).sort();
