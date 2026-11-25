@@ -90,6 +90,12 @@ it('has no WCAG A/AA violation, listing or with an article open', async () => {
 const EMPTY_COUNTS = { overdue: 0, today: 0, upcoming: 0, unassigned: 0 };
 const EMPTY_PAGE = { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+/** The sidebar's navigation, once sign-in has finished: before that, the signed-out header has its own "Primary" navigation (as WorkspaceSidebar.test). */
+async function sidebarNav() {
+  await screen.findByRole('button', { name: /^(Collapse|Expand) sidebar$/ });
+  return within(screen.getByRole('navigation', { name: 'Primary' }));
+}
+
 function openApp(roles: Role[]) {
   const fetchImpl = vi.fn<typeof fetch>(async (url) => {
     const at = new URL(String(url), 'http://synthetic');
@@ -104,7 +110,7 @@ function openApp(roles: Role[]) {
 
 it('opens from the sidebar on every signed-in page, closes, and returns the focus to Help', async () => {
   openApp(['clinician']);
-  const help = within(await screen.findByRole('navigation', { name: 'Primary' })).getByRole('button', { name: HELP_WORDS.button });
+  const help = (await sidebarNav()).getByRole('button', { name: HELP_WORDS.button });
   await userEvent.click(help);
   expect(await screen.findByRole('dialog', { name: HELP_WORDS.title })).toBeVisible();
   expect(panel().getByRole('heading', { level: 2, name: HELP_WORDS.title })).toHaveFocus();
@@ -115,7 +121,7 @@ it('opens from the sidebar on every signed-in page, closes, and returns the focu
 
 it('sends nothing and stores nothing while the person types (section 2)', async () => {
   const { fetchImpl } = openApp(['clinician']);
-  await userEvent.click(within(await screen.findByRole('navigation', { name: 'Primary' })).getByRole('button', { name: HELP_WORDS.button }));
+  await userEvent.click((await sidebarNav()).getByRole('button', { name: HELP_WORDS.button }));
   await screen.findByRole('dialog', { name: HELP_WORDS.title });
   await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalled());
   const before = fetchImpl.mock.calls.length;
