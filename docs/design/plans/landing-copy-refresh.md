@@ -2,7 +2,7 @@
 
 Date: 2026-11-25
 
-Status: **draft, for the founder's decisions LC-D1 to LC-D3 (section 4).** Plan only: no copy, code or test changes.
+Status: **approved by the founder on 2026-11-25: LC-D1 and LC-D2 as recommended, LC-D3 as the alternative (the English first).** Plan only: no copy, code or test changes.
 
 ## 1. Why
 
@@ -46,17 +46,17 @@ The last answer describes Help's refusal rule as built (spec 051, section 5). It
 
 ## 4. Decisions for the founder
 
-- **LC-D1. What "Where we are today" claims about interpretation.**
+- **LC-D1. What "Where we are today" claims about interpretation.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** keep "Clinical interpretation and prescribing recommendations are not available yet." as it is. The genomic
     profile and medication check (spec 044) run on synthetic data behind the clinical hold. Saying more on a public page is a claim for
     the founders and counsel, not a copy fix.
   - **Alternative:** add one sentence on the genomic profile, with its hold, in words the founders write.
-- **LC-D2. The decorative fragment beside the third row** (`AssistantFragment.tsx`, now a chat exchange).
+- **LC-D2. The decorative fragment beside the third row** (`AssistantFragment.tsx`, now a chat exchange). **Decided 2026-11-25: as recommended.**
   - **Recommended:** a Help exchange that asks how to do something in the app. Question: "How do I attach a report?" Answer: "Choose
     Attach a report on your home page." It is about the app, never about a patient, and it is what Help really answers.
   - **Alternative:** a still worklist fragment: two rows, "Follow-up due today" and "Result held", with no exchange.
 - **LC-D3. The Spanish.** The landing's Spanish is the founders' draft (spec 050 LS2-D6 has them review it rather than rewrite it), and
-  machine translation is ruled out (spec 050 R7).
+  machine translation is ruled out (spec 050 R7). **Decided 2026-11-25: the alternative, the English first.**
   - **Recommended:** one PR with the English above and the founders' Spanish for the same seven entries. It merges only once the
     Spanish is in. Until then the PR waits as a draft with the Spanish rows marked.
   - **Alternative:** the English first, with the Spanish rows left as they are until the founders rewrite them. For a while the two
@@ -64,7 +64,8 @@ The last answer describes Help's refusal rule as built (spec 051, section 5). It
 
 ## 5. The slice (one PR)
 
-- `lib/landing/landing-copy.ts`: the entries in section 2, in English and, per LC-D3, Spanish.
+- `lib/landing/landing-copy.ts`: the entries in section 2, in English. The Spanish rows stay as they are (LC-D3), each marked in a comment as
+  waiting for the founders' rewrite, and listed in the PR.
 - `components/landing/AssistantFragment.tsx`: per LC-D2. Its comment no longer names the chat.
 - `components/landing/LandingActions.tsx`: its comment says the signed-in home is the worklist, not the chat.
 - Tests:
