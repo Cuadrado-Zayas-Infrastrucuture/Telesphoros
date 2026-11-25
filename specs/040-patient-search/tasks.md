@@ -44,7 +44,22 @@ Date: 2026-11-13. `plan.md` approved by the founder on 2026-11-13, with D1 to D5
 
 ## Slice B: the roster (after slice A's PR)
 
-- [ ] B1 to B5, written from the plan when slice A is merged.
+Written 2026-11-25 from the plan, after slice A merged (#390). P2: nothing runs in this session, so CI is the first run of every test here.
+
+- [x] B1 `searchPatients` in `apps/frontend/src/lib/api.ts`: the text checked with `patientLabelSearchSchema` and refused without a
+  request (`SearchTextError`); `page`, `pageSize=20`, `order=desc`, `labelContains`; the envelope checked as `listPatients` does; every
+  other answer is one failure, `PATIENT_SEARCH_FAILED`.
+- [x] B2 `apps/frontend/src/hooks/usePatientSearch.ts`: one search at a time; a new search, a changed text or leaving the page aborts the
+  last, and a late answer is dropped (PS-12); `more` pages the current search.
+- [x] B3 `PatientRoster.tsx` (PS-10, D4): typing filters the loaded rows at once; while pages remain, Search all patients and Enter ask the
+  server; only a 200 replaces the rows and says "Searched all patients: N matches."; any other answer keeps the loaded rows, their filter
+  and their sentence, with one line and Retry; a refused text says which characters the field takes.
+- [x] B4 Tests: `PatientRoster.test.tsx` (new), `PatientsPage.test.tsx` (wording), `e2e/patient-search.spec.ts` (new: 25 patients, the
+  oldest found; keyboard only). 401 is not a fallback case: it ends the session (`AuthProvider`), so the test list leaves it out.
+- [ ] B5 Breakages, one at a time, each against its named test, in a place where tests run (the open defect-injection list): the
+  sentence claiming "all" on a non-200 (the failure cases); the fallback removed (the failure cases); the text sent unchecked (the refusal
+  case); the abort removed (PS-12); the late-answer check removed (PS-12). The founder's browser check from the written steps in
+  `docs/verification/2026-11-25-patient-search-roster.md`.
 
 ## Slice C: the two pickers (after slice B's PR)
 

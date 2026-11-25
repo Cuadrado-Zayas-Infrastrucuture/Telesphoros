@@ -1,4 +1,4 @@
-import { paginatedSchema, patientCreateSchema, patientDtoSchema } from '@telesphoros/shared-types';
+import { paginatedSchema, patientCreateSchema, patientDtoSchema, patientLabelSearchSchema } from '@telesphoros/shared-types';
 import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { productUploadSchema, type ProductUploadValues } from './productUploadSchema';
 
@@ -58,6 +58,32 @@ export async function listPatients(apiFetch: ApiFetch, page: number, signal?: Ab
   } catch (error) {
     if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
     throw new SubmitError('Patients could not be loaded. Please retry.');
+  }
+}
+
+/** A search text the label's alphabet refuses (spec 040 PS-10): it is never sent, and the message names the rule, never the text. */
+export class SearchTextError extends Error {}
+
+/** What a search that did not answer 200 says (spec 040 PS-10): only that the whole list was not searched. */
+export const PATIENT_SEARCH_FAILED = 'The whole list could not be searched. Showing the loaded patients only.';
+
+/**
+ * Spec 040 slice B: one page of the patients whose label contains `text`, newest first. The text is checked with the API's own rule first and
+ * refused without a request. Any answer but a 200 whose body passes the shared schema is one failure, `PATIENT_SEARCH_FAILED`, so an older API
+ * that refuses the parameter (400) can never be read as "no match".
+ */
+export async function searchPatients(apiFetch: ApiFetch, text: string, page: number, signal?: AbortSignal) {
+  const checked = patientLabelSearchSchema.safeParse(text);
+  if (!checked.success) throw new SearchTextError(checked.error.issues[0]?.message ?? 'Use letters, numbers and hyphens only.');
+  try {
+    const response = await apiFetch(`/api/v1/patients?page=${page}&pageSize=20&order=desc&labelContains=${encodeURIComponent(checked.data)}`, { signal });
+    if (!response.ok) throw new Error();
+    const result = paginatedSchema(patientDtoSchema).parse(await response.json());
+    if (result.meta.page !== page || result.meta.pageSize !== 20 || result.data.length > 20) throw new Error();
+    return result;
+  } catch (error) {
+    if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
+    throw new SubmitError(PATIENT_SEARCH_FAILED);
   }
 }
 
