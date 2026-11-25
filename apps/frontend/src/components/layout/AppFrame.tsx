@@ -1,10 +1,12 @@
 import { ownedStorageMode } from '@/lib/storageMode';
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Outlet, useMatches, useNavigation, useLocation } from 'react-router-dom';
 import type { UIMatch } from 'react-router-dom';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { useAuth } from '@/auth/AuthProvider';
 import { WorkspaceSidebar } from '@/components/layout/WorkspaceSidebar';
+
+const HelpDrawer = lazy(() => import('@/components/help/HelpDrawer').then((module) => ({ default: module.HelpDrawer })));
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SkipLink } from '@/components/layout/SkipLink';
 import { ScreenLanguage } from '@/components/layout/ScreenLanguage';
@@ -33,6 +35,13 @@ export function AppFrame() {
   const sidebar = status === 'signedIn' && !landing && !SIGN_IN_FLOW.includes(pathname);
   const workspace = sidebar || pathname.startsWith('/reports') || pathname.startsWith('/local-') || (pathname === '/' && ownedStorageMode());
   const mainRef = useRef<HTMLElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpMounted, setHelpMounted] = useState(false);
+  const drawerOpen = sidebar && helpOpen;
+  const openHelp = () => {
+    setHelpMounted(true);
+    setHelpOpen(true);
+  };
   const navigation = useNavigation();
   useRouteFocus(mainRef, landing);
   // Spec 050 LS1 (LS1-D1): the one place that sets <html lang>. The landing has its own language; every other page follows the app's (R3).
@@ -70,7 +79,7 @@ export function AppFrame() {
           lang={!landing && shell.language !== app ? shell.language : undefined}
         >
           <SkipLink />
-          {sidebar ? <WorkspaceSidebar /> : <SiteHeader />}
+          {sidebar ? <WorkspaceSidebar helpOpen={drawerOpen} onOpenHelp={openHelp} /> : <SiteHeader />}
           <div className={sidebar ? 'workspace-body' : 'contents'}>
             {/* Announced politely while a lazy route's JavaScript is being fetched. */}
             <div role="status" aria-live="polite" className="mx-auto w-full max-w-page px-4 sm:px-6">
@@ -103,6 +112,11 @@ export function AppFrame() {
             </ScreenLanguage>
             {!sidebar && <SiteFooter />}
           </div>
+          {sidebar && helpMounted && (
+            <Suspense fallback={null}>
+              <HelpDrawer open={drawerOpen} onClose={() => setHelpOpen(false)} />
+            </Suspense>
+          )}
         </div>
       </ScreenLanguageContext.Provider>
     </ThemeProvider>

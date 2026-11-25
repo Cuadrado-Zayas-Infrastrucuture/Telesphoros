@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChartColumn, ChevronsUpDown, FileText, House, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Sparkles, Users, X } from 'lucide-react';
+import { ChartColumn, ChevronsUpDown, CircleHelp, FileText, House, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Sparkles, Users, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -25,7 +25,7 @@ type PanelItem = { kind: 'link'; to: string; label: string; icon: typeof FileTex
  * remembered in this browser; the layout narrows its column through `.workspace-layout:has(.is-collapsed)`. On small screens it is a
  * disclosure menu instead.
  */
-export function WorkspaceSidebar() {
+export function WorkspaceSidebar({ helpOpen = false, onOpenHelp }: { helpOpen?: boolean; onOpenHelp?: () => void } = {}) {
   const { status, roles, preferredName } = useAuth();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
@@ -259,6 +259,31 @@ export function WorkspaceSidebar() {
           </ul>
           {lists && <SidebarReports onNavigate={close} />}
         </nav>
+        {onOpenHelp && (
+          <div className="border-t border-divider pt-3">
+            <LazyTooltip label={iconsOnly ? 'Help' : undefined} side="right">
+              <button
+                type="button"
+                onKeyDown={dismiss}
+                aria-haspopup="dialog"
+                aria-expanded={helpOpen}
+                aria-controls="help-drawer"
+                onClick={() => {
+                  setAccountOpen(false);
+                  onOpenHelp();
+                }}
+                className={cn(
+                  'flex min-h-control w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted',
+                  iconsOnly && 'justify-center px-0',
+                  helpOpen && 'bg-muted text-primary',
+                )}
+              >
+                <CircleHelp aria-hidden="true" className="size-4 shrink-0" />
+                <span className="workspace-link-label">Help</span>
+              </button>
+            </LazyTooltip>
+          </div>
+        )}
         <div className="workspace-account relative border-t border-divider pt-3">
           <LazyTooltip label={iconsOnly ? `Account, ${role}` : undefined} side="right">
             <button
