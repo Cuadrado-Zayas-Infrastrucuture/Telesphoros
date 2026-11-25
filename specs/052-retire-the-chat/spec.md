@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-25
 
-**Status**: **Draft, for the founder's decisions RC-D1 to RC-D5 (section 6). Specification only: no code, route, setting, migration or
+**Status**: **Approved by the founder on 2026-11-25: RC-D1 to RC-D5 as recommended (section 6). Specification only: no code, route, setting, migration or
 knowledge change.** It is the follow-up that spec 051 H-D5 named: "retiring it is its own slice once attaching has a home outside the
 chat". It amends specs 024 D3 and 038 D3, and spec 049 W-D2, as far as the chat is concerned, once approved.
 
@@ -77,19 +77,19 @@ upload page and Settings and repoint the links, leaving the chat reachable only 
 
 ## 6. Decisions for the founder
 
-- **RC-D1. Retire the chat now?**
+- **RC-D1. Retire the chat now?** **Decided 2026-11-25: as recommended.**
   - **Recommended:** yes. Help answers how-to questions; the upload page attaches reports and recovers interrupted uploads.
   - **Alternative:** keep it until the first usability sessions (direction plan F5) have seen both.
-- **RC-D2. What `/chat` does afterwards.**
+- **RC-D2. What `/chat` does afterwards.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** it sends the person to the home (`/workspace`), so an old bookmark lands somewhere useful.
   - **Alternative:** the not-found page.
-- **RC-D3. The upload page's name.**
+- **RC-D3. The upload page's name.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** "Attach a report", the words the home already uses.
   - **Alternative:** "Upload a report".
-- **RC-D4. A sidebar entry for attaching.**
+- **RC-D4. A sidebar entry for attaching.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** none. It stays a quick action on the home and a button on Reports; the sidebar keeps its destinations.
   - **Alternative:** an "Attach a report" entry for writer roles.
-- **RC-D5. The chat's code.**
+- **RC-D5. The chat's code.** **Decided 2026-11-25: as recommended.**
   - **Recommended:** removed in RC1, with its tests, each removed case named in the verification record. Git keeps the history.
   - **Alternative:** left in the repository, unreachable, until a later clean-up.
 
