@@ -105,7 +105,7 @@ export function WorkspaceSidebar() {
     ...(localWorkspaceAvailable()
       ? [
           { kind: 'link' as const, to: LOCAL_WORKSPACE_PATH, panel: 'Workspace', label: words.workspace, icon: Sparkles, show: true },
-          { kind: 'link' as const, to: '/local-interpretation', panel: 'Chat preview', label: words.chatPreview, icon: MessageSquare, show: true },
+          { kind: 'link' as const, to: '/local-interpretation', panel: 'AI preview', label: words.aiPreview, icon: MessageSquare, show: true },
         ]
       : []),
     { kind: 'link', to: '/patients', panel: 'Patients', label: words.patients, icon: Users, show: canRead },

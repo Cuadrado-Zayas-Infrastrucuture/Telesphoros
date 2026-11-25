@@ -50,7 +50,7 @@ test('report navigation is offered without owned storage, beside the local previ
   const followups = page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: /^Follow-ups/ });
   await expect(followups).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
-  await expect(page.getByRole('link', { name: 'Chat preview', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'AI preview', exact: true })).toBeVisible();
   // Spec 052 RC1b: the chat is gone; Home is the way into the signed-in pages, and its quick action attaches a report.
   await expect(page.getByRole('link', { name: 'Chat', exact: true })).toHaveCount(0);
   await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Home', exact: true }).click();

@@ -31,7 +31,7 @@ test('report selection opens a drawer and restores the row focus without replaci
     await page.getByRole('button', { name: 'Back to reports' }).click();
     await expect(drawer).not.toBeVisible(); await expect(row).toBeFocused();
   }
-  await openWorkspaceNavigation(page); await page.getByRole('link', { name: 'Chat preview', exact: true }).click();
+  await openWorkspaceNavigation(page); await page.getByRole('link', { name: 'AI preview', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Sample question' })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await accessible(page);
