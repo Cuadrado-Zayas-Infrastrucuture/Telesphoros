@@ -1,7 +1,7 @@
 # Plan: spec 050, slice LS2, the shell in Spanish
 
-**Status**: **proposed, 2026-11-25. Not approved.** No code until the founder approves LS2-D1 to LS2-D6. Read against `main` at `85ad609d`,
-after #470 (LS1, the language layer).
+**Status**: **approved by the founder on 2026-11-25: LS2-D1 to LS2-D6 as recommended.** Read against `main` at `85ad609d`, after #470
+(LS1, the language layer). LS2a is built in the pull request after the one that merges this plan; LS2b waits for the founders' Spanish.
 
 LS2 translates the first screens: the **`shell`** and **`sign-in`**. As before, nobody can choose Spanish until LS6 (LS-D2). LS2 is split
 in two (LS2-D6), so the first half can land before any Spanish exists.

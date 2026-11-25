@@ -12,5 +12,5 @@ footer, consent bar) and the sign-in pages. That is about 55 strings. It is spli
   - a list of every string for the founders to fill in.
 - **LS2b:** the founders' signed Spanish.
 
-Nobody can choose Spanish until LS6. Six decisions, LS2-D1 to LS2-D6, are put to the founder. Among them: how the founders preview their
-text, and whether they review the landing's existing draft Spanish rather than write it again. Not approved yet. No code change.
+Nobody can choose Spanish until LS6. Six decisions, LS2-D1 to LS2-D6, were put to the founder, who approved all six as recommended on 2026-11-25. Among them: how the founders preview their
+text, and whether they review the landing's existing draft Spanish rather than write it again. No code change.
