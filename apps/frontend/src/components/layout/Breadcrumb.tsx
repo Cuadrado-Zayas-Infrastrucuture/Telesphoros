@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 /**
  * Where this page sits (specs/041 C4): each earlier level is a link, the current page is plain text marked `aria-current`. It replaces
- * "Back to chat" on the patient pages; the home and the chat stay one click away in the sidebar.
+ * "Back to chat" on the patient pages; the home stays one click away in the sidebar.
  */
 export function Breadcrumb({ trail, current }: { trail: { to: string; label: string }[]; current: string }) {
   return (

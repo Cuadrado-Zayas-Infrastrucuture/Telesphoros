@@ -1,51 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openPatients, signInAs, openChat } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
-const confirmation = 'I confirm this file contains synthetic data only';
+// Spec 052 RC1b: "replacement, same-file reattachment and failed-upload retry stay clear in chat" left with the chat; Attach a report's own
+// suites (e2e/upload.spec.ts, e2e/upload-navigation.spec.ts) prove its retry and recovery rules.
 const fixture = (id: string) => new URL(`../../../data/fixtures/lab-reports/captures/${id}/source.pdf`, import.meta.url).pathname;
 
-test('replacement, same-file reattachment and failed-upload retry stay clear in chat', async ({ page }) => {
-  await signInAs(page, 'alice', '/chat');
-  const picker = page.locator('input[type=file]');
-  const details = page.getByRole('dialog', { name: 'Report details', exact: true });
-  await picker.setInputFiles(fixture('D01'));
-  await details.getByRole('checkbox', { name: confirmation }).check();
-  await details.getByRole('button', { name: 'Remove file' }).click();
-  await picker.setInputFiles(fixture('D01'));
-  await expect(details).toBeVisible();
-  await expect(details.getByRole('checkbox', { name: confirmation })).not.toBeChecked();
-  await details.getByRole('checkbox', { name: confirmation }).check();
-  await picker.setInputFiles(fixture('D08'));
-  await expect(details.getByRole('checkbox', { name: confirmation })).not.toBeChecked();
-  await details.getByRole('link', { name: 'Add patient' }).click();
-  await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(`SYN-RETRY-${crypto.randomUUID().slice(0, 8)}`);
-  await page.getByRole('button', { name: 'Create patient', exact: true }).click();
-  await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-  await openChat(page);
-  await page.getByRole('button', { name: 'Report details', exact: true }).click();
-  await details.getByRole('textbox', { name: 'Report note' }).fill('Discuss this synthetic report at the next visit.');
-  await details.getByRole('checkbox', { name: confirmation }).check();
-  let attempts = 0;
-  await page.route('**/api/v1/reports', async (route) => {
-    if (route.request().method() !== 'POST') { await route.continue(); return; }
-    attempts++;
-    if (attempts === 1) await route.abort('failed');
-    else await route.continue();
-  });
-  await details.getByRole('button', { name: 'Upload report', exact: true }).click();
-  await expect(details.getByRole('alert')).toBeVisible();
-  await expect(details.getByRole('textbox', { name: 'Report note' })).toHaveValue('Discuss this synthetic report at the next visit.');
-  expect(await axeViolations(page)).toEqual([]);
-  await page.screenshot({ path: test.info().outputPath('upload-retry.png') });
-  await details.getByRole('button', { name: 'Upload report', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
-  await expect(page.getByText('Interpretation is not available in the prototype yet.')).toHaveCount(0);
-  expect(attempts).toBe(2);
-});
-
-test('a roster beyond 20 patients stays searchable and selectable without losing the draft', async ({ page, browser }, info) => {
+test('a roster beyond 20 patients stays searchable, and Attach a report pages to the oldest without losing the chosen file', async ({ page, browser }, info) => {
   const me = page.waitForResponse((response) => response.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/chat');
+  await signInAs(page, 'alice', '/workspace');
   const authenticated = await me;
   const api = new URL(authenticated.url()).origin;
   const headers = { Authorization: authenticated.request().headers().authorization! };
@@ -60,7 +22,7 @@ test('a roster beyond 20 patients stays searchable and selectable without losing
   // A fresh signed-in view reads the seeded real roster, with this project's viewport/touch settings.
   const view = await browser.newPage({ viewport: page.viewportSize()!, hasTouch: info.project.use.hasTouch, isMobile: info.project.use.isMobile });
   try {
-    await signInAs(view, 'alice', '/chat');
+    await signInAs(view, 'alice', '/workspace');
     await openPatients(view); // specs/034 D2: the roster lives on the Patients page
     const patients = view.getByRole('region', { name: 'Patient records', exact: true });
     await expect(view.getByRole('link', { name: 'Add patient', exact: true })).toBeInViewport();
@@ -71,19 +33,23 @@ test('a roster beyond 20 patients stays searchable and selectable without losing
     await patients.getByRole('textbox', { name: 'Find a patient' }).fill('');
     expect(await view.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await view.screenshot({ path: info.outputPath('busy-roster.png') });
-    await view.goBack(); // back to the chat
-    await view.getByRole('textbox', { name: 'Question' }).fill('Keep this roster-selection draft');
-    await view.locator('input[type=file]').setInputFiles(fixture('D01'));
-    const details = view.getByRole('dialog', { name: 'Report details', exact: true });
-    const choice = details.getByRole('combobox', { name: 'Patient', exact: true });
-    const selected = await choice.inputValue();
-    await details.getByRole('button', { name: 'More patients' }).click();
-    await expect(choice.locator('option', { hasText: firstLabel })).toHaveCount(1);
-    await expect(choice).toHaveValue(selected);
+    // Spec 052 RC1b: the file is attached on Attach a report, whose patient list pages as the Patients list does; the chosen file stays.
+    await view.goBack(); // back to the home
+    await view.getByRole('main').getByRole('link', { name: 'Attach a report', exact: true }).click();
+    await expect(view.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
+    await view.getByLabel(/report type/i).selectOption('lab-pdf');
+    await view.getByLabel(/report file/i).setInputFiles(fixture('D01'));
+    await view.getByRole('button', { name: 'Refresh patients' }).click();
+    for (let pages = 0; pages < 100; pages++) {
+      await expect(view.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+      if (await view.getByRole('option', { name: firstLabel, exact: true }).count()) break;
+      await view.getByRole('button', { name: 'Next patients' }).click();
+    }
+    const choice = view.getByLabel(/synthetic patient \(required\)/i);
     await choice.selectOption(firstId);
-    await expect(details.getByRole('textbox', { name: 'Report note' })).toHaveValue('Keep this roster-selection draft');
+    await expect(choice).toHaveValue(firstId);
+    expect(await view.getByLabel(/report file/i).evaluate((input: HTMLInputElement) => input.files?.[0]?.name)).toBe('source.pdf');
+    expect(await view.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await axeViolations(view)).toEqual([]);
-    await details.getByRole('button', { name: 'Back to chat', exact: true }).click();
-    await expect(view.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this roster-selection draft');
   } finally { await view.close(); }
 });

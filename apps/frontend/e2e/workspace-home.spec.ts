@@ -1,14 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { axeViolations, openChat, openPatients, openWorkspaceNavigation, signInAs, type Persona } from './helpers';
+import { openPatients, openWorkspaceNavigation, signInAs, type Persona } from './helpers';
 
-// Spec 024: the chat, at /chat since the worklist became the home (spec 049), in a production-mode build (`vite build --mode e2e`, so `import.meta.env.DEV` is false and the local preview gate is off
-// whatever the host name). The fake identity provider's redirect address fixes the host at 127.0.0.1; the unit tests cover `localhost` and a deployed host.
+// The signed-in frame in a production-mode build (`vite build --mode e2e`, so `import.meta.env.DEV` is false and the local preview gate is off
+// whatever the host name): where signing in lands, the sidebar, and the retired chat (spec 052 RC1b). The chat's own cases left with it; each is
+// named in docs/verification/2026-11-25-retire-the-chat-rc1b.md. The fake identity provider's redirect address fixes the host at 127.0.0.1.
 
-const NOTE = 'Interpretation is not available in the prototype yet.';
-const HEADING = 'Start with a synthetic report.';
 const primary = (page: Page) => page.getByRole('navigation', { name: 'Primary', exact: true });
-/** Back to the conversation in progress: Chat in the sidebar (spec 049; it was the page's "Back to chat", specs/041 C4). */
-const backToChat = openChat;
 
 /** Signs in from the sign-in page, as a person arriving at the home page would, and waits until the callback has moved on. */
 async function signInFromHome(page: Page, persona: Persona) {
@@ -32,53 +29,51 @@ test.describe('where signing in lands (CH-1)', () => {
     });
   }
 
-  test('/chat opens on this host for a signed-in member, with the notice, and the local workspace is still absent', async ({ page }) => {
-    await signInAs(page, 'dave', '/chat');
-    await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
-    await expect(page.getByText('Synthetic data only. Not for clinical use.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Attach a report' })).toHaveCount(0);
+  // Spec 052 RC-5, RC-D2: an old link or bookmark to the chat lands on the home, even for a member with no role.
+  test('/chat sends a signed-in member to the home, and the local workspace is still absent', async ({ page }) => {
+    // Not signInAs: it waits for the address it was given, and /chat moves on to /workspace at once.
+    await page.goto('/chat');
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    const consent = page.getByRole('button', { name: 'Allow preferences', exact: true });
+    if (await consent.count()) await consent.click();
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: /Sign in as dave\b/ }).click();
+    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(page.getByText('Your account has no clinical role, so there is no work to show here.')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Question' })).toHaveCount(0);
     await page.goto('/local-workspace');
     await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
   });
 });
 
 test.describe('the feature panel (CH-2, specs/034 D1)', () => {
+  // Spec 052 RC-6: no Chat for anyone.
   const cases = [
-    ['alice', ['Home', 'Chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
-    ['bob', ['Home', 'Chat', 'Patients', 'Reports', 'Recents']],
-    ['carol', ['Chat', 'Usage']],
+    ['alice', ['Home', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+    ['bob', ['Home', 'Patients', 'Reports', 'Recents']],
+    ['carol', ['Usage']],
   ] as const;
   for (const [persona, expected] of cases) {
     test(`lists, in order, only what ${persona} may use`, async ({ page }) => {
       await signInAs(page, persona, '/workspace');
       await openWorkspaceNavigation(page);
       expect(await panelItems(page)).toEqual(expected);
+      await expect(primary(page).getByRole('link', { name: 'Chat', exact: true })).toHaveCount(0);
       await expect(page.locator('.workspace-account').getByRole('button', { name: /^Account, / })).toBeVisible();
     });
   }
 
   test('recent reports come from the API, and patients have their own page (specs/034 D2, D3)', async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
+    await signInAs(page, 'alice', '/workspace');
     await openWorkspaceNavigation(page);
     await expect(primary(page).getByText('Recents', { exact: true })).toBeVisible();
     await openPatients(page);
     await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
   });
 
-  test('Chat on the chat itself opens an empty conversation, as New chat did (spec 049)', async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
-    await page.getByRole('textbox', { name: 'Question' }).fill('A first question');
-    await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByText(NOTE)).toBeVisible();
-    await openWorkspaceNavigation(page);
-    await primary(page).getByRole('link', { name: 'Chat', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
-    await expect(page.getByText('A first question')).toHaveCount(0);
-  });
-
   test('on a desktop the collapse is remembered while navigating', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the collapse is a desktop control');
-    await signInAs(page, 'alice', '/chat');
+    await signInAs(page, 'alice', '/workspace');
     await page.getByRole('button', { name: 'Collapse sidebar' }).click();
     const sidebar = page.locator('header.workspace-navigation');
     await expect(sidebar).toHaveClass(/is-collapsed/);
@@ -92,7 +87,7 @@ test.describe('the feature panel (CH-2, specs/034 D1)', () => {
 
   test('on a phone it is a drawer: Tab stays inside it, and Escape closes it and returns focus to the menu button', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'phone layout only');
-    await signInAs(page, 'alice', '/chat');
+    await signInAs(page, 'alice', '/workspace');
     const toggle = page.getByRole('button', { name: 'Workspace navigation', exact: true });
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -110,169 +105,15 @@ test.describe('the feature panel (CH-2, specs/034 D1)', () => {
   });
 });
 
-test.describe('the conversation', () => {
-  test('a typed question gets the note, never an answer, and sends no request (CH-4, CH-5)', async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
-    await expect(page.getByRole('button', { name: 'Attach a report' })).toBeVisible();
-    await page.waitForLoadState('networkidle');
-    const requests: string[] = [];
-    page.on('request', (request) => requests.push(`${request.method()} ${request.url()}`));
-    await page.getByRole('textbox', { name: 'Question' }).fill('What does CYP2C19 *2/*2 mean?');
-    await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByText(NOTE)).toHaveCount(1);
-    await expect(page.getByText('What does CYP2C19 *2/*2 mean?')).toBeVisible();
-    await page.waitForTimeout(500);
-    expect(requests).toEqual([]);
-    // No sample answers and no sample-question buttons exist outside the local preview.
-    await expect(page.getByRole('group', { name: 'Sample questions' })).toHaveCount(0);
-    await expect(page.getByText(/Sample answer/)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Explain this' })).toHaveCount(0);
-  });
-
-  test('a JSON report goes up once with the confirmation, shows its status word, and "Check status" reloads it (CH-3)', async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
-    const declarations: string[] = [];
-    page.on('request', (request) => {
-      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/reports') declarations.push(request.url());
-    });
-    const name = `chat-${crypto.randomUUID().slice(0, 8)}.json`;
-    await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-    const details = page.getByRole('dialog', { name: 'Report details' });
-    await details.getByRole('link', { name: 'Add patient' }).click();
-    const newLabel = page.getByRole('textbox', { name: 'Synthetic patient label' });
-    await expect(newLabel).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
-    const labelBox = await newLabel.boundingBox();
-    expect(labelBox!.height).toBeGreaterThanOrEqual(44);
-    expect(labelBox!.x).toBeGreaterThanOrEqual(0);
-    expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    await newLabel.fill(label());
-    await page.getByRole('button', { name: 'Create patient', exact: true }).click();
-    await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-    await backToChat(page);
-    await page.getByRole('button', { name: 'Report details' }).click();
-    const choice = details.getByRole('combobox', { name: 'Patient' });
-    const box = await choice.boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    expect(await choice.evaluate((element) => getComputedStyle(element).fontSize)).toBe('16px');
-    expect(await axeViolations(page)).toEqual([]);
-    // Without the confirmation nothing is sent. Send is aria-disabled so that it can still say why; Playwright treats that as disabled, hence force.
-    await page.getByRole('button', { name: 'Upload report' }).click({ force: true });
-    await expect(page.getByRole('status').filter({ hasText: 'Confirm the file is synthetic.' })).toBeVisible();
-    expect(declarations).toEqual([]);
-    await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
-    await page.getByRole('button', { name: 'Upload report' }).click();
-    const thread = page.getByRole('region', { name: 'Conversation' });
-    await expect(thread.getByText(name)).toBeVisible();
-    const word = thread.getByText(/^(Received|Processing|Processed|Failed)$/);
-    await expect(word).toBeVisible();
-    expect(declarations).toHaveLength(1);
-    const reload = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/reports' && request.method() === 'GET');
-    await thread.getByRole('button', { name: 'Check status' }).click();
-    await reload;
-    await expect(word).toBeVisible();
-    expect(declarations).toHaveLength(1);
-    // Recents lists the newest reports, so this one is on it, with its status word; its row opens the report's details (specs/034 D3).
-    await openWorkspaceNavigation(page);
-    const row = primary(page).getByRole('list', { name: 'Recent reports' }).getByRole('link').filter({ hasText: name.replace(/\.json$/, '') });
-    await expect(row.getByText(/^(Received|Processing|Processed|Failed)$/)).toBeVisible();
-    await row.click();
-    await expect(page.getByRole('dialog', { name: 'Report details' }).getByText(name).first()).toBeVisible();
-  });
-
-  test('a PDF is refused with a message naming the local preview, and nothing is uploaded (CH-6)', async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
-    const posts: string[] = [];
-    page.on('request', (request) => {
-      if (request.method() === 'POST') posts.push(request.url());
-    });
-    await page.locator('input[type=file]').setInputFiles({ name: 'SYN-004.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
-    await expect(page.getByRole('alert').filter({ hasText: /local preview/i })).toBeVisible();
-    await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
-    await page.getByRole('button', { name: 'Upload report' }).click({ force: true });
-    await expect(page.getByRole('alert').filter({ hasText: /local preview/i })).toBeVisible();
-    expect(posts).toEqual([]);
-  });
+test('a reader sees the Patients page without the Add patient control (CH-9)', async ({ page }) => {
+  await signInAs(page, 'bob', '/workspace');
+  await openPatients(page);
+  await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Add patient' })).toHaveCount(0);
 });
 
-test.describe('accessibility and layout (CH-7)', () => {
-  for (const dark of [false, true]) {
-    test(`no WCAG A/AA violations: empty, file attached, and with a note (${dark ? 'dark' : 'light'})`, async ({ page }) => {
-      if (dark) await page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
-      await signInAs(page, 'alice', '/chat');
-      await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
-      await openWorkspaceNavigation(page); // on a phone the panel is a drawer; open it so axe sees the lists too
-      await expect(primary(page).getByText('Recents', { exact: true })).toBeVisible();
-      expect(await axeViolations(page)).toEqual([]);
-      await page.locator('input[type=file]').setInputFiles({ name: 'axe.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-      await expect(page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' })).toBeVisible();
-      expect(await axeViolations(page)).toEqual([]);
-      await page.getByRole('button', { name: 'Remove file' }).click();
-      await page.getByRole('textbox', { name: 'Question' }).fill('A question');
-      await page.getByRole('button', { name: 'Send' }).click();
-      await expect(page.getByText(NOTE)).toBeVisible();
-      expect(await axeViolations(page)).toEqual([]);
-    });
-  }
-
-  for (const width of [390, 768, 1280]) {
-    test(`nothing scrolls sideways at ${width} px`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 800 });
-      await signInAs(page, 'alice', '/chat');
-      await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
-      const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      expect(await overflow(), 'empty state').toBeLessThanOrEqual(0);
-      await page.locator('input[type=file]').setInputFiles({ name: 'a-rather-long-synthetic-report-file-name-for-layout.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-      await expect(page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' })).toBeVisible();
-      expect(await overflow(), 'file attached').toBeLessThanOrEqual(0);
-      await page.getByRole('button', { name: 'Remove file' }).click();
-      await page.getByRole('textbox', { name: 'Question' }).fill('A question');
-      await page.getByRole('button', { name: 'Send' }).click();
-      await expect(page.getByText(NOTE)).toBeVisible();
-      expect(await overflow(), 'conversation').toBeLessThanOrEqual(0);
-    });
-  }
-});
-
-test.describe('Add patient from chat (CH-9)', () => {
-  test('a writer adds one synthetic patient; it shows on the Patients page and in the chat choice; a bad label sends nothing', async ({ page }) => {
-    await signInAs(page, 'alice', '/chat');
-    await page.locator('input[type=file]').setInputFiles({ name: 'p.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-    const section = page.getByRole('region', { name: 'Patient records' });
-    const posts: string[] = [];
-    page.on('request', (request) => {
-      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/patients') posts.push(request.url());
-    });
-    await page.getByRole('dialog', { name: 'Report details' }).getByRole('link', { name: 'Add patient' }).click();
-    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill('Jane Doe');
-    await page.getByRole('button', { name: 'Create patient' }).click();
-    await expect(page.getByRole('alert')).toBeVisible();
-    expect(posts).toEqual([]);
-    const created = label();
-    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
-    await page.getByRole('button', { name: 'Create patient' }).click();
-    await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-    await backToChat(page);
-    await openPatients(page);
-    await expect(section.getByRole('list', { name: 'Patients' }).getByText(created)).toBeVisible();
-    // Back to the same conversation: the chat stays in memory while a page is open.
-    await page.goBack();
-    await expect(page).toHaveURL(/\/chat$/);
-    await page.getByRole('button', { name: 'Report details' }).click();
-    expect(posts).toHaveLength(1);
-    await expect(page.getByRole('combobox', { name: 'Patient' }).locator('option', { hasText: created })).toHaveCount(1);
-  });
-
-  test('a reader sees the Patients page without the control', async ({ page }) => {
-    await signInAs(page, 'bob', '/chat');
-    await openPatients(page);
-    await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Add patient' })).toHaveCount(0);
-  });
-});
-
-test('a lost patient-create response locks creation, then retries the same identity and uploads once', async ({ page }, info) => {
+// Kept from the chat's cases, started from the Patients page instead (spec 052 RC1b): the replay rule belongs to adding a patient, not to the chat.
+test('a lost patient-create response locks creation, then retries the same identity and creates the patient once', async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const bodies: unknown[] = [];
   const returnedIds: string[] = [];
@@ -289,11 +130,11 @@ test('a lost patient-create response locks creation, then retries the same ident
       await route.abort('failed'); // The real API created it; only its response is lost.
     } else await route.fulfill({ response: stored });
   });
-  await signInAs(page, 'alice', '/chat');
-  const name = `replay-${crypto.randomUUID().slice(0, 8)}.json`;
-  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-  await page.getByRole('dialog', { name: 'Report details' }).getByRole('link', { name: 'Add patient' }).click();
-  await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(label());
+  await signInAs(page, 'alice', '/workspace');
+  await openPatients(page);
+  await page.getByRole('link', { name: 'Add patient', exact: true }).click();
+  const created = label();
+  await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   const pending = page.getByRole('button', { name: 'Saving…', exact: true });
   await expect(pending).toBeDisabled();
@@ -319,46 +160,9 @@ test('a lost patient-create response locks creation, then retries the same ident
   await expect(page.getByRole('alert').filter({ hasText: /patient/i })).toBeVisible();
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
-  await backToChat(page);
-  await page.getByRole('button', { name: 'Report details' }).click();
-  await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
-  await page.getByRole('button', { name: 'Upload report', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Conversation' }).getByRole('list', { name: `Upload of ${name}` })).toHaveCount(1);
-  await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
   expect(bodies).toHaveLength(2);
   expect(bodies[1]).toEqual(bodies[0]);
   expect(returnedIds).toHaveLength(2);
   expect(returnedIds[1]).toBe(returnedIds[0]);
-});
-
-test('attachment Undo restores the file, pauses for keyboard focus and expires without a request', async ({ page }, info) => {
-  await signInAs(page, 'alice', '/chat');
-  await page.clock.install();
-  // Freeze before creating the timer: wall-clock time must not leak into the 7999/8000ms boundary.
-  await page.clock.pauseAt(new Date(Date.now() + 60_000));
-  const name = `undo-${crypto.randomUUID().slice(0, 8)}.json`;
-  const form = page.getByRole('form', { name: 'Report and question' });
-  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-  await page.getByRole('textbox', { name: 'Report note' }).fill('Keep this note');
-  const posts: string[] = [];
-  page.on('request', (request) => { if (request.method() === 'POST') posts.push(request.url()); });
-  await form.getByRole('button', { name: 'Remove file' }).click();
-  const undo = form.getByRole('button', { name: 'Undo attachment removal' });
-  await expect(form.getByRole('status').filter({ hasText: 'Attachment removed.' })).toBeVisible();
-  await undo.focus();
-  await page.mouse.move(0, 0);
-  await page.clock.fastForward(9_000);
-  await expect(undo).toBeVisible();
-  await page.screenshot({ path: info.outputPath('attachment-undo.png') });
-  await undo.press('Enter');
-  await expect(form.getByText(name, { exact: true })).toBeVisible();
-  await expect(form.getByRole('textbox', { name: 'Report note' })).toHaveValue('Keep this note');
-  await form.getByRole('button', { name: 'Remove file' }).click();
-  await form.getByRole('textbox', { name: 'Question' }).focus();
-  await page.mouse.move(0, 0);
-  await page.clock.fastForward(7_999);
-  await expect(undo).toBeVisible();
-  await page.clock.fastForward(1);
-  await expect(undo).toHaveCount(0);
-  expect(posts).toEqual([]);
 });

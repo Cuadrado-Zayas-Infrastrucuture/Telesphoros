@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { DrugList } from '@telesphoros/shared-types';
-import { axeViolations, openWorkspaceNavigation, signInAs, openChat } from '../e2e/helpers';
+import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
 const drugs: DrugList = JSON.parse(readFileSync(new URL('../../../packages/shared-types/src/drug-list/bundled.json', import.meta.url), 'utf8'));
 const createdPatients = new WeakMap<Page, { api: string; patient: string; headers: { Authorization: string } }>();
 test.afterEach(async ({ page }) => {
@@ -14,7 +14,7 @@ test.afterEach(async ({ page }) => {
 
 async function fixture(page: Page, earlier = 0) {
   const me = page.waitForResponse((reply) => reply.url().endsWith('/api/v1/me'));
-  await signInAs(page, 'alice', '/chat');
+  await signInAs(page, 'alice', '/workspace');
   const auth = await me;
   const api = new URL(auth.url()).origin;
   const headers = { Authorization: auth.request().headers().authorization! };
@@ -71,7 +71,6 @@ const filteredRead = (page: Page, status: string, assignment = 'mine') =>
 
 test('filtering resets pagination, keeps clinic totals, handles no matches and opens the matching reminder', async ({ page }) => {
   const f = await fixture(page, 21);
-  await page.getByRole('textbox', { name: 'Question' }).fill('Keep the synthetic filtered reminder discussion');
   const panel = await openInbox(page);
   let reply = filteredRead(page, 'all');
   await panel.getByRole('combobox', { name: 'Assignment', exact: true }).selectOption('mine');
@@ -109,8 +108,6 @@ test('filtering resets pagination, keeps clinic totals, handles no matches and o
   await target.click();
   await expect(page.getByRole('form', { name: 'Document follow-up' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await openChat(page);
-  await expect(page.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep the synthetic filtered reminder discussion');
 });
 
 test('a reviewer can filter clinic reminders and sees an honest empty assigned-to-me list', async ({ page, browser }) => {
@@ -118,7 +115,7 @@ test('a reviewer can filter clinic reminders and sees an honest empty assigned-t
   const context = await browser.newContext({ viewport: page.viewportSize()! });
   try {
     const reviewer = await context.newPage();
-    await signInAs(reviewer, 'gina', '/chat');
+    await signInAs(reviewer, 'gina', '/workspace');
     const panel = await openInbox(reviewer);
     const read = filteredRead(reviewer, 'all');
     await panel.getByRole('combobox', { name: 'Assignment', exact: true }).selectOption('mine');

@@ -29,7 +29,7 @@ export function PreferredName() {
         }}
       />
       <p id="preferred-name-help" className="text-sm text-muted-foreground">
-        Optional. Personalizes your chat welcome for this sign-in. Kept in this tab’s memory; cleared when you sign out or reload. Leave blank to remove it.
+        Optional. Shown on your account at the foot of the sidebar for this sign-in. Kept in this tab’s memory; cleared when you sign out or reload. Leave blank to remove it.
       </p>
       <div>
         <Button type="submit" variant="outline">

@@ -1,18 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { signInAs, openWorkspaceNavigation, selectReportsPatient, openChat } from '../e2e/helpers';
+import { signInAs, openPatients, openWorkspaceNavigation, selectReportsPatient } from '../e2e/helpers';
 
-test('chat upload, stored uncertain findings, and independent patient-link review', async ({ page, browser }) => {
-  await signInAs(page, 'alice', '/chat');
+/** Chooses a patient on Attach a report, paging its patient list as a person would (the same bounded loop as `signInWithPatient`). */
+async function choosePatientOnUploadPage(page: import('@playwright/test').Page, label: string) {
+  await page.getByRole('button', { name: 'Refresh patients' }).click();
+  for (let attempts = 0; attempts < 100; attempts++) {
+    await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+    if (await page.getByRole('option', { name: label, exact: true }).count()) break;
+    const next = page.getByRole('button', { name: 'Next patients' });
+    if (!(await next.count()) || !(await next.isEnabled())) throw new Error('Synthetic patient not listed within the bounded pages.');
+    await next.click();
+  }
+  await page.getByLabel(/synthetic patient \(required\)/i).selectOption({ label });
+}
+
+// Spec 052 RC1b: the report is attached on Attach a report, not in the chat, which is gone.
+test('upload, stored uncertain findings, and independent patient-link review', async ({ page, browser }) => {
+  await signInAs(page, 'alice', '/workspace');
   const filename = `synthetic-${crypto.randomUUID().slice(0, 8)}.json`;
   // Each browser case represents a different synthetic issuer, so its identifiers never collide across patients.
   const source = JSON.parse(readFileSync(new URL('../../../data/fixtures/pgx-contracts/uncertain/package.json', import.meta.url), 'utf8'));
   source.report.laboratoryId = `syn-lab-${crypto.randomUUID()}`;
   source.report.assay.manifest.laboratoryId = source.report.laboratoryId;
-  await page.locator('input[type=file]').setInputFiles({ name: filename, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
-  const dialog = page.getByRole('dialog', { name: 'Report details', exact: true });
-  await dialog.getByRole('link', { name: 'Add patient', exact: true }).click();
+  await openPatients(page);
+  await page.getByRole('link', { name: 'Add patient', exact: true }).click();
   const label = `SYN-PGX-${crypto.randomUUID().slice(0, 8)}`;
   await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(label);
   await page.getByRole('textbox', { name: 'Given name' }).fill('Synthetic');
@@ -24,16 +37,18 @@ test('chat upload, stored uncertain findings, and independent patient-link revie
   await page.getByRole('button', { name: 'Create patient', exact: true }).click();
   const createdPatient = await (await creation).json() as { id: string; label: string };
   await expect(page.getByRole('heading', { name: label, exact: true })).toBeVisible();
-  await openChat(page);
-  await page.getByRole('button', { name: 'Report details', exact: true }).click();
-  const picker = dialog.getByRole('combobox', { name: 'Patient', exact: true });
-  await expect(picker.getByRole('option', { name: label, exact: true })).toBeAttached();
-  await picker.selectOption({ label });
-  await dialog.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
+  await openWorkspaceNavigation(page);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Home', exact: true }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Attach a report', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
+  await choosePatientOnUploadPage(page, label);
+  await page.getByLabel(/report type/i).selectOption('structured');
+  await page.getByLabel(/report file/i).setInputFiles({ name: filename, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
+  await page.getByLabel(/synthetic data only/i).check();
   const uploaded = page.waitForResponse((r) => /upload-attempts\/[^/]+\/bytes$/.test(r.url()) && r.request().method() === 'PUT');
-  await dialog.getByRole('button', { name: 'Upload report', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   expect((await uploaded).status()).toBe(200);
-  await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   await openWorkspaceNavigation(page);
   await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true }).click();
   await selectReportsPatient(page, createdPatient);

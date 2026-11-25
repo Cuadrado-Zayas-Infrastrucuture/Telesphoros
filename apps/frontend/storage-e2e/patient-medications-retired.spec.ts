@@ -30,7 +30,7 @@ const {PostgresPatientMedicationsRepository} = require('./dist/storage/postgres/
 `;
 
 test('historical ingredient corrections and stops remain compact among 20 medications', async ({ page }, info) => {
-  await signInAs(page, 'alice', '/chat');
+  await signInAs(page, 'alice', '/workspace');
   await openPatients(page); // specs/034 D2: the patient list and Add patient live on the Patients page
   const label = `SYN-RETIRED-${crypto.randomUUID().slice(0, 8)}`;
   await page.getByRole('link', { name: 'Add patient' }).click();

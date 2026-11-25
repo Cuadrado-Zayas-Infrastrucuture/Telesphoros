@@ -13,7 +13,6 @@ import helpEs from './help.es.json';
 /** The screens an article can belong to, with their routes. `patient` has a parameter, so an article can be about it but cannot link to it. */
 export const HELP_SCREENS = {
   worklist: '/workspace',
-  chat: '/chat',
   patients: '/patients',
   'new-patient': '/patients/new',
   patient: '/patients/:id',

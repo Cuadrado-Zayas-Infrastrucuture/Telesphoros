@@ -13,8 +13,6 @@ export function localWorkspaceAvailable(): boolean {
 
 /** The signed-in home: the worklist (spec 049). */
 export const WORKSPACE_PATH = '/workspace';
-/** The chat (specs/024), at its own address since the worklist became the home (spec 049 W-D2). */
-export const CHAT_PATH = '/chat';
 
 const canUseHome = (roles: readonly Role[]) => roles.some((role) => CLINICAL_READ_ROLES.includes(role) || WRITER_ROLES.includes(role));
 
