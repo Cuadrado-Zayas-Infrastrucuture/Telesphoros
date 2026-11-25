@@ -34,6 +34,7 @@ its own page. So the chat is a second, weaker way to do one task, and a box that
 | Address constant | `lib/localWorkspace.ts:17` | `CHAT_PATH` |
 | Help | `packages/help-content/src/help.en.json` | Screen `chat` in five articles; "attach-a-report" says "Reports are attached in Chat."; `helpScreenOf('/chat')` (`lib/helpSearch.ts:13`) |
 | Tests | `e2e/workspace-home.spec.ts` (about 20 cases of spec 024), `e2e/helpers.ts:84`, `:96` (`openChat`), `e2e/upload-navigation.spec.ts:30`, `e2e/safe-area.spec.ts`, `e2e/sidebar.spec.ts`; unit: `WorkspacePage.test.tsx`, `WorkspaceUploadLifecycle.test.tsx`, `WorkspaceSidebar.test.tsx`, `WorklistPage.test.tsx`, `ReportsPage*.test.tsx` | What the chat proves today, and what moves to the upload page |
+| Other suites that use the chat | `product-demo-e2e/` (chat-upload, workflow-polish, followups, followup-filters, followup-entry), `storage-e2e/` (workflow-regressions, structured-preview, patient-medications and others start at `/chat`), `medication-fence-e2e/`, `local-e2e/sidebar-workspace.spec.ts` | Found while starting RC1: about 20 browser test files outside `e2e/` attach their reports through the chat, or start there. Each must attach through the upload page instead before the chat can go |
 | Not this | `/local-interpretation` ("Chat preview", local builds only, `WorkspaceSidebar.tsx:109`) | The local preview is its own surface and does not change |
 
 ## 3. The change
@@ -70,10 +71,11 @@ The API, every backend file, migrations, Terraform, knowledge and clinical logic
 
 | Slice | What | Touches |
 | --- | --- | --- |
-| **RC1** | The upload page and Settings as pages; every attach link to `/reports/upload`; the sidebar without Chat; `/chat` as RC-D2 says; the chat's code removed; Help's articles and `helpScreenOf` updated; tests moved or removed as section 3.5 | `apps/frontend`, `packages/help-content` |
+| **RC1a, the pages** | `/reports/upload` ("Attach a report") and `/settings` as pages with "Back to home"; every attach link to `/reports/upload`; Help gains the screen `upload` and "attach-a-report" names the page; the tests that closed the drawer updated. The chat stays reachable from the sidebar | `apps/frontend`, `packages/help-content` |
+| **RC1b, the chat removed** | The sidebar without Chat; `/chat` to the home (RC-D2); the chat's code removed (RC-D5); every suite that attached through the chat attaches through the upload page; the chat's own cases removed, each named; Help's screen `chat` removed | `apps/frontend` (all browser suites), `packages/help-content` |
 
-One slice: the pieces depend on each other (the drawer needs the chat to sit over). If the founder wants it smaller, RC1a can move the
-upload page and Settings and repoint the links, leaving the chat reachable only from the sidebar, and RC1b removes it.
+Two slices, decided 2026-11-25 while starting RC1, when the other suites that attach through the chat came to light (section 2). RC1a is
+small and changes what people see; RC1b is mostly tests. The end state is the one the founder approved; only the order of the PRs changed.
 
 ## 6. Decisions for the founder
 
@@ -90,17 +92,17 @@ upload page and Settings and repoint the links, leaving the chat reachable only 
   - **Recommended:** none. It stays a quick action on the home and a button on Reports; the sidebar keeps its destinations.
   - **Alternative:** an "Attach a report" entry for writer roles.
 - **RC-D5. The chat's code.** **Decided 2026-11-25: as recommended.**
-  - **Recommended:** removed in RC1, with its tests, each removed case named in the verification record. Git keeps the history.
+  - **Recommended:** removed (now in RC1b), with its tests, each removed case named in the verification record. Git keeps the history.
   - **Alternative:** left in the repository, unreachable, until a later clean-up.
 
 ## 7. Order with other work
 
-- **Spec 040 slice C** (the search in the two upload pickers) is written after slice B (#474) merges. If RC1 merges first, slice C changes
+- **Spec 040 slice C** (the search in the two upload pickers) is written after slice B (#474) merges. If RC1b merges first, slice C changes
   one picker, the upload page's, and its plan is updated to say so. Neither waits on the other.
-- **Spanish (spec 050):** the shell word `chat` (`lib/words/shell.ts:19`) is removed in RC1, so the founders have one word fewer to write
+- **Spanish (spec 050):** the shell word `chat` (`lib/words/shell.ts:19`) is removed in RC1b, so the founders have one word fewer to write
   in LS2b. Nothing Spanish is written here.
 
-## 8. Tests (RC1)
+## 8. Tests (RC1a and RC1b)
 
 - **Unit:** the sidebar has no Chat entry for any role (RC-6); each attach link's address, for writers only (RC-2); `/reports/upload` and
   `/settings` render as pages with a level-one heading (RC-3); `/chat` lands as RC-D2 says (RC-5); `helpScreenOf` has no `chat`.
