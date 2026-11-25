@@ -113,7 +113,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await openSettings();
     await userEvent.type(await screen.findByRole('textbox', { name: 'Preferred name' }), 'Avery');
     await userEvent.click(screen.getByRole('button', { name: 'Save preferred name' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Close account preferences' }));
+    await backToChat();
     expect(await screen.findByText('Welcome, Avery.')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Start with a synthetic report.' })).toBeVisible();
   });
@@ -147,13 +147,25 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(submitReport).not.toHaveBeenCalled();
   });
 
-  it('opens Settings over chat and keeps the draft when closed', async () => {
+  // Spec 052 RC-3: Settings is a page in the main area, not a panel over the chat.
+  it('opens Settings as a page, not a dialog, and keeps the chat draft when the clinician returns', async () => {
     open(['clinician']);
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep my draft');
     await openSettings();
-    const panel = await screen.findByRole('dialog', { name: 'Account preferences' });
-    await userEvent.click(within(panel).getByRole('button', { name: 'Close account preferences' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/workspace');
+    await backToChat();
     expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveValue('Keep my draft');
+  });
+
+  it('opens Attach a report as a page, not a dialog, with the way back home', async () => {
+    const { router } = open(['clinician']);
+    await screen.findByRole('textbox', { name: 'Question' });
+    await act(async () => router.navigate('/reports/upload'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/workspace');
   });
 
   it('opens Reports as a page, not a dialog, and keeps the chat draft when the clinician returns', async () => {

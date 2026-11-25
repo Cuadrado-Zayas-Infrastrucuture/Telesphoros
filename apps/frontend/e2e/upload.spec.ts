@@ -122,7 +122,7 @@ async function reloadAndSignIn(page: Page, interrupt?: () => void) {
   await expect(page).toHaveURL(/\/signin$/);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('**/reports/upload');
-  await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
 }
 async function reselect(page: Page, fixture: { id: string; label: string }, name: string, bytes: Buffer) {
   // The patient list is paged; after a reload it starts on page 1 again, so walk to the page that holds the fixture patient.
@@ -260,7 +260,7 @@ test('a different verified caller after a 401 never sees or replays the previous
   await page.getByRole('button', { name: 'Refresh patients' }).click();
   await page.getByRole('button', { name: /Sign in as hal\b/ }).click();
   await page.waitForURL('**/reports/upload');
-  await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Attach a report' })).toBeVisible();
   // The panel's Recents lists the newest reports, this one included: the recovery notice is what must not name it.
   await expect(page.getByRole('main').getByText('previous-caller.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);

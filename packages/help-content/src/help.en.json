@@ -13,7 +13,7 @@
         "Help explains how the product works: what a screen shows, what a word or a status means, and why a control may be unavailable to you or in this environment.",
         "It does not answer questions about a patient. A patient's page shows their results, and each result shows where it comes from."
       ],
-      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "upload", "follow-ups", "settings", "usage"],
       "roles": "all",
       "keywords": ["help", "question", "ask", "answer", "assistant"],
       "links": [],
@@ -80,14 +80,14 @@
       "id": "attach-a-report",
       "title": "Attaching a report",
       "body": [
-        "Reports are attached in Chat. Choose Attach a report, choose the patient in Report details, confirm that the file holds synthetic data only, then upload.",
+        "Choose Attach a report on the home page or on Reports. Choose the patient, then the file and its type, confirm that the file holds synthetic data only, then choose Upload report. If a reload interrupts an upload, the same page offers to finish or cancel it.",
         "The Reports page lists every report and whether its file was verified. Verifying a file confirms that it was stored unchanged. It does not check what the report says."
       ],
-      "screens": ["worklist", "chat", "reports"],
+      "screens": ["worklist", "chat", "reports", "upload"],
       "roles": ["clinician"],
       "keywords": ["report", "attach", "upload", "file", "pdf", "lab"],
       "links": [
-        { "label": "Open Chat", "screen": "chat" },
+        { "label": "Attach a report", "screen": "upload" },
         { "label": "Open Reports", "screen": "reports" }
       ],
       "status": "draft",
@@ -143,7 +143,7 @@
         "A reader reads patient records and results. A clinician can also add patients, attach reports and record medications, decisions and follow-ups. A reviewer reads records and does the reviews that need a second person.",
         "An administrator manages the organization's members and sees its usage, but nothing clinical. A control your role cannot use is not shown to you."
       ],
-      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "upload", "follow-ups", "settings", "usage"],
       "roles": "all",
       "keywords": ["role", "roles", "permission", "access", "reader", "clinician", "reviewer", "administrator", "admin", "cannot", "missing"],
       "links": [{ "label": "Open account preferences", "screen": "settings" }],
@@ -157,7 +157,7 @@
         "Everything in this product is synthetic: invented patients, invented reports and test settings. It is not approved for clinical use.",
         "Do not enter real patient information anywhere in it."
       ],
-      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "upload", "follow-ups", "settings", "usage"],
       "roles": "all",
       "keywords": ["synthetic", "real", "clinical use", "approved", "test", "demo"],
       "links": [],
@@ -184,7 +184,7 @@
       "body": [
         "The product's policies, its privacy policy included, have not been published yet. Help will point to them here once they are."
       ],
-      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "follow-ups", "settings", "usage"],
+      "screens": ["worklist", "chat", "patients", "new-patient", "patient", "reports", "upload", "follow-ups", "settings", "usage"],
       "roles": "all",
       "keywords": ["policy", "policies", "privacy", "terms", "data", "legal"],
       "links": [],

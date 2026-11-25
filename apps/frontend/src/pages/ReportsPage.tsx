@@ -110,9 +110,9 @@ export default function ReportsPage() {
         </div>
         {canAttach && (
           <Button asChild className="min-h-control w-full whitespace-normal px-5 sm:w-auto">
-            <Link to="/chat">
+            <Link to="/reports/upload">
               <ArrowUpFromLine aria-hidden="true" className="size-4 shrink-0" />
-              Attach report in chat
+              Attach a report
             </Link>
           </Button>
         )}

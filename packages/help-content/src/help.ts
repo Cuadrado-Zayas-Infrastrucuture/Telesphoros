@@ -18,6 +18,7 @@ export const HELP_SCREENS = {
   'new-patient': '/patients/new',
   patient: '/patients/:id',
   reports: '/reports',
+  upload: '/reports/upload',
   'follow-ups': '/follow-ups',
   settings: '/settings',
   usage: '/usage',

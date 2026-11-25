@@ -41,7 +41,7 @@ export default function WorklistPage() {
           )}
           {canWrite && (
             <Button asChild variant="outline" className="min-h-control">
-              <Link to="/chat">
+              <Link to="/reports/upload">
                 <ArrowUpFromLine aria-hidden="true" className="size-4" />
                 Attach a report
               </Link>

@@ -2,6 +2,7 @@ import { StoragePreferencesButton } from '@/components/privacy/StoragePreference
 import { useStorageConsent } from '@/components/privacy/StorageConsentProvider';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { BackToHomeLink } from '@/components/layout/BackToHomeLink';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES } from '@/auth/roles';
 import { PreferredName } from '@/components/settings/PreferredName';
@@ -37,7 +38,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <h1 className="text-3xl leading-tight tracking-tight">Settings</h1>
+      {/* A page in the main area, as every destination is (spec 052 RC-3); it used to open as a panel over the chat. */}
+      <div>
+        <BackToHomeLink />
+        <h1 className="text-3xl leading-tight tracking-tight">Settings</h1>
+      </div>
 
       <SettingsSection id="settings-account" title="Account">
         <dl>
