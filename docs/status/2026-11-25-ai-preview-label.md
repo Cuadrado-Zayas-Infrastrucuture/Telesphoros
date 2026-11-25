@@ -11,5 +11,6 @@ read as if the chat were still there.
 - Tests that name the link: `WorkspaceSidebar.test.tsx`, `ReportsPage.test.tsx`, and the local-e2e `sidebar-workspace` and
   `report-workspace` specs.
 
-Not changed: the preview page's own heading, "Chat workspace" (`SyntheticAssistant.tsx`, asserted in three tests). It is a
-separate question, named in the PR. Staging and hosted builds never show the entry.
+The preview page's heading follows (taken next, on "continue"): "Chat workspace" becomes "AI preview" in `SyntheticAssistant.tsx`, with
+its three assertions (`ReportsPage.test.tsx`, local-e2e `sidebar-workspace` and `interpretation-preview`). The CSS class `chat-workspace`
+is internal and stays. Staging and hosted builds never show the entry or the page.

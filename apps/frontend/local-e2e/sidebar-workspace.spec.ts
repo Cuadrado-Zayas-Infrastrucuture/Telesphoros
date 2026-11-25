@@ -13,7 +13,7 @@ async function accessible(page: Page) {
 }
 test('wide Prompt Kit conversation keeps evidence in a keyboard-accessible drawer', async ({ page }, info) => {
   await signInAs(page, 'alice', '/local-interpretation');
-  await expect(page.getByRole('heading', { name: 'Chat workspace' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI preview' })).toBeVisible();
   const network: string[] = [];
   page.on('request', request => { if (['fetch', 'xhr', 'websocket'].includes(request.resourceType())) network.push(request.url()); });
   const conversation = page.getByRole('region', { name: 'Explanation conversation' });

@@ -355,7 +355,7 @@ it('opens a separate synthetic preview without passing report or patient context
     expect(link).toHaveAttribute('href', '/local-interpretation');
     const calls = api.mock.calls.length;
     await user.click(link);
-    await screen.findByRole('heading', { name: 'Chat workspace' });
+    await screen.findByRole('heading', { name: 'AI preview' });
     expect(router.state.location.search).toBe('');
     expect(router.state.location.state).toBeNull();
     expect(screen.queryByText('synthetic.json')).not.toBeInTheDocument();
