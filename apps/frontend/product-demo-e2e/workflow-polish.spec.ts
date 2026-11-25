@@ -64,11 +64,11 @@ test('a roster beyond 20 patients stays searchable and selectable without losing
     await openPatients(view); // specs/034 D2: the roster lives on the Patients page
     const patients = view.getByRole('region', { name: 'Patient records', exact: true });
     await expect(view.getByRole('link', { name: 'Add patient', exact: true })).toBeInViewport();
-    await patients.getByRole('textbox', { name: 'Find loaded patients' }).fill(firstLabel);
+    await patients.getByRole('textbox', { name: 'Find a patient' }).fill(firstLabel);
     await expect(patients.getByText(/No match among loaded patients/)).toBeVisible();
     await patients.getByRole('button', { name: 'More patients' }).click();
     await expect(patients.getByRole('link', { name: firstLabel, exact: true })).toBeVisible();
-    await patients.getByRole('textbox', { name: 'Find loaded patients' }).fill('');
+    await patients.getByRole('textbox', { name: 'Find a patient' }).fill('');
     expect(await view.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await view.screenshot({ path: info.outputPath('busy-roster.png') });
     await view.goBack(); // back to the chat
