@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { MascotWelcome } from '@/components/MascotWelcome';
 import { LandingActions } from './LandingActions';
 import { LandingParticles } from './LandingParticles';
@@ -24,14 +24,8 @@ const lines = (parts: readonly string[]) =>
 export function ProductLanding({ canUpload, signedIn }: { canUpload: boolean; signedIn: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   useLandingMotion(root);
-  const { language, copy } = useLandingLanguage();
-  // Tell the browser and assistive technology which language the page is in; leaving the landing restores English.
-  useEffect(() => {
-    document.documentElement.lang = language;
-    return () => {
-      document.documentElement.lang = 'en';
-    };
-  }, [language]);
+  // The landing's language also sets <html lang>, in AppFrame, the one place that does (spec 050 LS1-D1).
+  const { copy } = useLandingLanguage();
   const { hero, purpose, capabilities, questions, closing } = copy;
   return (
     <div ref={root} className="product-landing">

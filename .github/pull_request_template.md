@@ -18,6 +18,7 @@
 - [ ] **Clinical hold unchanged:** nothing in this PR lifts or weakens a clinical hold. (If it does, it must name the sign-off.)
 - [ ] Clinical logic changes carry tests and a validation note in `docs/clinical-validation/`.
 - [ ] Database changes are a new numbered migration with a down file, and the database tier was run.
+- [ ] **Spanish:** any Spanish text in this PR was written by the founders, not machine translated, and every clinical string names two pharmacist signers and a date (spec 050 R7, R8). Or this PR adds no Spanish.
 - [ ] This PR adds one `docs/status/YYYY-MM-DD-slug.md` fragment (not a section in `docs/STATUS.md`), or changes nothing `docs/STATUS.md` would describe.
 
 ## Follow-ups
