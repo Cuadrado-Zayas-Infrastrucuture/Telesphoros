@@ -2,6 +2,17 @@
   "language": "en",
   "entries": [
     {
+      "id": "cpic",
+      "term": "CPIC",
+      "aliases": [
+        "CPIC",
+        "Clinical Pharmacogenetics Implementation Consortium"
+      ],
+      "body": "The Clinical Pharmacogenetics Implementation Consortium: experts who publish peer-reviewed guidelines on using genetic test results when prescribing some medications. The guidance in this app quotes CPIC's own wording.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
       "id": "phenotype",
       "term": "Phenotype",
       "aliases": [
@@ -168,6 +179,16 @@
         "No recommendation"
       ],
       "body": "The loaded guideline covers this medication and this genetic result, but publishes no recommendation for it. The row gives the guideline's own reason. It does not mean the genetic result has no effect.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "not-tested",
+      "term": "Not tested",
+      "aliases": [
+        "Not tested"
+      ],
+      "body": "A guideline for one of this patient's medications uses this gene, but no confirmed report for this patient includes a result for it. It does not mean the gene is normal.",
       "status": "draft",
       "signedBy": []
     },
