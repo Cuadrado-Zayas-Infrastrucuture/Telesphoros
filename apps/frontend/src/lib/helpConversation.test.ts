@@ -19,7 +19,9 @@ function shownIn(answer: HelpAnswer): HelpHit[] {
   return [];
 }
 
-beforeEach(() => vi.mocked(searchHelp).mockClear());
+beforeEach(() => {
+  vi.mocked(searchHelp).mockClear();
+});
 
 describe('a question about a patient', () => {
   it('is refused before any search, with the way to the results on a patient page', () => {
