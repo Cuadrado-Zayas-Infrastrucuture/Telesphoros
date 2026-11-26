@@ -21,7 +21,6 @@ its row here fails the test.
 | `shell-sidebar.primary` | Primary |  |
 | `shell-sidebar.home` | Home |  |
 | `shell-sidebar.workspace` | Workspace |  |
-| `shell-sidebar.chatPreview` | Chat preview |  |
 | `shell-sidebar.patients` | Patients |  |
 | `shell-sidebar.reports` | Reports |  |
 | `shell-sidebar.followups` | Follow-ups |  |
