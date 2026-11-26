@@ -1,4 +1,5 @@
 import type { GenomicGene } from '@telesphoros/shared-types';
+import { GlossaryTerm } from '@/components/patients/GlossaryTerm';
 import { when } from '@/lib/formatWhen';
 import { PROFILE_WORDS } from '@/lib/genomicProfileWords';
 
@@ -21,7 +22,9 @@ export function GenomicGeneEvidence({ name, gene }: { name: string; gene: Genomi
             </span>
           ))
         ) : (
-          <span>{PROFILE_WORDS.notTested}</span>
+          <span>
+            <GlossaryTerm text={PROFILE_WORDS.notTested} />
+          </span>
         )}
       </dd>
     </>
