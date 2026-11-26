@@ -8,14 +8,14 @@ breakages were never done. This page and `scripts/breakages/` turn them into one
 
 ## What is here
 
-- `scripts/breakages/catalogue.json`: 67 entries. Each has the rule in plain words, the file, the exact text to find (it must
+- `scripts/breakages/catalogue.json`: 72 entries. Each has the rule in plain words, the file, the exact text to find (it must
   occur once), what to put in its place, the command that runs the guarding tests, and the test title expected to go red.
 - `scripts/breakages/run.mjs`: applies one entry at a time, runs its command, and always puts the file back. Before the first entry of
   each command it runs that command unbroken (the control); an entry only counts when its control was green.
 - `scripts/breakages/results.json`: written by the runner, never committed (it is in `.gitignore`).
 
 The entries come from: spec 045 slices N2, N3 and N4 (the phenoconversion notices); spec 044 slice B2; spec 049 W1 and W2 (the worklist
-home); spec 051 H1 and H2 (Help); spec 040 slices B and C (patient search); and spec 052 RC1a and RC1b (retiring the chat). The `source`
+home); spec 051 H1 and H2 and spec 053 C1 (Help); spec 040 slices B and C (patient search); and spec 052 RC1a and RC1b (retiring the chat). The `source`
 field of each entry names the plan section it came from; "designed" means the plan named the rule but not the breakage, so the
 breakage was written for it. RC1a entries marked "adapted" test the rule as it stands after RC1b removed the drawer.
 
@@ -103,12 +103,17 @@ Not run yet. The founder runs it in a sandbox job and fills in the last column.
 | H1-3 | H1 (spec 051) | package-unit | Article text is plain: no web address outside links. | |
 | H1-4 | H1 (spec 051) | package-unit | An article cannot link to a route that has a parameter, such as the patient page. | |
 | H1-5 | H1 (spec 051) | package-unit | No article reassures: none says safe, no interaction, not affected or none. | |
-| H2-1 | H2 (spec 051) | frontend-unit | The panel checks for a patient question before it searches, and does not search one. | |
+| H2-1 | H2 (spec 051) | frontend-unit | Help checks for a patient question before it searches, and does not search one (spec 053 C1: in answerFor). | |
 | H2-2 | H2 (spec 051) | frontend-unit | A refused question shows the fixed refusal sentence from packages/help-content. | |
 | H2-3 | H2 (spec 051) | frontend-unit | A match is weak when the best result covers fewer than half the words. | |
 | H2-4 | H2 (spec 051) | frontend-unit | An article is never listed for a role it excludes. | |
-| H2-5 | H2 (spec 051) | frontend-unit | An opened draft article shows the draft line. | |
-| H2-6 | H2 (spec 051) | browser | Nothing the person types is sent: typing makes no API request. | |
+| H2-5 | H2 (spec 051) | frontend-unit | A quoted draft article shows the draft line. | |
+| H2-6 | H2 (spec 051) | browser | Nothing the person types is sent: asking makes no API request. | |
+| C1-1 | C1 (spec 053) | frontend-unit | The refusal is decided before any search: searching first and refusing only when nothing matches is caught. | |
+| C1-2 | C1 (spec 053) | frontend-unit | The conversation is cleared when the drawer closes (spec 053 section 1). | |
+| C1-3 | C1 (spec 053) | frontend-unit | Only the last 20 exchanges are kept on screen (C1-D2). | |
+| C1-4 | C1 (spec 053) | frontend-unit | A chosen article joins the conversation with no message from the person, who typed nothing (C1-D1). | |
+| C1-5 | C1 (spec 053) | frontend-unit | A blank box sends nothing. | |
 | PSB-1 | Patient search B (spec 040) | frontend-unit | On any answer but a 200 the roster's scope sentence never claims that all patients were searched. | |
 | PSB-2 | Patient search B (spec 040) | frontend-unit | A failed search of the whole list keeps the loaded rows and their filter on screen (the fallback). | |
 | PSB-3 | Patient search B (spec 040) | frontend-unit | A search text outside the label alphabet is refused in the browser and never sent. | |
