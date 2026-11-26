@@ -17,7 +17,7 @@ const shortName = (filename: string) => filename.replace(/\.(json|pdf)$/i, '') |
 /**
  * The panel's "Recents" (specs/034, was "Past reports", specs/024 D2): the first page, newest first, one line each with the status as a word in color.
  * A row opens that report on the Reports page. A report whose file never arrived says so, and its Remove sits beside the row, not inside the link.
- * Reloads when the chat or the upload form uploads, cancels, checks or removes a report.
+ * Reloads when the upload page uploads, cancels or checks a report, or a Remove removes one.
  */
 export function SidebarReports({ onNavigate }: { onNavigate?: () => void }) {
   const words = useWords(SIDEBAR_WORDS);
