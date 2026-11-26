@@ -6,7 +6,7 @@ import { geneValue, PROFILE_WORDS } from '@/lib/genomicProfileWords';
 
 /**
  * One card per gene: the phenotype in words (opening its glossary entry when it has one), each confirmed report and its date; and "Not
- * tested" for a gene a guideline needs that none includes.
+ * tested", which opens its own entry, for a gene a guideline needs that none includes.
  */
 export function GenomicGeneCards({ genes, untested }: { genes: readonly GenomicGene[]; untested: readonly string[] }) {
   return (
@@ -34,7 +34,9 @@ export function GenomicGeneCards({ genes, untested }: { genes: readonly GenomicG
         {untested.map((name) => (
           <li key={name} className="flex flex-col gap-1 rounded-lg border border-border bg-panel p-4">
             <h4 className="font-semibold">{name}</h4>
-            <p className="font-medium">{PROFILE_WORDS.notTested}</p>
+            <p className="font-medium">
+              <GlossaryTerm text={PROFILE_WORDS.notTested} />
+            </p>
             <p className="text-sm text-muted-foreground">{PROFILE_WORDS.notTestedDetail}</p>
           </li>
         ))}

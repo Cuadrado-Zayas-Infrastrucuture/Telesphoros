@@ -416,6 +416,16 @@ it("opens the gene's value from the row's because-line and from its card, and th
   expect(drawer().getByText(entryOf('poor-metabolizer').body)).toBeInTheDocument();
 });
 
+it('opens "Not tested" on the gene card in the glossary drawer, and returns focus to it when closed', async () => {
+  await show();
+  const untested = screen.getByRole('heading', { name: 'GENEC' }).closest('li')!;
+  const word = within(untested).getByRole('button', { name: 'Not tested' });
+  await userEvent.click(word);
+  expect(drawer().getByText(entryOf('not-tested').body)).toBeInTheDocument();
+  await userEvent.click(drawer().getByRole('button', { name: GLOSSARY_WORDS.close }));
+  expect(word).toHaveFocus();
+});
+
 it('leaves a word with no entry as plain text, guessing nothing', async () => {
   await show();
   const simvastatin = within(row('simvastatin'));
