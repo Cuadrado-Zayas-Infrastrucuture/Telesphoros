@@ -1,112 +1,131 @@
-import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Role } from '@telesphoros/shared-types';
-import { GLOSSARY_EN, HELP_EN, HELP_SCREENS } from '@telesphoros/help-content';
+import { GLOSSARY_EN, HELP_EN } from '@telesphoros/help-content';
 import { Button } from '@/components/ui/Button';
 import { ContextDrawer } from '@/components/ui/ContextDrawer';
-import { articlesFor, helpScreenOf, isPatientQuestion, searchHelp, type HelpHit } from '@/lib/helpSearch';
-import { HELP_WORDS, helpFoot } from '@/lib/helpWords';
+import { answerFor, answerForHit, type HelpAnswer as Answer } from '@/lib/helpConversation';
+import { articlesFor, helpScreenOf, type HelpHit } from '@/lib/helpSearch';
+import { HELP_WORDS } from '@/lib/helpWords';
+import { HelpAnswer } from './HelpAnswer';
+import { HelpHitList } from './HelpHitList';
 
-const titleOf = (hit: HelpHit) => (hit.kind === 'article' ? hit.article.title : `${HELP_WORDS.word}: ${hit.entry.term}`);
-const keyOf = (hit: HelpHit) => (hit.kind === 'article' ? `article-${hit.article.id}` : `word-${hit.entry.id}`);
+const CORPUS = { articles: HELP_EN.articles, glossary: GLOSSARY_EN };
+/** The exchanges kept on screen while the drawer is open; the oldest goes first (plan C1-D2). */
+export const HELP_EXCHANGE_LIMIT = 20;
+
+interface Exchange {
+  id: number;
+  /** What the person typed; null when they chose an article from a list, because they typed nothing (plan C1-D1). */
+  asked: string | null;
+  answer: Answer;
+}
 
 /**
- * Spec 051 slice H2: the help panel, in the app's side drawer (H-D4). It opens on the articles for this screen and these roles, searches
- * every article and every glossary word as the person types, and refuses a question about a patient before searching (section 5, H-D6).
- * It reads only the reviewed content, the screen's address and the roles: it sends nothing, stores nothing and reads no patient data.
+ * Spec 051 slice H2, made a conversation by spec 053 slice C1: the help panel, in the app's side drawer (H-D4). Before anything is asked it
+ * shows this screen's articles for these roles. The person asks and presses Enter; Help answers from the reviewed articles and the glossary,
+ * refusing a question about a patient before any search (`answerFor`). The conversation lives in this component only: it is cleared when the
+ * drawer closes, and nothing typed is sent, stored or put in the address. It reads no patient data.
  */
 export function HelpPanel({ open, onClose, pathname, roles }: { open: boolean; onClose: () => void; pathname: string; roles: readonly Role[] }) {
-  const [query, setQuery] = useState('');
-  const [opened, setOpened] = useState<HelpHit | null>(null);
+  const [draft, setDraft] = useState('');
+  const [exchanges, setExchanges] = useState<Exchange[]>([]);
+  const [focusOn, setFocusOn] = useState<number | null>(null);
+  const nextId = useRef(1);
   const heading = useRef<HTMLHeadingElement>(null);
-  const screen = helpScreenOf(pathname);
-  const forThisPage = articlesFor(HELP_EN.articles, screen, roles).map((article): HelpHit => ({ kind: 'article', article }));
-  const asked = query.trim();
-  const refused = asked.length > 0 && isPatientQuestion(asked);
-  const results = asked.length > 0 && !refused ? searchHelp(asked, HELP_EN.articles, GLOSSARY_EN, screen, roles) : null;
-  // A question that matches nothing still offers the closest thing there is: this page's first articles (section 4).
-  let listed = forThisPage;
-  if (results) listed = results.hits.length > 0 ? results.hits : forThisPage.slice(0, 3);
-  const show = (next: HelpHit | null) => {
-    setOpened(next);
-    heading.current?.focus();
+  const box = useRef<HTMLInputElement>(null);
+  const newest = useRef<HTMLLIElement>(null);
+  const forThisPage = articlesFor(HELP_EN.articles, helpScreenOf(pathname), roles).map((article): HelpHit => ({ kind: 'article', article }));
+  const newestId = exchanges.at(-1)?.id;
+
+  // The newest answer is brought into view; after a chosen article, the focus moves to its heading so it is read next.
+  useEffect(() => {
+    newest.current?.scrollIntoView?.({ block: 'start' });
+    if (focusOn !== null) document.getElementById(`help-answer-${focusOn}-heading`)?.focus();
+  }, [newestId, focusOn]);
+
+  const add = (asked: string | null, answer: Answer) => {
+    const id = nextId.current++;
+    setExchanges((before) => [...before, { id, asked, answer }].slice(-HELP_EXCHANGE_LIMIT));
+    return id;
   };
+  const send = (event: FormEvent) => {
+    event.preventDefault();
+    const asked = draft.trim();
+    box.current?.focus();
+    if (asked.length === 0) return;
+    add(asked, answerFor(asked, CORPUS, pathname, roles));
+    setDraft('');
+    setFocusOn(null);
+  };
+  const openHit = (hit: HelpHit) => setFocusOn(add(null, answerForHit(hit)));
   const close = () => {
-    setOpened(null);
+    setExchanges([]);
+    setDraft('');
+    setFocusOn(null);
     onClose();
   };
+
   return (
     <ContextDrawer open={open} onClose={close} title={HELP_WORDS.title} id="help-panel" closeLabel={HELP_WORDS.close} headingRef={heading}>
-      {opened ? (
-        <article aria-labelledby="help-open-heading" className="flex flex-col gap-3">
-          <h3 id="help-open-heading" className="text-lg font-medium">
-            {titleOf(opened)}
-          </h3>
-          {opened.kind === 'article' ? opened.article.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>) : <p>{opened.entry.body}</p>}
-          {opened.kind === 'article' && opened.article.links.length > 0 && (
-            <ul className="flex flex-col gap-1">
-              {opened.article.links.map((link) => (
-                <li key={link.screen}>
-                  <Link to={HELP_SCREENS[link.screen]} onClick={close} className="inline-flex min-h-control items-center font-medium underline underline-offset-2">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="text-sm text-muted-foreground">{helpFoot(opened.kind === 'article' ? opened.article : opened.entry)}</p>
-          <div>
-            <Button variant="outline" className="min-h-control" onClick={() => show(null)}>
-              {HELP_WORDS.back}
-            </Button>
+      <div className="flex min-h-full flex-col gap-4">
+        {exchanges.length === 0 ? (
+          <div className="flex flex-col gap-4">
+            <p>{HELP_WORDS.intro}</p>
+            <section aria-labelledby="help-list-heading" className="flex flex-col gap-2">
+              <h3 id="help-list-heading" className="font-medium">
+                {HELP_WORDS.forThisPage}
+              </h3>
+              {forThisPage.length === 0 ? <p className="text-sm text-muted-foreground">{HELP_WORDS.nothingForThisPage}</p> : <HelpHitList hits={forThisPage} onOpen={openHit} />}
+            </section>
           </div>
-        </article>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            {HELP_WORDS.search}
+        ) : (
+          <div role="log" aria-label={HELP_WORDS.conversation} className="flex flex-col gap-4">
+            <ol className="flex flex-col gap-4">
+              {exchanges.map((exchange) => (
+                <Fragment key={exchange.id}>
+                  {exchange.asked !== null && (
+                    <li aria-label={HELP_WORDS.you} className="ml-8 flex flex-col gap-1 self-end rounded-lg bg-muted px-3 py-2 break-words">
+                      <span aria-hidden="true" className="text-xs font-medium text-muted-foreground">
+                        {HELP_WORDS.you}
+                      </span>
+                      <span>{exchange.asked}</span>
+                    </li>
+                  )}
+                  <li
+                    ref={exchange.id === newestId ? newest : undefined}
+                    aria-label={HELP_WORDS.helpSays}
+                    className="flex flex-col gap-1 rounded-lg border border-border bg-panel px-3 py-2 break-words"
+                  >
+                    <span aria-hidden="true" className="text-xs font-medium text-muted-foreground">
+                      {HELP_WORDS.helpSays}
+                    </span>
+                    <HelpAnswer answer={exchange.answer} id={`help-answer-${exchange.id}`} onOpen={openHit} onLeave={close} />
+                  </li>
+                </Fragment>
+              ))}
+            </ol>
+            {exchanges.length >= HELP_EXCHANGE_LIMIT && <p className="text-sm text-muted-foreground">{HELP_WORDS.limit}</p>}
+          </div>
+        )}
+        <form onSubmit={send} className="sticky -bottom-5 mt-auto -mx-5 -mb-5 flex items-end gap-2 border-t border-divider bg-panel px-5 py-3">
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-medium">
+            {HELP_WORDS.ask}
             <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              ref={box}
+              type="text"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
               autoComplete="off"
               spellCheck={false}
+              enterKeyHint="send"
               className="min-h-control rounded-md border border-input bg-background px-3 text-base font-normal"
             />
           </label>
-          <p className="text-sm text-muted-foreground">{HELP_WORDS.hint}</p>
-          {refused ? (
-            <div role="status" className="flex flex-col gap-2">
-              <p>{HELP_EN.refusal?.body ?? HELP_WORDS.refusalFallback}</p>
-              {screen === 'patient' && (
-                <Link to={`${pathname}#patient-results`} onClick={close} className="inline-flex min-h-control items-center font-medium underline underline-offset-2">
-                  {HELP_WORDS.patientResults}
-                </Link>
-              )}
-            </div>
-          ) : (
-            <section aria-labelledby="help-list-heading" className="flex flex-col gap-2">
-              <h3 id="help-list-heading" className="font-medium">
-                {results ? HELP_WORDS.results : HELP_WORDS.forThisPage}
-              </h3>
-              {results && (results.weak || results.hits.length === 0) && <p role="status">{HELP_WORDS.weak}</p>}
-              {listed.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{HELP_WORDS.nothingForThisPage}</p>
-              ) : (
-                <ul className="flex flex-col gap-1">
-                  {listed.map((hit) => (
-                    <li key={keyOf(hit)}>
-                      <Button variant="ghost" className="min-h-control w-full justify-start text-left whitespace-normal" onClick={() => show(hit)}>
-                        {titleOf(hit)}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          )}
-        </div>
-      )}
+          <Button type="submit" className="min-h-control">
+            {HELP_WORDS.send}
+          </Button>
+        </form>
+      </div>
     </ContextDrawer>
   );
 }
