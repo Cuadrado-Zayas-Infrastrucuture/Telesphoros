@@ -33,6 +33,7 @@ describe('the glossary file', () => {
       'guidance-to-review',
       'held',
       'no-guideline-loaded',
+      'no-recommendation',
       'phenoconversion',
     ]) {
       expect(ids).toContain(id);

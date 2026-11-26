@@ -162,6 +162,16 @@
       "signedBy": []
     },
     {
+      "id": "no-recommendation",
+      "term": "No recommendation",
+      "aliases": [
+        "No recommendation"
+      ],
+      "body": "The loaded guideline covers this medication and this genetic result, but publishes no recommendation for it. The row gives the guideline's own reason. It does not mean the genetic result has no effect.",
+      "status": "draft",
+      "signedBy": []
+    },
+    {
       "id": "phenoconversion",
       "term": "Phenoconversion",
       "aliases": [
