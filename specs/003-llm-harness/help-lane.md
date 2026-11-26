@@ -2,7 +2,7 @@
 
 **Created**: 2026-11-26
 
-**Status**: **A draft for the founder: HL-D1 to HL-D3 are open (section 7).** Specification only: no code, route, setting, migration or
+**Status**: **Approved by the founder on 2026-11-26: HL-D1 to HL-D3 as recommended (section 7).** Specification only: no code, route, setting, migration or
 Terraform change. Spec 053 slice C2 starts only after this amendment is approved (spec 053 section 6).
 
 **Input**: Spec 053 HC-D6, decided 2026-11-26: "amend spec 003 with a help lane that reuses its harness parts (budgets, switch, evaluation
@@ -95,10 +95,12 @@ The screen links shown under the answer come from the cited articles' own `links
 | **HC5, never reassures** | The sentence matches the rule the articles already follow (`safe`, "no interaction", "not affected", `none`; `packages/help-content`'s test) |
 | **HC6, shape** | The answer is empty, too long, or breaks the schema; or a sentence addresses the reader about their patient or talks about the model or its instructions |
 
-**FR-H4, what a failure does.** As HL-D1 decides: the whole model answer is withheld, or the failing sentence is removed.
+**FR-H4, what a failure does** (HL-D1). Any failing check on any sentence withholds the whole model answer, and the C1 answer shows. No
+sentence is removed on its own.
 
-**FR-H5, the model's own refusal check** (spec 053 section 3, direction plan section 5). As HL-D3 decides. It can only add a refusal or a
-withholding, and it never releases what the rule refused.
+**FR-H5, the model's own refusal check** (spec 053 section 3, direction plan section 5; HL-D3). When the model sets `outOfScope`, the answer
+becomes the refusal. HC4 also runs on every sentence. Both are in the same call. The flag can only add a refusal; it never releases what the
+rule refused.
 
 **FR-H6, the label and the fallback.** A released answer carries the label "Written by an assistant from the articles below." Under it, the
 cited articles are listed with their links and their signed line (R4). Spec 053 section 3's label also says "Draft articles are not yet
@@ -144,22 +146,23 @@ the clinical lane. The live run is a manual report, never a required check. **En
   - a monitor is live, counting releases and withholdings by reason code;
   - a rollback has been rehearsed;
   - the help article "How Help's answers are written and checked" is signed;
-  - counsel's view is recorded, as HL-D2 decides.
+  - counsel's view is recorded (HL-D2): one question to counsel covers both lanes.
 
 ## 7. Decisions for the founder
 
-- **HL-D1. What a failed check does to the answer.**
+- **HL-D1. What a failed check does to the answer.** **Decided 2026-11-26: as recommended.**
   - **Recommended:** the whole model answer is withheld and the C1 answer shows. Removing one sentence can drop a qualifier ("only", "unless")
-    and change what the rest means, and the C1 answer beside it is always reviewed text. Spec 053 section 3 is amended to say so.
+    and change what the rest means, and the C1 answer beside it is always reviewed text. Spec 053 section 3 is amended to say so (done in
+    the same pull request).
   - **Alternative:** as spec 053 section 3 says now: the failing sentence is removed, and the answer is withheld only if too little is left.
     More answers get through, but a shortened answer can mislead.
 - **HL-D2. Counsel's view before Help's model is used for real.** The clinical lane waits for counsel on the FDA clinical decision support
-  criteria (D10).
+  criteria (D10). **Decided 2026-11-26: as recommended.**
   - **Recommended:** Help's lane waits for counsel too, as one combined question: Help explains the product and refuses patient questions, but
     it sits inside a clinical product, and one answer from counsel covers both lanes.
   - **Alternative:** no counsel condition for the help lane, because it gives no clinical recommendation. It is faster, but it leaves the
     question to the founders alone.
-- **HL-D3. The model's own refusal check.**
+- **HL-D3. The model's own refusal check.** **Decided 2026-11-26: as recommended.**
   - **Recommended:** the model's output carries an `outOfScope` flag, and when it is true the answer becomes the refusal. Check HC4 also runs
     on every sentence. Both happen in the same call, so there is no extra cost, and the flag can only add a refusal.
   - **Alternative:** a separate, second model call that classifies the question before the answer is written. It is a stronger separation, but

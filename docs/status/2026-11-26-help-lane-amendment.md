@@ -12,5 +12,10 @@ reuses the clinical lane's model port, budgets, switch, trace and receipt, and e
 - the evaluation set (questions that must be refused, answerable questions with seeded wrong answers, and injected instructions in
   questions and articles) runs in `verify` whenever the help lane or the articles change.
 
-Open for the founder: HL-D1 (what a failed check does), HL-D2 (counsel before real use) and HL-D3 (the model's own refusal check). Spec
-only: no code, route, setting, migration or Terraform change.
+The founder decided on 2026-11-26, as recommended:
+- any failed check withholds the whole model answer (HL-D1);
+- one question to counsel covers both lanes before real use (HL-D2);
+- the model's own refusal check is an `outOfScope` flag in the same call, with HC4 on every sentence (HL-D3).
+
+Spec 053 is amended to match: section 3's failure rule and label, and the C2 row. Spec only: no code, route, setting, migration or Terraform
+change.
