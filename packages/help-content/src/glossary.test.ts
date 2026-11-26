@@ -34,7 +34,9 @@ describe('the glossary file', () => {
       'held',
       'no-guideline-loaded',
       'no-recommendation',
+      'not-tested',
       'phenoconversion',
+      'cpic',
     ]) {
       expect(ids).toContain(id);
     }
