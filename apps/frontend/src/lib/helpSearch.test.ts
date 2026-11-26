@@ -56,8 +56,10 @@ describe('the articles for this screen and these roles', () => {
     expect(reader).not.toContain('attach-a-report');
     const clinician = articlesFor(HELP_EN.articles, 'worklist', ['clinician']).map((item) => item.id);
     expect(clinician).toEqual(expect.arrayContaining(['held-results', 'follow-ups', 'attach-a-report']));
-    // An administrator sees what is for everyone, and nothing clinical.
-    expect(articlesFor(HELP_EN.articles, 'usage', ['admin']).every((item) => item.roles === 'all')).toBe(true);
+    // An administrator sees what is for everyone and what is for administrators alone, and nothing clinical.
+    const admin = articlesFor(HELP_EN.articles, 'usage', ['admin']);
+    expect(admin.every((item) => item.roles === 'all' || (item.roles.length === 1 && item.roles[0] === 'admin'))).toBe(true);
+    expect(admin.map((item) => item.id)).toContain('the-usage-page');
   });
 });
 
@@ -108,6 +110,9 @@ describe('searching', () => {
     expect(ids(searchHelp('how do I add a patient', HELP_EN.articles, GLOSSARY_EN, 'patients', ['clinician']))[0]).toBe('find-or-add-a-patient');
     expect(ids(searchHelp('what does phenotype mean', HELP_EN.articles, GLOSSARY_EN, 'patient', ['reader']))).toContain('word:phenotype');
     expect(ids(searchHelp('how do I check a drug before prescribing', HELP_EN.articles, GLOSSARY_EN, 'patient', ['clinician']))[0]).toBe('checking-a-drug');
+    expect(ids(searchHelp('how do I change the theme', HELP_EN.articles, GLOSSARY_EN, 'settings', ['reader']))[0]).toBe('your-settings');
+    expect(ids(searchHelp('what does the usage page count', HELP_EN.articles, GLOSSARY_EN, 'usage', ['admin']))[0]).toBe('the-usage-page');
+    expect(ids(searchHelp('what does the usage page count', HELP_EN.articles, GLOSSARY_EN, 'usage', ['reader']))).not.toContain('the-usage-page');
   });
 });
 

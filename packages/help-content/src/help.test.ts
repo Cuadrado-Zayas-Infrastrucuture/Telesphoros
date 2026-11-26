@@ -36,6 +36,8 @@ describe('the English help', () => {
       'synthetic-data-only',
       'words-used-here',
       'policies',
+      'your-settings',
+      'the-usage-page',
     ]) {
       expect(ids).toContain(id);
     }
