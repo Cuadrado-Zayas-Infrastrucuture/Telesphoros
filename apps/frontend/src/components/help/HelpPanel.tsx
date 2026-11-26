@@ -74,11 +74,7 @@ export function HelpPanel({ open, onClose, pathname, roles }: { open: boolean; o
               <h3 id="help-list-heading" className="font-medium">
                 {HELP_WORDS.forThisPage}
               </h3>
-              {forThisPage.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{HELP_WORDS.nothingForThisPage}</p>
-              ) : (
-                <HelpHitList hits={forThisPage} onOpen={openHit} />
-              )}
+              {forThisPage.length === 0 ? <p className="text-sm text-muted-foreground">{HELP_WORDS.nothingForThisPage}</p> : <HelpHitList hits={forThisPage} onOpen={openHit} />}
             </section>
           </div>
         ) : (
