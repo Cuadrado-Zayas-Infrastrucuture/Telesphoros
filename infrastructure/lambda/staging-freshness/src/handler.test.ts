@@ -196,7 +196,7 @@ describe('Terraform inputs', () => {
 
   it('are what the real source filters the GitHub file list by', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
-    expect(index).toMatch(/files: all\.map\(\(f\) => f\.filename\)\.filter\(isTerraformInput\)/);
+    expect(index).toMatch(/files: changed\.files\.filter\(isTerraformInput\)/);
   });
 
   it('count what an apply reads and leave out tests, docs and examples', () => {

@@ -24,6 +24,10 @@ The newest migration is not read directly. `/api/v1/ready` answers 200 only when
 `main` has a newer migration than the image is what `image-behind-main` and `terraform-unapplied` surface, and `staging-status.sh` compares it
 in git.
 
+Which files changed after the applied commit comes from both commits' full file trees on GitHub, not from its compare: a compare lists
+300 changed files at most for the whole comparison, so on 2026-11-25 a release 347 files behind `main` left the check incomplete. A tree
+holds up to 100,000 entries (the repository has about 3,500); one GitHub cuts short still makes the run incomplete, never clean.
+
 ## When it cannot tell you
 
 | Failure | What reaches you |
