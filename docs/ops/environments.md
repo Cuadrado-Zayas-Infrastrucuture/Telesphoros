@@ -65,11 +65,13 @@ resource. On 2026-11-25 the release of `main` `78bc3f94` (#481, the newest commi
 frontend, docs and tests only) migrated through 0077 (#437: follow-up closure acknowledgements, 0076; #451: the patient access review, 0077) and
 put the API on revision 25 and the worker on 20. Its 22 clinical files since `5fe8fdbd` went out under the staging exception, without Kevin's signed
 review ([clinical-reviews](clinical-reviews/78bc3f9478581080ae2c22c844e3ff6493b316ec.json), spec 048). Its Terraform inputs, #436, #438 and #458 (the
-knowledge signers), went out with that release's plans and changed no resource. Its frontend is not published yet: `frontend.sh` waits for a passing
-`verify.sh`, which waits for the freshness check, which could not finish on 2026-11-25 because `main` was 347 files past `5fe8fdbd` (its compare stops at
-300). No CI job holds cloud credentials or applies anything.
+knowledge signers), went out with that release's plans and changed no resource. Its frontend waited for the freshness check, which could not finish on
+2026-11-25 because `main` was 347 files past `5fe8fdbd` (its compare stopped at 300); once #495 named `78bc3f94` here, the check completed and the
+frontend was published on 2026-11-26. Later on 2026-11-26 an `INFRA` apply of `main` `aa06f9a0` (#500: the freshness check diffs both commits' file
+trees instead of reading GitHub's compare) changed one resource, the freshness Lambda; a run by hand right after it completed with no refused read.
+No CI job holds cloud credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `78bc3f94` (the 2026-11-25 `IMAGE` apply): anything merged after it that an apply reads (`infrastructure/terraform/` and `infrastructure/lambda/`, less tests,
+The last apply read the backend clone at, and so applied from `main` `aa06f9a0` (the 2026-11-26 `INFRA` apply): anything merged after it that an apply reads (`infrastructure/terraform/` and `infrastructure/lambda/`, less tests,
 docs and examples: [terraform-inputs.json](../../scripts/staging/terraform-inputs.json)) is not applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
@@ -81,7 +83,7 @@ both in the same pull request.
 | Issuer | **No service runs.** Its roles exist; its log alarms were removed on 2026-10-31 (#210), since only the issuer's own logs could raise them. Tenant binding is still `dual` (the database accepts the tenant the API sets) | The issuer service, and capability-only binding before real data |
 | Synthetic assessment | **On** since 2026-11-05 (spec 032 S3): the API evaluates a reviewed structured report against the synthetic knowledge baked into the image (`/app/synthetic-knowledge`) and the frontend is built with the assessment controls. `ASSESSMENT-OFF` is the kill switch: the routes answer 503 again and stored evaluations stay stored (rehearsed off and on 2026-11-06). The two-person check SC-001 has not been run on staging yet | None: `synthetic_assessment_enabled` is accepted only by the synthetic profile |
 | Lab-report pipeline and queued evaluation | **Off.** `NODE_ENV=production` refuses `LAB_REPORT_PIPELINE` and `EVALUATION_REQUESTS` (`apps/backend/src/config/env.ts`), so those routes answer 503 | |
-| Frontend | S3 and CloudFront for `app.staging`, `www.staging` and `staging.telesphoros.app`. `index.html` was last published 2026-11-21 17:57 UTC from commit `5fe8fdbd`, built with the synthetic assessment controls ([frontend-publish.md](frontend-publish.md)). The hashed build output (`/assets/*`) is cached and compressed at the edge (managed CachingOptimized policy). The production build accepts structured JSON reports only | |
+| Frontend | S3 and CloudFront for `app.staging`, `www.staging` and `staging.telesphoros.app`. `index.html` was last published 2026-11-26 14:44 UTC from commit `78bc3f94`, built with the synthetic assessment controls ([frontend-publish.md](frontend-publish.md)). The hashed build output (`/assets/*`) is cached and compressed at the edge (managed CachingOptimized policy). The production build accepts structured JSON reports only | |
 | Database | RDS PostgreSQL 16.13, `db.t4g.micro`, one Availability Zone, automated backups kept 1 day. Migrated through 0077; manual snapshots `telesphoros-staging-pre-c0cbb367`, `telesphoros-staging-pre-e0ef8c3f` and `telesphoros-staging-pre-78bc3f94` were taken before 0074, 0075 and 0076 (each release keeps the newest three, as `migrate.sh` does; the 2026-11-25 release deleted `telesphoros-staging-pre-859e964a`) | Multi-AZ, deletion protection, at least 7 days of backups, a copy in a second Region (`database.tf` preconditions) |
 | Sign-in | Cognito user pool `telesphoros-staging` (invite only, authenticator-app MFA required); mail through SES | |
 | Report files | Versioned S3 bucket with Object Lock in **GOVERNANCE** mode, 1-day default retention, no replication | Object Lock stays **GOVERNANCE**, for at least six years (`reports_lock_days` ≥ 2190, founder decision 2026-10-19, `storage.tf`); only the audit bucket must be COMPLIANCE (`profile.tf` precondition) |
