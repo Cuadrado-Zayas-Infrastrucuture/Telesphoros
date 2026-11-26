@@ -8,7 +8,7 @@ import { ScreenLanguageContext, screenLanguage, TRANSLATED_SCREENS, type Screen 
  * page's `<html lang>`, which is the app's), so a screen reader pronounces an untranslated screen as English while the app is in Spanish.
  *
  * It adds no element: the provider stays where it is whatever the language, so a change of screen or language never remounts what is below it (the
- * signed-in frame keeps the chat in memory across pages).
+ * signed-in frame keeps its sidebar and what it holds across pages).
  */
 export function ScreenLanguage({
   screen,
