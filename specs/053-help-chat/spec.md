@@ -2,7 +2,8 @@
 
 **Created**: 2026-11-26
 
-**Status**: **Specification only, waiting for the founder's decisions (section 7).** No code, route, setting, migration or Terraform change.
+**Status**: **Decided by the founder on 2026-11-26: HC-D1, HC-D3, HC-D4, HC-D5 and HC-D6 as recommended; HC-D2 as a principle (section
+7), which also adds section 4a.** Specification only: no code, route, setting, migration or Terraform change.
 
 **Input**: The founder, 2026-11-26: "I saw that chat was completely eliminated, I think it would be good if that same chat could be used for user
 assistance." Asked where and how, the founder chose:
@@ -61,6 +62,34 @@ answer; it is an added way of saying the same reviewed content.
 - **The model path is dormant** until the founder turns it on (spec 003 story 7): a server switch, off by default, with a rehearsed kill
   switch like `ASSESSMENT-OFF`.
 
+## 4a. The model is a plug-in (HC-D2, the founder's principle)
+
+The founder, 2026-11-26: "we need to build in such a way that we own the data, the workflows, business logic and protect our IP while
+having the flexibility of understanding our customers. So a model is more of a plug in that can work right rather than a dependency that's
+hard to replace for an open weight when we have the resources."
+
+What that means for every slice:
+- **What stays ours, in this repository:**
+  - the help corpus;
+  - the prompt;
+  - the refusal rule;
+  - the citation check;
+  - the fallback;
+  - the evaluation set;
+  - the topic counts.
+
+  No business logic lives in a provider's product. That rules out a hosted knowledge base, a hosted agent, the provider's own guardrails
+  as the only guard, and fine-tuning that only one provider can run.
+- **One narrow interface in `apps/ai-service`:** text in, text out, with a token budget. A provider is an adapter behind it, chosen by
+  configuration. Swapping to a self-hosted open-weight model is a new adapter and a configuration change, nothing else.
+- **The evaluation set is the contract.** Any provider, first or replacement, ships only when it passes the same required check (R3). The
+  set and its results are ours, so changing providers is measured, not guessed.
+- **Nothing is sent that the corpus does not already contain,** apart from the question itself (section 3), and nothing comes back
+  stored. A provider never holds the product's data.
+- **The first provider is picked in C4, and must keep the `phi` boundary (HC-D1).** A managed model inside the existing AWS account
+  (Bedrock) is one that fits. A self-hosted open-weight model is the planned alternative once there are resources for it. Either is an
+  adapter.
+
 ## 5. Gates before any model answer reaches a person (direction plan section 6)
 
 | Gate | Met when |
@@ -78,7 +107,7 @@ answer; it is an added way of saying the same reviewed content.
 | Slice | What | Touches | Waits for |
 | --- | --- | --- | --- |
 | **C1** | The Help drawer as a conversation over today's engine: the person's message, Help's answer (the best article's text and links, or the refusal, or "no good match" with the closest three), Enter to send, a scrolling history cleared on close. Unit and browser tests; the existing Help tests carried over | `apps/frontend` | Nothing |
-| **C2** | The model path in `apps/ai-service`, dormant: the corpus-only request, the citation check, the fallback, the label, the evaluation set as a required check. No host; a fake model in tests | `apps/ai-service`, CI | C1, HC-D3, HC-D5, spec 003 approved or amended for the help lane |
+| **C2** | The model path in `apps/ai-service`, dormant: the provider-neutral interface (section 4a), the corpus-only request, the citation check, the fallback, the label, the evaluation set as a required check. No host; a fake model adapter in tests | `apps/ai-service`, CI | C1, HC-D3, HC-D5, spec 003 approved or amended for the help lane |
 | **C3** | One backend route that sends the question to the ai-service and returns the answer or the fallback, behind the switch, off everywhere | `apps/backend` | C2, HC-D1 |
 | **C4** | The host: the chosen model, budgets, kill switch, applied by the founder | Terraform, `docs/ops` | C3, HC-D2, the BAA if HC-D1 is `phi` and real use is wanted |
 
@@ -86,28 +115,29 @@ Each slice gets its own plan and PR, as before.
 
 ## 7. Decisions for the founder
 
-- **HC-D1 (F1). The data class of what people type.**
+- **HC-D1 (F1). The data class of what people type.** **Decided 2026-11-26: as recommended (`phi`).**
   - **Recommended:** `phi`. The model runs only inside the platform's boundary, and real use waits for the AWS BAA. Until then, staging
     is synthetic only, as it is today.
   - **Alternative:** `no-phi`, with a pre-check that refuses text that looks like patient information. The pre-check cannot be complete,
     and R1 says "when unsure, `phi`".
-- **HC-D2 (AG-D7). Where the model runs.**
+- **HC-D2 (AG-D7). Where the model runs.** **Decided 2026-11-26 as a principle, not a vendor: the model is a replaceable plug-in, and the
+  data, workflows, business logic and IP stay ours (section 4a). The first provider is picked in C4 within that rule.**
   - **Recommended:** Amazon Bedrock in the existing AWS account and region. It stays inside the boundary that `phi` needs, and no servers
     run for it. The model and budgets are set in C4.
   - **Alternative:** a self-hosted open-weight model. This means more control and more work: servers, scaling and updates.
-- **HC-D3. Which languages the model answers in first.**
+- **HC-D3. Which languages the model answers in first.** **Decided 2026-11-26: as recommended (English first).**
   - **Recommended:** English first. The Spanish articles do not exist yet (spec 050), and the evaluation needs a set in each language
     offered.
   - **Alternative:** both languages, after the Spanish articles exist.
-- **HC-D4. Draft articles.**
+- **HC-D4. Draft articles.** **Decided 2026-11-26: as recommended (signed articles only).**
   - **Recommended:** the model answers only from signed articles. C1 keeps quoting drafts with their draft line, as Help does now.
   - **Alternative:** it answers from drafts too, labelled as drafts. This is faster to try, but the model would be rephrasing unreviewed text.
-- **HC-D5. How strict the citation check is.**
+- **HC-D5. How strict the citation check is.** **Decided 2026-11-26: as recommended (the mechanical rule).**
   - **Recommended:** every sentence must cite a passage, and the words that carry the meaning (feature names, statuses, roles, numbers)
     must appear in that passage. It is simple, mechanical and testable. Anything looser needs a second model as a judge, which R2 says
     cannot be the only guard.
   - **Alternative:** a judge model scores support, with the mechanical rule kept as the floor.
-- **HC-D6. Spec 003.** Spec 003 is the harness for a model that explains engine results (the clinical lane). It is still a draft.
+- **HC-D6. Spec 003.** **Decided 2026-11-26: as recommended (amend spec 003 with a help lane).** Spec 003 is the harness for a model that explains engine results (the clinical lane). It is still a draft.
   - **Recommended:** amend spec 003 with a help lane that reuses its harness parts (budgets, switch, evaluation gate) without the
     clinical evidence rules. Approve that before C2.
   - **Alternative:** a separate, smaller harness spec for help only.
