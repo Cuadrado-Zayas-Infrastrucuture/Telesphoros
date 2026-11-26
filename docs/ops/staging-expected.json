@@ -1,6 +1,6 @@
 {
-  "checked": "2026-11-25",
-  "appliedCommit": "78bc3f9478581080ae2c22c844e3ff6493b316ec",
+  "checked": "2026-11-26",
+  "appliedCommit": "aa06f9a0052acc22aa23e6b75a075f39219e8763",
   "image": {
     "digest": "sha256:ed80eaa88982a221fbbebd58bd044d721bafb39a61e8393cf455f9633db28ff9",
     "commit": "78bc3f9478581080ae2c22c844e3ff6493b316ec"
