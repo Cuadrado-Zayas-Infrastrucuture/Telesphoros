@@ -24,7 +24,7 @@ async function ask(page: Page, name: string) {
 }
 test('branded synthetic explanation supports keyboard, recovery, stop, reset and no requests', async ({ page }, info) => {
   await signInAs(page, 'alice', '/local-interpretation');
-  await expect(page.getByRole('heading', { name: 'Chat workspace' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI preview' })).toBeVisible();
   await page.emulateMedia({ reducedMotion: 'reduce' }); await accessible(page);
   const requests: string[] = [];
   page.on('request', request => { if (['fetch', 'xhr', 'websocket', 'eventsource'].includes(request.resourceType())) requests.push(new URL(request.url()).pathname); });

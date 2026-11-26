@@ -107,7 +107,7 @@ export function SyntheticAssistant({ embedded = false, workspace = false }: { em
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 max-w-full flex-1 wrap-anywhere">
             {!workspace && <p className="mb-1 text-xs font-semibold text-muted-foreground">REPORTS / DESIGN PREVIEW</p>}
-            <h1 className="text-3xl tracking-tight">{workspace ? 'Chat workspace' : 'PGx interpretation workspace'}</h1>
+            <h1 className="text-3xl tracking-tight">{workspace ? 'AI preview' : 'PGx interpretation workspace'}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{workspace ? 'Bundled example · No patient linked' : 'Evidence in view. Explanations with context.'}</p>
           </div>
           {workspace ? (
