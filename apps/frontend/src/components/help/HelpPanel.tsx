@@ -6,7 +6,8 @@ import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { answerFor, answerForHit, type HelpAnswer as Answer } from '@/lib/helpConversation';
 import { articlesFor, helpScreenOf, type HelpHit } from '@/lib/helpSearch';
 import { HELP_WORDS } from '@/lib/helpWords';
-import { HelpAnswer, HelpHitList } from './HelpAnswer';
+import { HelpAnswer } from './HelpAnswer';
+import { HelpHitList } from './HelpHitList';
 
 const CORPUS = { articles: HELP_EN.articles, glossary: GLOSSARY_EN };
 /** The exchanges kept on screen while the drawer is open; the oldest goes first (plan C1-D2). */
