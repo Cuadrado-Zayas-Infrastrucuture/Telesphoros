@@ -6,4 +6,5 @@ Date: 2026-11-26
 asks, presses Enter, and Help answers with the best article quoted whole, the refusal for a question about a patient, or the closest three.
 No model, route or setting; frontend only. Nothing typed is sent or stored, and the conversation is cleared when the drawer closes.
 
-Open for the founder: C1-D1 (what a suggestion button does) and C1-D2 (how many exchanges are kept). Plan only: no code or test change.
+The founder decided on 2026-11-26, as recommended: a suggestion button adds that article's answer to the conversation (C1-D1), and the
+last 20 exchanges are kept (C1-D2). Plan only: no code or test change.

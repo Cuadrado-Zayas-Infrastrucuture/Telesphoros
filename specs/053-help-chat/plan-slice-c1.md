@@ -1,6 +1,6 @@
 # Plan: spec 053, slice C1, the Help drawer as a conversation
 
-**Status**: **a draft for the founder: C1-D1 and C1-D2 are open (section 6).** Plan only: no code or test changes. Read against `main` at
+**Status**: **approved by the founder on 2026-11-26: C1-D1 and C1-D2 as recommended (section 6).** Plan only: no code or test changes. Read against `main` at
 `305548a3`, after #501 (spec 053). The code goes in the pull request after the one that merges this plan.
 
 C1 turns the Help drawer into a chat over the engine Help has today: the reviewed articles and the glossary, matched with no model (spec
@@ -38,7 +38,7 @@ The drawer keeps its title, its place and how it opens and closes. Inside it:
    | The match is weak, or nothing matches | "No article answers that exactly. These are the closest:" and the three closest, as buttons (this page's first three when nothing matches at all, as now) |
 
 4. **A suggestion button** (For this page, Also in Help, or the closest three) adds Help's answer for that article to the conversation,
-   as C1-D1 decides.
+   with no "You" message above it (C1-D1).
 5. **The conversation scrolls**; the newest answer is brought into view. It is kept while the drawer is open, and **cleared when the
    drawer closes** (spec 053 section 1). The panel stays mounted after its first opening, so closing must empty it in code; reloading the
    tab empties it anyway.
@@ -118,12 +118,12 @@ reported in "How it was verified", then reverted.
 
 ## 6. Decisions for the founder
 
-- **C1-D1. What a suggestion button does.**
+- **C1-D1. What a suggestion button does.** **Decided 2026-11-26: as recommended.**
   - **Recommended:** it adds Help's answer for that article to the conversation, with no "You" message above it, because the person did
     not type anything. Everything stays in one place, and the conversation shows what was read.
   - **Alternative:** it opens the article over the conversation, with **Back to the conversation**, as the article view does now. This is
     closer to today, but it puts two ways of reading in one drawer.
-- **C1-D2. How much of the conversation is kept while the drawer is open.**
+- **C1-D2. How much of the conversation is kept while the drawer is open.** **Decided 2026-11-26: as recommended (the last 20).**
   - **Recommended:** the last 20 exchanges, with the line "Earlier messages are removed after 20." This keeps the drawer quick on a phone,
     and 20 is more than a person asks in one sitting.
   - **Alternative:** no limit until the drawer closes.
