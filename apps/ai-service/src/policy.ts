@@ -42,3 +42,22 @@ export function readiness(conditions: Partial<Record<ReadinessKey, boolean>>): {
   const missing = READINESS_KEYS.filter((k) => conditions[k] !== true);
   return missing.length === 0 ? { ready: true } : { ready: false, reasonCode: 'NOT_READY', missing };
 }
+
+/** The help lane's live path (help-lane.md FR-H11): closed in code, like `liveReadiness`. Nothing can open it until slice C4. */
+export const helpLiveReadiness = () => ({ ready: false as const, reasonCode: 'MODEL_EXECUTION_DISABLED' as const });
+/** The help lane's readiness conditions (help-lane.md section 6, HL-D2). The caller states them; only the boolean `true` counts. */
+export const HELP_READINESS_KEYS = [
+  'baaExecuted',
+  'founderFlagSet',
+  'thresholdsMet',
+  'shadowReviewPassed',
+  'monitorLive',
+  'rollbackRehearsed',
+  'howHelpAnswersArticleSigned',
+  'counselViewRecorded',
+] as const;
+export type HelpReadinessKey = (typeof HELP_READINESS_KEYS)[number];
+export function helpReadiness(conditions: Partial<Record<HelpReadinessKey, boolean>>): { ready: true } | { ready: false; reasonCode: 'NOT_READY'; missing: HelpReadinessKey[] } {
+  const missing = HELP_READINESS_KEYS.filter((k) => conditions[k] !== true);
+  return missing.length === 0 ? { ready: true } : { ready: false, reasonCode: 'NOT_READY', missing };
+}

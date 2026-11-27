@@ -3,7 +3,9 @@ import { describe, expect, test } from 'vitest';
 import { RESULTS } from '../evals/golden/results';
 import { runExplanation } from '../src/explain';
 import { EXPLAIN_TASK } from '../src/explain-contracts';
-import { GUARDS, PHI_TEMPLATE_FIELDS, taskProblems, TASKS, type TaskDeclaration } from '../src/tasks';
+import { GUARDS, HELP_CHECKS_REQUIRED, PHI_TEMPLATE_FIELDS, taskProblems, TASKS, type TaskDeclaration } from '../src/tasks';
+import { HELP_TASK } from '../src/help/contracts';
+import { HELP_TEMPLATE_V1 } from '../src/help/prompt-v1';
 import { TEMPLATE_V1 } from '../src/prompts/explain-v1';
 import { explainScenario } from './helpers/explain-adapters';
 import { exportsOf, guardsWithoutCaller, mentions, srcFiles } from './helpers/guard-callers';
@@ -65,4 +67,34 @@ describe('R2: every output guard has a production caller', () => {
     expect(mentions('explain.ts', files['explain.ts'], 'checkVerifierReply')).toBe(true);
   });
   test('the registry names the result fields only as data (sanity: RESULTS is a valid explainable input)', () => expect(Object.keys(RESULTS.avoid)).toContain('genes'));
+});
+
+// Spec 053 slice C2b, help-lane.md section 1: the help task is declared beside the clinical one, with its own checks.
+const help = TASKS[HELP_TASK];
+const withHelp = (patch: Partial<TaskDeclaration>) => ({ [HELP_TASK]: { ...help, ...patch } });
+describe('the help task (help-lane.md FR-H8)', () => {
+  test('is phi, needs a BAA provider, and its prompt fields are its template placeholders', () => {
+    expect(help).toMatchObject({ dataClass: 'phi', provider: 'baa-required', output: 'free-text' });
+    expect([...HELP_TEMPLATE_V1.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort()).toEqual([...help.promptFields].sort());
+  });
+  test('the typed question is a phi field, so a no-phi help task is reported', () => {
+    expect(PHI_TEMPLATE_FIELDS).toContain('question');
+    expect(taskProblems(withHelp({ dataClass: 'no-phi' }))).toContain(`${HELP_TASK}: R1_CLASS_DISAGREES`);
+  });
+  test('lists its own checks, and none of the clinical sensors or the verifier', () => {
+    expect([...help.checks]).toEqual([...HELP_CHECKS_REQUIRED]);
+    expect(help.checks.some((c) => c.startsWith('S') || c === 'VERIFIER')).toBe(false);
+  });
+  test('a help task missing a check is reported', () => {
+    expect(taskProblems(withHelp({ checks: help.checks.filter((c) => c !== 'HC3') }))).toContain(`${HELP_TASK}: R4_CHECKS_DISAGREE`);
+    expect(taskProblems(withHelp({ checks: help.checks.filter((c) => c !== 'OUT_OF_SCOPE') }))).toContain(`${HELP_TASK}: R4_CHECKS_DISAGREE`);
+  });
+  test('a free-text task the registry does not know must list the clinical set, the strictest', () =>
+    expect(taskProblems({ 'unknown.task': { ...help } })).toContain('unknown.task: R4_CHECKS_DISAGREE'));
+  test('broken on purpose: without help/answer.ts the help checks have no caller (R2)', () => {
+    const files = srcFiles(root);
+    expect(guardsWithoutCaller(files, GUARDS)).toEqual([]);
+    const rest = Object.fromEntries(Object.entries(files).filter(([k]) => k !== 'help/answer.ts'));
+    expect(guardsWithoutCaller(rest, GUARDS)).toEqual(expect.arrayContaining(['HC1', 'HC6', 'OUT_OF_SCOPE']));
+  });
 });

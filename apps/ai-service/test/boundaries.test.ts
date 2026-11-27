@@ -14,13 +14,17 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 // `dir` is the importing file's directory below src ('' for src itself). Subdirectories are scanned too, so new folders get the same rules.
 const insideSrc = (name: string, dir: string) =>
   name.startsWith('.') && !posix.normalize(posix.join(dir, name)).startsWith('..') && /^[a-z0-9-]+(\/[a-z0-9-]+)*$/.test(posix.normalize(posix.join(dir, name)));
+// The help lane (spec 053 C2b) may read Help's engine and articles, and the bundled drug list for its HC4 check: pure data and functions with no
+// network, file or provider access. Only files in src/help may import them, and nothing else from outside src is allowed anywhere.
+const HELP_LANE_PACKAGES = ['@telesphoros/help-content', '@telesphoros/shared-types/drug-list-data'];
+const helpLaneImport = (name: string, dir: string) => (dir === 'help' || dir.startsWith('help/')) && HELP_LANE_PACKAGES.includes(name);
 function sourceAllowed(source: string, dir = ''): boolean {
   const f = ts.createSourceFile('boundary.ts', source, ts.ScriptTarget.Latest, true);
   let allowed = true;
   function visit(n: ts.Node) {
     if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) {
       const name = n.moduleSpecifier.text;
-      if (!(name === 'zod' || name === 'node:crypto' || insideSrc(name, dir))) allowed = false;
+      if (!(name === 'zod' || name === 'node:crypto' || insideSrc(name, dir) || helpLaneImport(name, dir))) allowed = false;
     }
     if (ts.isIdentifier(n) && ['process', 'fetch', 'WebSocket', 'XMLHttpRequest', 'eval', 'Function', 'require'].includes(n.text)) allowed = false;
     if (n.kind === ts.SyntaxKind.ImportKeyword) allowed = false;
@@ -36,7 +40,7 @@ test('P1-26 refuses live models and harness disabled', () => {
 });
 test('P1-26 permits live models and harness disabled control', async () => {
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
-  expect(Object.keys(pkg.dependencies).sort()).toEqual(['@telesphoros/jobs', 'zod']);
+  expect(Object.keys(pkg.dependencies).sort()).toEqual(['@telesphoros/help-content', '@telesphoros/jobs', '@telesphoros/shared-types', 'zod']);
   expect(Object.keys(pkg.scripts).sort()).toEqual(['build', 'lint', 'prebuild', 'pretest', 'pretypecheck', 'test', 'test:durable:pg', 'typecheck']);
   const files = readdirSync(resolve(root, 'src'), { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.ts'));
   expect(files.some((f) => f.includes('/'))).toBe(true);
@@ -76,6 +80,13 @@ test('slice 1 subdirectories are scanned by the same rules (positive and negativ
   expect(sourceAllowed("import { x } from '../../evals/run';", 'evaluators')).toBe(false);
   expect(sourceAllowed("import { x } from './file.ts';", 'evaluators')).toBe(false);
   expect(sourceAllowed("import pg from 'pg';", 'prompts')).toBe(false);
+  // The help lane's two packages: allowed in src/help only, and the shared-types index never.
+  expect(sourceAllowed("import { answerFor } from '@telesphoros/help-content';", 'help')).toBe(true);
+  expect(sourceAllowed("import { BUNDLED_DRUG_LIST } from '@telesphoros/shared-types/drug-list-data';", 'help')).toBe(true);
+  expect(sourceAllowed("import { answerFor } from '@telesphoros/help-content';", '')).toBe(false);
+  expect(sourceAllowed("import { answerFor } from '@telesphoros/help-content';", 'evaluators')).toBe(false);
+  expect(sourceAllowed("import { ROLES } from '@telesphoros/shared-types';", 'help')).toBe(false);
+  expect(sourceAllowed("import x from 'helpers';", 'help')).toBe(false);
   expect(sourceAllowed("const x = fetch('https://example.invalid');", 'model-clients')).toBe(false);
 });
 test('the dormant harness is not exported from the package entry', () => {

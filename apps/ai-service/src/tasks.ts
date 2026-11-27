@@ -1,4 +1,6 @@
 import { EXPLAIN_TASK } from './explain-contracts';
+import { HELP_TASK } from './help/contracts';
+import { HELP_TEMPLATE_V1 } from './help/prompt-v1';
 import { TEMPLATE_V1 } from './prompts/explain-v1';
 
 export type DataClass = 'phi' | 'no-phi';
@@ -12,8 +14,11 @@ export interface TaskDeclaration {
   promptFields: readonly string[];
   provider: 'baa-required' | 'any';
 }
-/** Prompt fields that carry one person's genotype or phenotype: health information about an individual, so the task is `phi` (R1). */
-export const PHI_TEMPLATE_FIELDS = ['genes'] as const;
+/**
+ * Prompt fields that can carry health information about an individual, so the task is `phi` (R1): one person's genotype or phenotype, and
+ * the text a person types, which may hold anything (help lane, HC-D1).
+ */
+export const PHI_TEMPLATE_FIELDS = ['genes', 'question'] as const;
 
 /** Each guard and the entry point a production file must call. The sensors are reached through runSensors, the verifier through checkVerifierReply. */
 export const GUARDS: Readonly<Record<string, { symbol: string; module: string }>> = {
@@ -24,9 +29,21 @@ export const GUARDS: Readonly<Record<string, { symbol: string; module: string }>
   S5: { symbol: 'runSensors', module: 'evaluators/sensors.ts' },
   S6: { symbol: 'runSensors', module: 'evaluators/sensors.ts' },
   VERIFIER: { symbol: 'checkVerifierReply', module: 'evaluators/verifier.ts' },
+  // The help lane (help-lane.md FR-H3, FR-H5): its checks are reached through runHelpChecks, the model's own refusal through isOutOfScope.
+  HC1: { symbol: 'runHelpChecks', module: 'help/checks.ts' },
+  HC2: { symbol: 'runHelpChecks', module: 'help/checks.ts' },
+  HC3: { symbol: 'runHelpChecks', module: 'help/checks.ts' },
+  HC4: { symbol: 'runHelpChecks', module: 'help/checks.ts' },
+  HC5: { symbol: 'runHelpChecks', module: 'help/checks.ts' },
+  HC6: { symbol: 'runHelpChecks', module: 'help/checks.ts' },
+  OUT_OF_SCOPE: { symbol: 'isOutOfScope', module: 'help/checks.ts' },
 };
 export const FREE_TEXT_CHECKS: readonly string[] = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'VERIFIER'];
-const TEMPLATES: Readonly<Record<string, string>> = { [EXPLAIN_TASK]: TEMPLATE_V1 };
+/** The help lane's full set of checks (help-lane.md section 1): its own, not the clinical sensors, and no verifier (HC-D5). */
+export const HELP_CHECKS_REQUIRED: readonly string[] = ['HC1', 'HC2', 'HC3', 'HC4', 'HC5', 'HC6', 'OUT_OF_SCOPE'];
+/** The full set each free-text task must list. A task not named here must list the clinical set, the strictest. */
+const REQUIRED_CHECKS: Readonly<Record<string, readonly string[]>> = { [EXPLAIN_TASK]: FREE_TEXT_CHECKS, [HELP_TASK]: HELP_CHECKS_REQUIRED };
+const TEMPLATES: Readonly<Record<string, string>> = { [EXPLAIN_TASK]: TEMPLATE_V1, [HELP_TASK]: HELP_TEMPLATE_V1 };
 
 export const TASKS: Readonly<Record<string, TaskDeclaration>> = {
   [EXPLAIN_TASK]: {
@@ -35,6 +52,13 @@ export const TASKS: Readonly<Record<string, TaskDeclaration>> = {
     checks: FREE_TEXT_CHECKS,
     provider: 'baa-required',
     promptFields: ['drug', 'strength', 'genes', 'guidelineId', 'guidelineVersion', 'locator', 'recommendationText', 'implication'],
+  },
+  [HELP_TASK]: {
+    dataClass: 'phi',
+    output: 'free-text',
+    checks: HELP_CHECKS_REQUIRED,
+    provider: 'baa-required',
+    promptFields: ['screen', 'roles', 'articles', 'question'],
   },
 };
 
@@ -61,7 +85,7 @@ export function taskProblems(registry: Readonly<Record<string, Partial<TaskDecla
     const checks = t.checks ?? [];
     if (t.output === 'free-text') {
       if (checks.length === 0) say('R4_NO_CHECKS');
-      else if (FREE_TEXT_CHECKS.some((c) => !checks.includes(c))) say('R4_CHECKS_DISAGREE');
+      else if ((REQUIRED_CHECKS[key] ?? FREE_TEXT_CHECKS).some((c) => !checks.includes(c))) say('R4_CHECKS_DISAGREE');
     }
     if (checks.some((c) => !Object.hasOwn(GUARDS, c))) say('R2_UNKNOWN_GUARD');
   }

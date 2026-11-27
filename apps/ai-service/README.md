@@ -12,6 +12,7 @@ It sits under `apps/` although it is not deployed. No other workspace package im
 | [`src/evaluators/`](src/evaluators) | Sensors and the verifier for outputs |
 | [`durable/`](durable) | PostgreSQL-backed run and receipt stores and a queue; tested by `test:durable:pg` |
 | [`evals/`](evals) | Golden cases, attack cases and the pinned evaluation runner |
+| [`src/help/`](src/help) | The help lane (spec 003 [help-lane.md](../../specs/003-llm-harness/help-lane.md), spec 053 C2b): `runHelpAnswer`, its prompt, checks HC1 to HC6 and the curated fallback. Dormant: not exported, and nothing calls it until C3 |
 
 **Run and test**
 

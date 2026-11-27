@@ -8,14 +8,14 @@ breakages were never done. This page and `scripts/breakages/` turn them into one
 
 ## What is here
 
-- `scripts/breakages/catalogue.json`: 72 entries. Each has the rule in plain words, the file, the exact text to find (it must
+- `scripts/breakages/catalogue.json`: 82 entries. Each has the rule in plain words, the file, the exact text to find (it must
   occur once), what to put in its place, the command that runs the guarding tests, and the test title expected to go red.
 - `scripts/breakages/run.mjs`: applies one entry at a time, runs its command, and always puts the file back. Before the first entry of
   each command it runs that command unbroken (the control); an entry only counts when its control was green.
 - `scripts/breakages/results.json`: written by the runner, never committed (it is in `.gitignore`).
 
 The entries come from: spec 045 slices N2, N3 and N4 (the phenoconversion notices); spec 044 slice B2; spec 049 W1 and W2 (the worklist
-home); spec 051 H1 and H2 and spec 053 C1 (Help); spec 040 slices B and C (patient search); and spec 052 RC1a and RC1b (retiring the chat). The `source`
+home); spec 051 H1 and H2 and spec 053 C1 and C2b (Help and its model lane); spec 040 slices B and C (patient search); and spec 052 RC1a and RC1b (retiring the chat). The `source`
 field of each entry names the plan section it came from; "designed" means the plan named the rule but not the breakage, so the
 breakage was written for it. RC1a entries marked "adapted" test the rule as it stands after RC1b removed the drawer.
 
@@ -114,6 +114,16 @@ Not run yet. The founder runs it in a sandbox job and fills in the last column.
 | C1-3 | C1 (spec 053) | frontend-unit | Only the last 20 exchanges are kept on screen (C1-D2). | |
 | C1-4 | C1 (spec 053) | frontend-unit | A chosen article joins the conversation with no message from the person, who typed nothing (C1-D1). | |
 | C1-5 | C1 (spec 053) | frontend-unit | A blank box sends nothing. | |
+| C2-1 | C2b (spec 053) | package-unit | HC1: a cited passage must be a byte-exact span of the cited article. | |
+| C2-2 | C2b (spec 053) | package-unit | HC2: a cited article must have been in the prompt. | |
+| C2-3 | C2b (spec 053) | package-unit | HC3: every meaning-carrying word of a sentence must be in its cited passage (HC-D5). | |
+| C2-4 | C2b (spec 053) | package-unit | HC4: an answer never names a drug from the bundled list. | |
+| C2-5 | C2b (spec 053) | package-unit | HC5: an answer never reassures. | |
+| C2-6 | C2b (spec 053) | package-unit | HC6: an answer has no markup or links. | |
+| C2-7 | C2b (spec 053) | package-unit | The refusal rule runs before the model: a refused question never reaches it. | |
+| C2-8 | C2b (spec 053) | package-unit | The model's out-of-scope flag becomes the refusal and never releases anything (HL-D3). | |
+| C2-9 | C2b (spec 053) | package-unit | Any failing check on any sentence withholds the whole model answer (HL-D1). | |
+| C2-10 | C2b (spec 053) | package-unit | Outside the evaluation, an article signed by a test signer counts as unsigned (C2-D1). | |
 | PSB-1 | Patient search B (spec 040) | frontend-unit | On any answer but a 200 the roster's scope sentence never claims that all patients were searched. | |
 | PSB-2 | Patient search B (spec 040) | frontend-unit | A failed search of the whole list keeps the loaded rows and their filter on screen (the fallback). | |
 | PSB-3 | Patient search B (spec 040) | frontend-unit | A search text outside the label alphabet is refused in the browser and never sent. | |

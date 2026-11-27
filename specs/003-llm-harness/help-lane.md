@@ -91,7 +91,7 @@ The screen links shown under the answer come from the cited articles' own `links
 | **HC1, passage exists** | The cited passage is not a byte-exact span of the cited article's body |
 | **HC2, article allowed** | The cited article was not in the prompt, is not signed, or is not visible to the person's roles |
 | **HC3, meaning carried** (HC-D5) | A meaning-carrying word of the sentence is not in its cited passage. Those words are: feature and screen names, status and outcome words, role names, glossary terms, article titles' key words, and every numeral. The list is built from the corpus itself, so a new article extends it, and it is tested |
-| **HC4, never about a patient** | The sentence would be refused by `isPatientQuestion`, or names a drug from the bundled drug list, a gene symbol, a star allele or an activity score |
+| **HC4, never about a patient** | The sentence names a patient label, a star allele, an activity score with its number, a gene symbol or a drug from the bundled drug list. *Amended 2026-11-27 (C2b):* the question-shaped part of `isPatientQuestion` (a patient word beside a clinical word) is not applied to answers, because the articles themselves say "on a patient's page, Check a drug before prescribing", which it would refuse. That rule has already run on the question, and HC6 holds a sentence addressed to "your patient" |
 | **HC5, never reassures** | The sentence matches the rule the articles already follow (`safe`, "no interaction", "not affected", `none`; `packages/help-content`'s test) |
 | **HC6, shape** | The answer is empty, too long, or breaks the schema; or a sentence addresses the reader about their patient or talks about the model or its instructions |
 
