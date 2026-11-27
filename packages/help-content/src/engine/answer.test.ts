@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GLOSSARY_EN, HELP_EN } from '@telesphoros/help-content';
-import { answerFor, answerForHit, MORE_HITS, type HelpAnswer } from './helpConversation';
-import { searchHelp, type HelpHit } from './helpSearch';
+import { GLOSSARY_EN } from '../glossary';
+import { HELP_EN } from '../help';
+import { answerFor, answerForHit, MORE_HITS, type HelpAnswer } from './answer';
+import { searchHelp, type HelpHit } from './search';
 
 // Spec 053 slice C1: Help's answer to one question. Hand-written expectations from spec 051 sections 4 and 5 and the C1 plan, section 2,
 // against the real draft articles. The engine is the real one, wrapped so a test can see whether it ran.
-vi.mock('./helpSearch', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./helpSearch')>();
+vi.mock('./search', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./search')>();
   return { ...actual, searchHelp: vi.fn(actual.searchHelp) };
 });
 
@@ -28,6 +29,10 @@ describe('a question about a patient', () => {
     // "patient" alone would find an article: the refusal must win before the search is even run.
     expect(answerFor('can my patient take clopidogrel', CORPUS, PATIENT, ['clinician'])).toEqual({ kind: 'refusal', patientLink: `${PATIENT}#patient-results` });
     expect(searchHelp).not.toHaveBeenCalled();
+  });
+
+  it('links to the results of the page in view, whatever slashes end its address', () => {
+    expect(answerFor('dose for SYN-0042', CORPUS, `${PATIENT}///`, ['clinician'])).toEqual({ kind: 'refusal', patientLink: `${PATIENT}#patient-results` });
   });
 
   it('is refused on any other page, without a link to a patient', () => {
