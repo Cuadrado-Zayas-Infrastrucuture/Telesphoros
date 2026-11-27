@@ -20,7 +20,12 @@ const reply = (text: string, passage = PASSAGE, articleId = 'held-results'): Hel
 
 const CORRECT = reply('A held result shows no guidance.');
 const WRONG: ReadonlyArray<{ kind: string; reply: HelpReply; check: HelpCheckId; code: string }> = [
-  { kind: 'passage not in the article', reply: reply('A held result shows no guidance.', 'A held result shows no guidance at all.'), check: 'HC1', code: 'HC1_PASSAGE_NOT_IN_ARTICLE' },
+  {
+    kind: 'passage not in the article',
+    reply: reply('A held result shows no guidance.', 'A held result shows no guidance at all.'),
+    check: 'HC1',
+    code: 'HC1_PASSAGE_NOT_IN_ARTICLE',
+  },
   { kind: 'article not sent', reply: reply('Policies are listed.', 'Policies are listed.', 'policies'), check: 'HC2', code: 'HC2_ARTICLE_NOT_SENT' },
   { kind: 'invented feature', reply: reply('A held result shows no guidance on the usage page.'), check: 'HC3', code: 'HC3_MEANING_NOT_IN_PASSAGE' },
   { kind: 'wrong role', reply: reply('A held result shows no guidance to an admin.'), check: 'HC3', code: 'HC3_MEANING_NOT_IN_PASSAGE' },
