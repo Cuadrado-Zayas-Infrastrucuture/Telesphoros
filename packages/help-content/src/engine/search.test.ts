@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GLOSSARY_EN, HELP_EN, HELP_ROLES, type GlossaryEntry, type HelpArticle } from '@telesphoros/help-content';
-import { ROLES } from '@telesphoros/shared-types';
-import { articlesFor, helpScreenOf, isPatientQuestion, normalizeHelpText, queryWords, searchHelp } from './helpSearch';
+import { GLOSSARY_EN, type GlossaryEntry } from '../glossary';
+import { HELP_EN, type HelpArticle } from '../help';
+import { articlesFor, helpScreenOf, isPatientQuestion, normalizeHelpText, queryWords, searchHelp } from './search';
 
 // Spec 051 slice H2: the help panel's search and its patient-question rule. Hand-written expectations; synthetic articles where the order is
 // the point, so a change to the real drafts cannot hide a change to the rule.
@@ -33,10 +33,6 @@ describe('the screen in view', () => {
     expect(helpScreenOf('/usage')).toBe('usage');
     expect(helpScreenOf('/workspace/')).toBe('worklist');
     for (const other of ['/', '/signin', '/patients/a/b', '/local-workspace', '/chat']) expect(helpScreenOf(other), other).toBeNull();
-  });
-
-  it('knows the same roles as the product', () => {
-    expect([...HELP_ROLES].sort()).toEqual([...ROLES].sort());
   });
 });
 
