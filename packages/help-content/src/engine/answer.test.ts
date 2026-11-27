@@ -31,6 +31,10 @@ describe('a question about a patient', () => {
     expect(searchHelp).not.toHaveBeenCalled();
   });
 
+  it('links to the results of the page in view, whatever slashes end its address', () => {
+    expect(answerFor('dose for SYN-0042', CORPUS, `${PATIENT}///`, ['clinician'])).toEqual({ kind: 'refusal', patientLink: `${PATIENT}#patient-results` });
+  });
+
   it('is refused on any other page, without a link to a patient', () => {
     expect(answerFor('dose for SYN-0042', CORPUS, '/workspace', ['clinician'])).toEqual({ kind: 'refusal', patientLink: null });
     expect(answerFor('what about *2/*17', CORPUS, '/workspace', ['clinician'])).toEqual({ kind: 'refusal', patientLink: null });

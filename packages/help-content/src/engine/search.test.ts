@@ -34,6 +34,13 @@ describe('the screen in view', () => {
     expect(helpScreenOf('/workspace/')).toBe('worklist');
     for (const other of ['/', '/signin', '/patients/a/b', '/local-workspace', '/chat']) expect(helpScreenOf(other), other).toBeNull();
   });
+
+  it('trims any number of trailing slashes, in linear time on any address (CodeQL)', () => {
+    const many = '/'.repeat(100_000);
+    expect(helpScreenOf(`/workspace${many}`)).toBe('worklist');
+    expect(helpScreenOf(`${many}x`)).toBeNull();
+    expect(helpScreenOf(many)).toBeNull();
+  });
 });
 
 describe('the articles for this screen and these roles', () => {

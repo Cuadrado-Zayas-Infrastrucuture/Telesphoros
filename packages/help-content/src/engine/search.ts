@@ -7,9 +7,19 @@ import type { HelpArticle, HelpScreen } from '../help';
  * 053 slice C2a, so the browser and the help lane on the server share one rule. Roles are plain strings, so either side can pass its own.
  */
 
+/**
+ * The address without its trailing slashes, in one pass. A `/\/+$/` replace is quadratic on an address with many slashes that are not at
+ * its end, and this is library input: the help lane on the server calls it too (CodeQL, polynomial regular expression).
+ */
+export function withoutTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path.charCodeAt(end - 1) === 47) end -= 1;
+  return path.slice(0, end);
+}
+
 /** The screen an article belongs to, from the address in view; null for a page no article is about. */
 export function helpScreenOf(pathname: string): HelpScreen | null {
-  const path = pathname.replace(/\/+$/, '') || '/';
+  const path = withoutTrailingSlashes(pathname) || '/';
   if (path === '/workspace') return 'worklist';
   if (path === '/patients') return 'patients';
   if (path === '/patients/new') return 'new-patient';

@@ -1,6 +1,6 @@
 import type { GlossaryEntry } from '../glossary';
 import type { HelpArticle } from '../help';
-import { articlesFor, helpScreenOf, isPatientQuestion, searchHelp, type HelpHit } from './search';
+import { articlesFor, helpScreenOf, isPatientQuestion, searchHelp, withoutTrailingSlashes, type HelpHit } from './search';
 
 /**
  * Spec 053 slice C1: Help's answer to one question, as data. This is the one place the order of the rules lives: the refusal for a question
@@ -27,7 +27,7 @@ const asHit = (article: HelpArticle): HelpHit => ({ kind: 'article', article });
 
 export function answerFor(question: string, corpus: HelpCorpus, pathname: string, roles: readonly string[]): HelpAnswer {
   const screen = helpScreenOf(pathname);
-  if (isPatientQuestion(question)) return { kind: 'refusal', patientLink: screen === 'patient' ? `${pathname.replace(/\/+$/, '')}#patient-results` : null };
+  if (isPatientQuestion(question)) return { kind: 'refusal', patientLink: screen === 'patient' ? `${withoutTrailingSlashes(pathname)}#patient-results` : null };
   const results = searchHelp(question, corpus.articles, corpus.glossary, screen, roles);
   if (results.hits.length === 0) return { kind: 'closest', hits: articlesFor(corpus.articles, screen, roles).slice(0, 3).map(asHit) };
   if (results.weak) return { kind: 'closest', hits: results.hits };
