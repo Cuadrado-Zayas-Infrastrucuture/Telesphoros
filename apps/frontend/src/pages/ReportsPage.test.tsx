@@ -84,7 +84,7 @@ describe('reports page with real auth and route guards', () => {
       expect(screen.queryByRole('dialog', { name: 'Report history' })).not.toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: 'Report details' })).not.toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Sample question' })).not.toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Chat preview' })).toHaveAttribute('href', '/local-interpretation');
+      expect(screen.getByRole('link', { name: 'AI preview' })).toHaveAttribute('href', '/local-interpretation');
       const attach = screen.queryByRole('link', { name: 'Attach a report' });
       expect(Boolean(attach)).toBe(roles.includes('clinician'));
       // Spec 052 RC-2: attaching is a page of its own, not the chat.
@@ -107,7 +107,7 @@ describe('reports page with real auth and route guards', () => {
     renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: fetcher(['clinician']) });
     await heading();
     expect(screen.queryByRole('region', { name: 'AI-assisted PGx preview' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Chat preview' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'AI preview' })).not.toBeInTheDocument();
   });
   it('redirects an anonymous visitor and preserves the return path', async () => {
     const { client } = renderApp('/reports');
@@ -351,11 +351,11 @@ it('opens a separate synthetic preview without passing report or patient context
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
     await user.click(screen.getByRole('button', { name: 'Back to reports' }));
-    const link = await screen.findByRole('link', { name: 'Chat preview' });
+    const link = await screen.findByRole('link', { name: 'AI preview' });
     expect(link).toHaveAttribute('href', '/local-interpretation');
     const calls = api.mock.calls.length;
     await user.click(link);
-    await screen.findByRole('heading', { name: 'Chat workspace' });
+    await screen.findByRole('heading', { name: 'AI preview' });
     expect(router.state.location.search).toBe('');
     expect(router.state.location.state).toBeNull();
     expect(screen.queryByText('synthetic.json')).not.toBeInTheDocument();

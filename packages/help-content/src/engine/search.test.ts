@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GLOSSARY_EN, HELP_EN, HELP_ROLES, type GlossaryEntry, type HelpArticle } from '@telesphoros/help-content';
-import { ROLES } from '@telesphoros/shared-types';
-import { articlesFor, helpScreenOf, isPatientQuestion, normalizeHelpText, queryWords, searchHelp } from './helpSearch';
+import { GLOSSARY_EN, type GlossaryEntry } from '../glossary';
+import { HELP_EN, type HelpArticle } from '../help';
+import { articlesFor, helpScreenOf, isPatientQuestion, normalizeHelpText, queryWords, searchHelp } from './search';
 
 // Spec 051 slice H2: the help panel's search and its patient-question rule. Hand-written expectations; synthetic articles where the order is
 // the point, so a change to the real drafts cannot hide a change to the rule.
@@ -35,8 +35,11 @@ describe('the screen in view', () => {
     for (const other of ['/', '/signin', '/patients/a/b', '/local-workspace', '/chat']) expect(helpScreenOf(other), other).toBeNull();
   });
 
-  it('knows the same roles as the product', () => {
-    expect([...HELP_ROLES].sort()).toEqual([...ROLES].sort());
+  it('trims any number of trailing slashes, in linear time on any address (CodeQL)', () => {
+    const many = '/'.repeat(100_000);
+    expect(helpScreenOf(`/workspace${many}`)).toBe('worklist');
+    expect(helpScreenOf(`${many}x`)).toBeNull();
+    expect(helpScreenOf(many)).toBeNull();
   });
 });
 
@@ -56,8 +59,10 @@ describe('the articles for this screen and these roles', () => {
     expect(reader).not.toContain('attach-a-report');
     const clinician = articlesFor(HELP_EN.articles, 'worklist', ['clinician']).map((item) => item.id);
     expect(clinician).toEqual(expect.arrayContaining(['held-results', 'follow-ups', 'attach-a-report']));
-    // An administrator sees what is for everyone, and nothing clinical.
-    expect(articlesFor(HELP_EN.articles, 'usage', ['admin']).every((item) => item.roles === 'all')).toBe(true);
+    // An administrator sees what is for everyone and what is for administrators alone, and nothing clinical.
+    const admin = articlesFor(HELP_EN.articles, 'usage', ['admin']);
+    expect(admin.every((item) => item.roles === 'all' || (item.roles.length === 1 && item.roles[0] === 'admin'))).toBe(true);
+    expect(admin.map((item) => item.id)).toContain('the-usage-page');
   });
 });
 
@@ -107,6 +112,10 @@ describe('searching', () => {
     expect(ids(searchHelp('what is a held result', HELP_EN.articles, GLOSSARY_EN, 'worklist', ['reader']))[0]).toBe('held-results');
     expect(ids(searchHelp('how do I add a patient', HELP_EN.articles, GLOSSARY_EN, 'patients', ['clinician']))[0]).toBe('find-or-add-a-patient');
     expect(ids(searchHelp('what does phenotype mean', HELP_EN.articles, GLOSSARY_EN, 'patient', ['reader']))).toContain('word:phenotype');
+    expect(ids(searchHelp('how do I check a drug before prescribing', HELP_EN.articles, GLOSSARY_EN, 'patient', ['clinician']))[0]).toBe('checking-a-drug');
+    expect(ids(searchHelp('how do I change the theme', HELP_EN.articles, GLOSSARY_EN, 'settings', ['reader']))[0]).toBe('your-settings');
+    expect(ids(searchHelp('what does the usage page count', HELP_EN.articles, GLOSSARY_EN, 'usage', ['admin']))[0]).toBe('the-usage-page');
+    expect(ids(searchHelp('what does the usage page count', HELP_EN.articles, GLOSSARY_EN, 'usage', ['reader']))).not.toContain('the-usage-page');
   });
 });
 

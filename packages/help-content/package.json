@@ -2,7 +2,7 @@
   "name": "@telesphoros/help-content",
   "private": true,
   "version": "0.0.0",
-  "description": "Reviewed help content shared by the screens and the help assistant: the glossary first. Plain data and its schema; no file or network access.",
+  "description": "Reviewed help content shared by the screens and the help assistant: the glossary, the help articles, and Help's engine (the patient-question rule, the search and the answer). Plain data, its schema and pure functions; no file or network access.",
   "type": "module",
   "sideEffects": false,
   "main": "./src/index.ts",

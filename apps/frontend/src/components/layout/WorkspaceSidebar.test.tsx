@@ -73,7 +73,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     try {
       open('/settings', ['clinician']);
       // Recents loads on its own and may already show its rows: compare only the destinations above it, as linkNames() does.
-      expect(await linkNames()).toEqual(['Home', 'Workspace', 'Chat preview', 'Patients', 'Reports', 'Follow-ups']);
+      expect(await linkNames()).toEqual(['Home', 'Workspace', 'AI preview', 'Patients', 'Reports', 'Follow-ups']);
       const nav = await primary();
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {

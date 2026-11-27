@@ -8,9 +8,6 @@ import { type Facts, isTerraformInput, run, type Service, type Sources } from '.
 const REPO = 'Cuadrado-Zayas-Infrastrucuture/Telesphoros';
 /** Changes to any of these are changes to the running image; docs, specs, the vault and Terraform are not. */
 const APPLICATION_PATHS = ['apps', 'packages', 'knowledge', 'infrastructure/docker', 'pnpm-lock.yaml'];
-/** GitHub's compare answer holds 300 files at most; a full page may have more behind it. */
-const COMPARE_FILE_LIMIT = 300;
-
 class GithubError extends Error {
   override name = 'GithubError';
 }
@@ -26,8 +23,38 @@ async function github<T>(path: string): Promise<T> {
 
 interface Compare {
   status: string;
-  files?: { filename: string }[];
   commits?: { commit: { committer: { date: string } } }[];
+}
+
+interface TreeEntry {
+  path: string;
+  mode: string;
+  type: string;
+  sha: string;
+}
+
+/** The files added, removed, or with other content or mode between two recursive trees. Directories are not files. */
+export function changedFiles(before: TreeEntry[], after: TreeEntry[]): string[] {
+  const files = (tree: TreeEntry[]) => new Map(tree.filter((e) => e.type !== 'tree').map((e) => [e.path, `${e.mode} ${e.sha}`]));
+  const a = files(before);
+  const b = files(after);
+  const changed = new Set([...b].filter(([path, id]) => a.get(path) !== id).map(([path]) => path));
+  for (const path of a.keys()) if (!b.has(path)) changed.add(path);
+  return [...changed].sort();
+}
+
+/**
+ * What changed between a commit and main, from both commits' full trees. GitHub's compare lists 300 changed files at most for a whole
+ * comparison (paging returns more commits, not more files), so on 2026-11-25 a release 347 files behind could not be judged. A tree
+ * holds 100,000 entries; `truncated` when GitHub cut either one short. The compare is read only for ancestry and the first commit's date.
+ */
+async function changedSince(commit: string): Promise<{ compare: Compare; files: string[]; truncated: boolean }> {
+  const compare = await github<Compare>(`compare/${commit}...main`);
+  if (compare.status !== 'ahead' && compare.status !== 'identical') throw new GithubError('applied commit is not an ancestor of main');
+  const before = await github<{ truncated: boolean; tree: TreeEntry[] }>(`git/trees/${commit}?recursive=1`);
+  const after = await github<{ truncated: boolean; tree: TreeEntry[] }>('git/trees/main?recursive=1');
+  if (before.truncated || after.truncated) return { compare, files: [], truncated: true };
+  return { compare, files: changedFiles(before.tree, after.tree), truncated: false };
 }
 
 const env = (name: string): string => {
@@ -43,6 +70,16 @@ export function realSources(): Sources {
   const sns = new SNSClient({});
   const cluster = env('ECS_CLUSTER');
   const services = { api: env('API_SERVICE'), worker: env('WORKER_SERVICE') } as const;
+  // Both checks may ask about the same commit in one run: read GitHub once per commit (unauthenticated, 60 requests an hour).
+  const read = new Map<string, ReturnType<typeof changedSince>>();
+  const since = (commit: string) => {
+    let answer = read.get(commit);
+    if (!answer) {
+      answer = changedSince(commit);
+      read.set(commit, answer);
+    }
+    return answer;
+  };
 
   return {
     async facts() {
@@ -75,16 +112,13 @@ export function realSources(): Sources {
       return res.status;
     },
     async terraformFilesSince(commit) {
-      const compare = await github<Compare>(`compare/${commit}...main`);
-      if (compare.status !== 'ahead' && compare.status !== 'identical') throw new GithubError('applied commit is not an ancestor of main');
-      const all = compare.files ?? [];
-      return { files: all.map((f) => f.filename).filter(isTerraformInput), truncated: all.length >= COMPARE_FILE_LIMIT };
+      const changed = await since(commit);
+      return { files: changed.files.filter(isTerraformInput), truncated: changed.truncated };
     },
     async applicationChangeSince(commit) {
-      const compare = await github<Compare>(`compare/${commit}...main`);
-      const all = compare.files ?? [];
-      if (all.length >= COMPARE_FILE_LIMIT) throw new GithubError('compare truncated');
-      const changed = all.some((f) => APPLICATION_PATHS.some((p) => f.filename === p || f.filename.startsWith(`${p}/`)));
+      const { compare, files, truncated } = await since(commit);
+      if (truncated) throw new GithubError('tree truncated');
+      const changed = files.some((f) => APPLICATION_PATHS.some((p) => f === p || f.startsWith(`${p}/`)));
       if (!changed) return { since: undefined };
       const image = await github<{ commit: { committer: { date: string } } }>(`commits/${commit}`);
       const dates: string[] = [];

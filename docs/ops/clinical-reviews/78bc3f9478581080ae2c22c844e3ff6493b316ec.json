@@ -1,0 +1,32 @@
+{
+  "schema": "clinical-review/1",
+  "base": "5fe8fdbd0f64c50d9cacf1049260c0ea00e510ef",
+  "candidate": "78bc3f9478581080ae2c22c844e3ff6493b316ec",
+  "changed": [
+    "apps/backend/src/gene-modifiers/gene-modifier-set.ts",
+    "apps/backend/src/gene-modifiers/gene-modifiers.module.spec.ts",
+    "apps/backend/src/gene-modifiers/gene-modifiers.module.ts",
+    "apps/backend/src/genomic-profile/genomic-profile.builder.spec.ts",
+    "apps/backend/src/genomic-profile/genomic-profile.builder.ts",
+    "apps/backend/src/genomic-profile/genomic-profile.controller.ts",
+    "apps/backend/src/genomic-profile/genomic-profile.module.ts",
+    "apps/backend/src/genomic-profile/genomic-profile.service.spec.ts",
+    "apps/backend/src/genomic-profile/genomic-profile.service.ts",
+    "apps/backend/src/services/knowledge/cli.spec.ts",
+    "apps/backend/src/services/knowledge/cli.ts",
+    "apps/backend/src/services/knowledge/content-hash.ts",
+    "apps/backend/src/services/knowledge/gene-modifier-loader.spec.ts",
+    "apps/backend/src/services/knowledge/gene-modifier-loader.ts",
+    "apps/backend/src/services/knowledge/knowledge-loader.ts",
+    "apps/backend/src/services/knowledge/signatures.ts",
+    "docs/clinical-validation/assessment-signed-knowledge.md",
+    "docs/clinical-validation/gene-modifier-list.md",
+    "docs/clinical-validation/genomic-profile-read.md",
+    "docs/clinical-validation/patient-identity-unknown.md",
+    "packages/cpic-schema/src/cpic-schema.test.ts",
+    "packages/cpic-schema/src/knowledge.ts"
+  ],
+  "exception": {
+    "reason": "Synthetic staging only; Kevin has no KMS signing key yet, so he reviews these changes on staging."
+  }
+}

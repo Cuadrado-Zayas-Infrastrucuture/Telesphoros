@@ -123,6 +123,21 @@
       "signedBy": []
     },
     {
+      "id": "checking-a-drug",
+      "title": "Checking a drug before prescribing",
+      "body": [
+        "On a patient's page, Check a drug before prescribing looks up one drug, chosen by its name as a medication is, against this patient's confirmed gene results and the guidelines loaded in the product. Nothing is saved: the check records no prescription, no medication and no decision.",
+        "The answer uses the same words as the patient's current medications, and each word has a short explanation. No guideline loaded means only that the loaded guidelines do not cover the drug. It does not mean genes do not matter for it.",
+        "If the drug is listed as changing a gene that this patient's current guidance rests on, the check says so."
+      ],
+      "screens": ["patient"],
+      "roles": ["reader", "clinician", "reviewer"],
+      "keywords": ["check", "checking", "drug", "before", "prescribe", "prescribing", "new", "lookup"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
       "id": "recording-a-decision",
       "title": "Recording a decision",
       "body": [
@@ -187,6 +202,37 @@
       "screens": ["worklist", "patients", "new-patient", "patient", "reports", "upload", "follow-ups", "settings", "usage"],
       "roles": "all",
       "keywords": ["policy", "policies", "privacy", "terms", "data", "legal"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "your-settings",
+      "title": "Your settings",
+      "body": [
+        "Settings shows who is signed in, their organization, and what each of their roles lets them do here. The server checks every request; the list only describes it. A preferred name, if you give one, is shown on your account at the foot of the sidebar until you sign out or reload.",
+        "Appearance chooses light, dark, or matching this device. Browser storage chooses whether this browser remembers your display and language settings. Your sign-in is never kept there: it is held in this tab only, so reloading the page signs the tab out.",
+        "Sign out ends your sessions in this organization on every device, then signs this browser out of your sign-in provider.",
+        "Administrators also see Access review: who opened which patient's record, looked up by patient id or by member over at most 92 days, with a file to download. It shows ids, not names."
+      ],
+      "screens": ["settings"],
+      "roles": "all",
+      "keywords": ["settings", "account", "organization", "preferred", "name", "theme", "dark", "light", "appearance", "storage", "sign", "out", "access", "review", "audit"],
+      "links": [],
+      "status": "draft",
+      "signedBy": []
+    },
+    {
+      "id": "the-usage-page",
+      "title": "What the usage page counts",
+      "body": [
+        "Usage is for administrators. For this month so far and for last month, it counts this organization's reports uploaded, its evaluations with results and its evaluations held. It also gives the report files kept and their total size.",
+        "The calendar shows reports uploaded on each day of one year: darker days had more uploads. Days and months are in Puerto Rico time.",
+        "The figures count activity only. They say nothing about whether a result was right or how a patient did."
+      ],
+      "screens": ["usage"],
+      "roles": ["admin"],
+      "keywords": ["usage", "count", "counts", "calendar", "uploads", "uploaded", "storage", "size", "month", "activity"],
       "links": [],
       "status": "draft",
       "signedBy": []

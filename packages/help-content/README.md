@@ -29,3 +29,16 @@ step. The Spanish file (`glossary.es.json`) waits for the founders' text.
 - `src/help.ts`: the schema. A file that breaks a rule is refused when it is loaded.
 - No policy is quoted until it is published (H-D2).
 
+## Help's engine (spec 053 slice C2a)
+
+`src/engine/` holds the code that decides Help's answer, so the browser and the help lane on the server use the same rule:
+- `search.ts`:
+  - `isPatientQuestion`, the refusal rule (spec 051 section 5);
+  - `searchHelp` and its scoring (section 4);
+  - `articlesFor`, `visibleTo` and `helpScreenOf`.
+- `answer.ts`: `answerFor`, which refuses first and only then searches (spec 053 C1). The model path in `apps/ai-service` falls back to
+  it (spec 003, [help-lane.md](../../specs/003-llm-harness/help-lane.md)).
+
+These are pure functions with no model, request or storage, and their tests are beside them. Roles are plain strings. The frontend
+re-exports these functions from `src/lib/helpSearch.ts` and `src/lib/helpConversation.ts`, and its `helpEngine.test.ts` fails if a copy
+appears there.

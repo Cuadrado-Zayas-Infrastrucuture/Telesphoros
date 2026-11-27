@@ -30,11 +30,14 @@ describe('the English help', () => {
       'attach-a-report',
       'the-genomic-profile',
       'phenoconversion-notice',
+      'checking-a-drug',
       'recording-a-decision',
       'roles',
       'synthetic-data-only',
       'words-used-here',
       'policies',
+      'your-settings',
+      'the-usage-page',
     ]) {
       expect(ids).toContain(id);
     }

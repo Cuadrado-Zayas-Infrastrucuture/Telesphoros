@@ -1,8 +1,8 @@
 import type { PatientDto } from '@telesphoros/shared-types';
 
 /**
- * The chat and the feature panel are separate parts of one screen that show the same reports and patients. Each tells the other, in this tab only,
- * when it has added one, so neither keeps a stale list. Nothing leaves the page.
+ * The upload page, the patient forms, the sidebar's Recents and the patient lists show the same reports and patients from separate reads. Whichever
+ * adds or removes one tells the others, in this tab only, so none keeps a stale list. Nothing leaves the page.
  */
 const target = new EventTarget();
 const REPORTS = 'telesphoros:reports-changed';
