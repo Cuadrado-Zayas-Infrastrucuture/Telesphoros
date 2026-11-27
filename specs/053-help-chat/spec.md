@@ -45,10 +45,12 @@ answer; it is an added way of saying the same reviewed content.
   patient data, reports, results or anything from the clinical API. A test asserts the request carries nothing else.
 - **What it writes** are short answers in the reader's language, each sentence citing an article id and passage.
 - **The citation check is code.** Every cited passage must exist in the corpus and support the sentence by an agreed rule (section 7,
-  HC-D5). A sentence that fails is removed; if too little is left, the whole model answer is withheld and the C1 answer shows.
+  HC-D5). If any sentence fails, the whole model answer is withheld and the C1 answer shows; no sentence is removed on its own (amended
+  2026-11-26, spec 003 help lane HL-D1).
 - **The refusal comes first and is deterministic** (spec 051 H-D6). The model adds its own refusal check after it, and never replaces it
   (direction plan section 5).
-- **Labelled as assistant output** (R4): "Written by an assistant from the articles below. Draft articles are not yet reviewed."
+- **Labelled as assistant output** (R4): "Written by an assistant from the articles below." (Amended 2026-11-26: the model answers only
+  from signed articles, HC-D4, so the earlier draft sentence is dropped.)
 - **No actions** (tier T0): it may link to a screen, and never does anything.
 
 ## 4. Data, storage and spend
@@ -107,7 +109,7 @@ What that means for every slice:
 | Slice | What | Touches | Waits for |
 | --- | --- | --- | --- |
 | **C1** | The Help drawer as a conversation over today's engine: the person's message, Help's answer (the best article's text and links, or the refusal, or "no good match" with the closest three), Enter to send, a scrolling history cleared on close. Unit and browser tests; the existing Help tests carried over | `apps/frontend` | Nothing |
-| **C2** | The model path in `apps/ai-service`, dormant: the provider-neutral interface (section 4a), the corpus-only request, the citation check, the fallback, the label, the evaluation set as a required check. No host; a fake model adapter in tests | `apps/ai-service`, CI | C1, HC-D3, HC-D5, spec 003 approved or amended for the help lane |
+| **C2** | The model path in `apps/ai-service`, dormant: the provider-neutral interface (section 4a), the corpus-only request, the citation check, the fallback, the label, the evaluation set as a required check. No host; a fake model adapter in tests | `apps/ai-service`, `packages/help-content` (the refusal rule and the search move there), CI | C1, HC-D3, HC-D5, spec 003 amended for the help lane ([help-lane.md](../003-llm-harness/help-lane.md)) |
 | **C3** | One backend route that sends the question to the ai-service and returns the answer or the fallback, behind the switch, off everywhere | `apps/backend` | C2, HC-D1 |
 | **C4** | The host: the chosen model, budgets, kill switch, applied by the founder | Terraform, `docs/ops` | C3, HC-D2, the BAA if HC-D1 is `phi` and real use is wanted |
 
