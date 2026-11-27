@@ -11,7 +11,7 @@ It sits under `apps/` although it is not deployed. No other workspace package im
 | [`src/model-clients/`](src/model-clients) | The model port and a scripted stand-in; there is no real client |
 | [`src/evaluators/`](src/evaluators) | Sensors and the verifier for outputs |
 | [`durable/`](durable) | PostgreSQL-backed run and receipt stores and a queue; tested by `test:durable:pg` |
-| [`evals/`](evals) | Golden cases, attack cases and the pinned evaluation runner |
+| [`evals/`](evals) | Golden cases, attack cases and the pinned evaluation runner. `evals/help/` is the help lane's set and gate (spec 053 C2c) |
 | [`src/help/`](src/help) | The help lane (spec 003 [help-lane.md](../../specs/003-llm-harness/help-lane.md), spec 053 C2b): `runHelpAnswer`, its prompt, checks HC1 to HC6 and the curated fallback. Dormant: not exported, and nothing calls it until C3 |
 
 **Run and test**
