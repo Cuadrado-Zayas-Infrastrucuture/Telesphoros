@@ -1,6 +1,6 @@
 # Plan: spec 053, slice C2, Help's model path, dormant
 
-**Status**: **A draft for the founder: C2-D1 to C2-D3 are open (section 7).** Plan only: no code or test changes. Read against `main` at
+**Status**: **Approved by the founder on 2026-11-27: C2-D1 to C2-D3 as recommended (section 7).** Plan only: no code or test changes. Read against `main` at
 `59384a94`, after #504 (C1, the conversation) and #505 (the help lane, [spec 003 help-lane.md](../003-llm-harness/help-lane.md)).
 
 C2 builds everything the help lane needs **except a real model and a way for the app to reach it**:
@@ -109,7 +109,9 @@ All of this follows [help-lane.md](../003-llm-harness/help-lane.md). The numbers
 - **Where.** `apps/ai-service/evals/help/` holds the set, `evals/help/run.ts` holds the runner, and `test/help-eval-gate.test.ts` holds
   the gate. Like the clinical gate, it runs in `verify` with every ai-service test, so any change to the help lane or to
   `packages/help-content` is measured.
-- **The corpus it runs against** (C2-D1). No article is signed yet, and the model answers only from signed articles (HC-D4).
+- **The corpus it runs against** (C2-D1). No article is signed yet, and the model answers only from signed articles (HC-D4). The gate
+  runs against a fixture copy of the articles signed by "TEST SIGNER A" and "TEST SIGNER B" (section 7), and also against any real
+  signed articles once they exist.
 - **The set,** at the help-lane sizes (initial):
 
   | Part | Count |
@@ -120,7 +122,8 @@ All of this follows [help-lane.md](../003-llm-harness/help-lane.md). The numbers
   | Questions carrying instructions | 10, run with `obedient` |
   | Articles carrying instructions, in a fixture copy of the corpus | 5 |
 
-  Who drafts the questions is C2-D3.
+  The agent drafts every question and seeded wrong answer from the articles. The founders review the 20 that must be refused in the C2c
+  pull request (C2-D3).
 - **What the gate requires:**
   - no wrong answer released;
   - no refused question reaching the port;
@@ -142,7 +145,7 @@ All of this follows [help-lane.md](../003-llm-harness/help-lane.md). The numbers
 
 ## 7. Decisions for the founder
 
-- **C2-D1. The corpus the evaluation runs against while no article is signed.**
+- **C2-D1. The corpus the evaluation runs against while no article is signed.** **Decided 2026-11-27: as recommended.**
   - **Recommended:** a fixture copy of today's articles in `apps/ai-service/evals/help/fixtures/`, marked signed by two fictitious
     signers named "TEST SIGNER A" and "TEST SIGNER B". It is never shipped:
     - a test fails if any product article names a test signer;
@@ -151,11 +154,11 @@ All of this follows [help-lane.md](../003-llm-harness/help-lane.md). The numbers
 
     When the founders sign real articles, the gate also runs against them.
   - **Alternative:** wait for the founders to sign articles before C2c. This is cleaner, but C2c cannot start until then.
-- **C2-D2. Three pull requests or one.**
+- **C2-D2. Three pull requests or one.** **Decided 2026-11-27: as recommended (three).**
   - **Recommended:** three (C2a, C2b, C2c), as in section 2. Each is reviewable, and C2a is a pure move that proves nothing changes before
     any model code lands.
   - **Alternative:** one pull request. Fewer merges, but one large diff touching three packages.
-- **C2-D3. Who drafts the evaluation questions.**
+- **C2-D3. Who drafts the evaluation questions.** **Decided 2026-11-27: as recommended.**
   - **Recommended:** the agent drafts all of them from the articles, including the seeded wrong answers. You and the co-founder review the
     20 that must be refused in the C2c PR, because where Help stops is a clinical boundary.
   - **Alternative:** you write the questions that must be refused, and the agent drafts the rest.

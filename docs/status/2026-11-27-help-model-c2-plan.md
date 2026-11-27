@@ -10,5 +10,9 @@ model and nothing in the product calling it:
   `apps/ai-service`.
 - **C2c** adds the evaluation set and the help gate in `verify`.
 
-Open for the founder: C2-D1 (the evaluation corpus while no article is signed), C2-D2 (three PRs or one) and C2-D3 (who drafts the
-evaluation questions). Plan only: no code or test change.
+The founder decided on 2026-11-27, as recommended:
+- the evaluation runs against a test-signed fixture copy of the articles, never shipped (C2-D1);
+- three pull requests (C2-D2);
+- the agent drafts the questions, and the founders review the 20 that must be refused (C2-D3).
+
+Plan only: no code or test change.
