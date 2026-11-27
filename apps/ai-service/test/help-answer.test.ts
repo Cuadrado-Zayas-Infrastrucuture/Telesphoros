@@ -108,7 +108,11 @@ describe('every failure shows exactly the curated answer (FR-H4, HL-D1)', () => 
   });
 
   test('the hold codes are kept for the receipt and never shown', async () => {
-    const { outcome, receipt } = await runHelpAnswer(HELD, scripted(() => SAFE), fixtures);
+    const { outcome, receipt } = await runHelpAnswer(
+      HELD,
+      scripted(() => SAFE),
+      fixtures,
+    );
     expect(receipt.holds).toContain('HC5_REASSURES');
     expect(JSON.stringify(outcome)).not.toContain('HC5');
   });

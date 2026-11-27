@@ -36,7 +36,11 @@ const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
 
 /** The glossary entries a set of articles names, by whole alias, as the screens find them. Only signed ones go to a model. */
 function glossaryNamedBy(articles: readonly HelpArticle[], glossary: readonly GlossaryEntry[], allowTestSigners: boolean): GlossaryEntry[] {
-  const text = ` ${articles.flatMap((a) => [a.title, ...a.body]).map(normalizeHelpText).join(' ')} `;
+  const words = articles
+    .flatMap((a) => [a.title, ...a.body])
+    .map(normalizeHelpText)
+    .join(' ');
+  const text = ` ${words} `;
   return glossary.filter((entry) => signedForModel(entry, allowTestSigners) && entry.aliases.some((alias) => text.includes(` ${normalizeHelpText(alias)} `)));
 }
 
