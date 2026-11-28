@@ -12,5 +12,16 @@ export {
   type HelpFile,
   type HelpScreen,
 } from './help';
-export { articlesFor, helpScreenOf, isPatientQuestion, normalizeHelpText, queryWords, searchHelp, visibleTo, type HelpHit, type HelpResults } from './engine/search';
+export {
+  articlesFor,
+  helpScreenOf,
+  isPatientQuestion,
+  normalizeHelpText,
+  queryWords,
+  searchHelp,
+  visibleTo,
+  withoutTrailingSlashes,
+  type HelpHit,
+  type HelpResults,
+} from './engine/search';
 export { answerFor, answerForHit, hitKey, MORE_HITS, type HelpAnswer, type HelpCorpus } from './engine/answer';

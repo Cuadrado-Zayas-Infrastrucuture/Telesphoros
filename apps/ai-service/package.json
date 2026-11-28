@@ -22,17 +22,19 @@
     "dist"
   ],
   "scripts": {
-    "prebuild": "node ../../scripts/workspace-build/workspace.cjs prepare jobs",
+    "prebuild": "node ../../scripts/workspace-build/workspace.cjs prepare jobs shared-types",
     "build": "tsup",
-    "pretypecheck": "node ../../scripts/workspace-build/workspace.cjs prepare jobs",
+    "pretypecheck": "node ../../scripts/workspace-build/workspace.cjs prepare jobs shared-types",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "pretest": "node ../../scripts/workspace-build/workspace.cjs prepare jobs",
+    "pretest": "node ../../scripts/workspace-build/workspace.cjs prepare jobs shared-types",
     "test": "vitest run",
-    "test:durable:pg": "node ../../scripts/workspace-build/workspace.cjs prepare jobs && vitest run --config vitest.durable.config.mts"
+    "test:durable:pg": "node ../../scripts/workspace-build/workspace.cjs prepare jobs shared-types && vitest run --config vitest.durable.config.mts"
   },
   "dependencies": {
+    "@telesphoros/help-content": "workspace:*",
     "@telesphoros/jobs": "workspace:*",
+    "@telesphoros/shared-types": "workspace:*",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -48,5 +50,5 @@
     "globals": "^17.13.0",
     "@telesphoros/cpic-schema": "workspace:*"
   },
-  "description": "Synthetic control-flow library only; no models, service, effects or deployment"
+  "description": "Synthetic control-flow library only; no models, service, effects or deployment. Holds the explanation harness and the help lane (spec 003), both dormant"
 }
