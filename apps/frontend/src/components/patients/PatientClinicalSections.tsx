@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { DecisionLink } from '@/lib/clinicianDecisions';
+import { RESULTS_WORDS } from '@/lib/words/patient';
+import { useWords } from '@/lib/words/screens';
 import { PatientResults } from './PatientResults';
 import { FollowupsSection } from './FollowupsSection';
 
@@ -11,6 +13,7 @@ import { FollowupsSection } from './FollowupsSection';
  */
 export function PatientClinicalSections({ patientId }: { patientId: string }) {
   const { search } = useLocation();
+  const words = useWords(RESULTS_WORDS);
   const [decision, setDecision] = useState<DecisionLink | null>(null);
   const [editing, setEditing] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export function PatientClinicalSections({ patientId }: { patientId: string }) {
       <div className="flex max-w-3xl flex-col gap-2">
         {waiting && (
           <p role="status" className="text-sm">
-            Decision saved. Its follow-up step opens when the follow-up form that is open now is closed. Until then no reminder exists for it.
+            {words.followupWaiting}
           </p>
         )}
         {outcome && (
@@ -54,7 +57,7 @@ export function PatientClinicalSections({ patientId }: { patientId: string }) {
           patientId={patientId}
           decision={waiting ? undefined : (decision ?? undefined)}
           onDecisionClose={(saved) => {
-            if (decision?.guided) setOutcome(saved ? 'Decision saved. Follow-up saved.' : 'Decision saved. No follow-up was scheduled, so no reminder was created.');
+            if (decision?.guided) setOutcome(saved ? words.decisionFollowupSaved : words.decisionNoFollowup);
             setDecision(null);
           }}
           onEditingChange={setEditing}

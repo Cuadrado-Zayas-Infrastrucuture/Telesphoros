@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { draftFrom, EMPTY_DRAFT } from '@/lib/demographicsDraft';
 import type { DemographicsRead } from '@/lib/patientDemographics';
 import { IDENTITY_TABLE } from '@/lib/patientIdentity';
+import { DEMOGRAPHICS_WORDS } from '@/lib/words/patient';
 import { useWords } from '@/lib/words/screens';
 
 export function DemographicsSection(props: {
@@ -20,10 +21,11 @@ export function DemographicsSection(props: {
 }) {
   const { read, version, canWrite, onViewVersion } = props;
   const [editing, setEditing] = useState(false);
-  const words = useWords(IDENTITY_TABLE);
+  const identityWords = useWords(IDENTITY_TABLE);
+  const words = useWords(DEMOGRAPHICS_WORDS);
   const heading = (
     <h2 id="demographics-heading" className="text-lg font-semibold">
-      Demographics
+      {words.heading}
     </h2>
   );
 
@@ -31,7 +33,7 @@ export function DemographicsSection(props: {
     return (
       <section aria-labelledby="demographics-heading" className="flex flex-col gap-2">
         {heading}
-        <p className="text-sm text-muted-foreground">{words.section}</p>
+        <p className="text-sm text-muted-foreground">{identityWords.section}</p>
       </section>
     );
   }
@@ -40,7 +42,7 @@ export function DemographicsSection(props: {
     return (
       <section aria-labelledby="demographics-heading" className="flex flex-col gap-2">
         {heading}
-        <p className="text-sm text-muted-foreground">This patient's identity was erased. Its versions can no longer be read, and none can be added.</p>
+        <p className="text-sm text-muted-foreground">{words.erased}</p>
       </section>
     );
   }
@@ -55,9 +57,9 @@ export function DemographicsSection(props: {
       </div>
       {viewingEarlier && (
         <p role="status" className="text-sm text-muted-foreground">
-          Showing version {current.version}, an earlier version.{' '}
+          {words.earlierVersion(String(current.version))}{' '}
           <button type="button" className="underline underline-offset-2" onClick={() => onViewVersion(undefined)}>
-            Show the current version
+            {words.showCurrent}
           </button>
         </p>
       )}
@@ -75,12 +77,12 @@ export function DemographicsSection(props: {
       ) : current ? (
         <DemographicsValues value={current} />
       ) : (
-        <p className="text-sm text-muted-foreground">No demographics recorded yet.</p>
+        <p className="text-sm text-muted-foreground">{words.empty}</p>
       )}
       {canWrite && !editing && !viewingEarlier && (
         <div>
           <Button size="sm" variant={current ? 'outline' : 'default'} onClick={() => setEditing(true)}>
-            {current ? 'Correct' : 'Record demographics'}
+            {current ? words.correct : words.record}
           </Button>
         </div>
       )}
